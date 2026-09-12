@@ -16,17 +16,15 @@ class _SalesScreenState extends State<SalesScreen> {
   List<Party> _parties = [];
   Party? _selectedParty;
   
-  // Controllers
   final _itemController = TextEditingController();
   final _qtyController = TextEditingController();
   final _rateController = TextEditingController();
 
-  // PC Keyboard Focus Nodes (Enter dabate hi agle box par jaane ke liye)
   final FocusNode _itemFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _rateFocusNode = FocusNode();
 
-  String _stockType = 'fresh'; // 'fresh' ya 'replacement'
+  String _stockType = 'fresh';
   bool _isGstEnabled = false;
   String _generatedInvoiceNo = 'INV/001';
   int _currentInvoiceSeq = 1;
@@ -34,10 +32,15 @@ class _SalesScreenState extends State<SalesScreen> {
   DateTime _billDate = DateTime.now();
   final List<Map<String, dynamic>> _billItems = [];
 
+  // Mock / Dynamic History List jo item type karne par dikhegi
+  // (Format: Date | Bill No | Item Name | Rate)
+  List<Map<String, dynamic>> _itemHistoryList = [];
+
   @override
   void initState() {
     super.initState();
     _loadInitialData();
+    _itemController.addListener(_onItemNameChanged);
   }
 
   @override
@@ -64,6 +67,28 @@ class _SalesScreenState extends State<SalesScreen> {
         _currentInvoiceSeq = settings.nextInvoiceNumber;
         _generatedInvoiceNo = '${settings.invoicePrefix}$_currentInvoiceSeq';
       }
+    });
+  }
+
+  // Jab dukaandar item name type karega, toh uski pichli history fetch hogi
+  void _onItemNameChanged() {
+    final typedItem = _itemController.text.trim();
+    if (typedItem.length < 2 || _selectedParty == null) {
+      setState(() => _itemHistoryList = []);
+      return;
+    }
+
+    // Yahan hum sample history generate kar rahe hain (Aap isko database se connect kar sakte hain)
+    // Dhyan dein: Yeh scrollable list mein 5 se zyada hone par scroll support karegi
+    setState(() {
+      _itemHistoryList = [
+        {'date': '12/08/2026', 'billNo': 'INV/045', 'name': typedItem, 'rate': 250.0},
+        {'date': '05/08/2026', 'billNo': 'INV/038', 'name': typedItem, 'rate': 245.0},
+        {'date': '28/07/2026', 'billNo': 'INV/022', 'name': typedItem, 'rate': 240.0},
+        {'date': '15/07/2026', 'billNo': 'INV/015', 'name': typedItem, 'rate': 250.0},
+        {'date': '01/07/2026', 'billNo': 'INV/009', 'name': typedItem, 'rate': 235.0},
+        {'date': '20/06/2026', 'billNo': 'INV/004', 'name': typedItem, 'rate': 230.0}, // 6th item (Scrollable test)
+      ];
     });
   }
 
@@ -103,9 +128,9 @@ class _SalesScreenState extends State<SalesScreen> {
       _itemController.clear();
       _qtyController.clear();
       _rateController.clear();
+      _itemHistoryList = [];
     });
 
-    // Item add hote hi wapas Item Name box par focus chala jaye taaki agla item type kar sakein
     FocusScope.of(context).requestFocus(_itemFocusNode);
   }
 
@@ -176,7 +201,6 @@ class _SalesScreenState extends State<SalesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Date & Stock Type row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -210,22 +234,72 @@ class _SalesScreenState extends State<SalesScreen> {
                   child: Text(party.name, overflow: TextOverflow.ellipsis),
                 );
               }).toList(),
-              onChanged: (val) => setState(() => _selectedParty = val),
+              onChanged: (val) {
+                setState(() => _selectedParty = val);
+              },
               decoration: const InputDecoration(labelText: 'Select Customer', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
 
-            // Item Input with PC Keyboard Enter Navigation
+            // Item Input
             TextField(
               controller: _itemController,
               focusNode: _itemFocusNode,
-              decoration: const InputDecoration(labelText: 'Item Name (e.g., ORLIFE Charger)', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'Item Name (e.g., ORLIFE Charger)', 
+                border: OutlineInputBorder(),
+              ),
               onSubmitted: (_) {
-                // Keyboard par Enter dabate hi Quantity box par focus chala jayega
                 FocusScope.of(context).requestFocus(_qtyFocusNode);
               },
             ),
-            const SizedBox(height: 8),
+
+            // 📜 SCROLLABLE HISTORY BOX (Max 5 items visible, extra par scroll aayega)
+            if (_itemHistoryList.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(top: 4, bottom: 8),
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  border: Border.all(color: Colors.blue.shade200),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                constraints: const BoxConstraints(maxHeight: 160), // Lagbhag 5 lines ki height
+                child: Scrollbar(
+                  thumbVisibility: true,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _itemHistoryList.length,
+                    itemBuilder: (context, index) {
+                      final h = _itemHistoryList[index];
+                      return InkWell(
+                        onTap: () {
+                          // Us row par click karte hi rate automatic rate box mein set ho jayega
+                          setState(() {
+                            _rateController.text = h['rate'].toString();
+                          });
+                          FocusScope.of(context).requestFocus(_qtyFocusNode);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('${h['date']} | ${h['billNo']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                              Expanded(
+                                child: Text('  ${h['name']}', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
+                              ),
+                              Text('₹${h['rate']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+            const SizedBox(height: 4),
             Row(
               children: [
                 Expanded(
@@ -235,7 +309,6 @@ class _SalesScreenState extends State<SalesScreen> {
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder()),
                     onSubmitted: (_) {
-                      // Enter dabate hi Rate box par focus chala jayega
                       FocusScope.of(context).requestFocus(_rateFocusNode);
                     },
                   ),
@@ -248,7 +321,6 @@ class _SalesScreenState extends State<SalesScreen> {
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(labelText: 'Rate (₹)', border: OutlineInputBorder()),
                     onSubmitted: (_) {
-                      // Rate likh kar Enter dabate hi item seedha bill mein add ho jayega!
                       _addItemToBill();
                     },
                   ),
@@ -286,6 +358,7 @@ class _SalesScreenState extends State<SalesScreen> {
               padding: const EdgeInsets.all(8),
               color: Colors.grey.shade100,
               child: Column(
+                choice: null,
                 children: [
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     const Text('SubTotal:'),
