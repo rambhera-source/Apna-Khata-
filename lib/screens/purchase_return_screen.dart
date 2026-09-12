@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/party.dart';
 import '../models/inventory_model.dart';
-import '../widgets/searchable_field.dart'; // Reusable searchable widget import kiya
+import 'searchable_field.dart'; // Local screens folder se import
 
 class PurchaseReturnScreen extends StatefulWidget {
   const PurchaseReturnScreen({super.key});
@@ -298,7 +298,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                   : ListView.builder(
                       itemCount: _purchaseReturnItems.length,
                       itemBuilder: (context, index) {
-                        final item = _purchaseReturnItems.valueListenable != null ? _purchaseReturnItems[index] : _purchaseReturnItems[index];
+                        final item = _purchaseReturnItems[index]; // Yeh line theek kar di gayi hai
                         return Card(
                           child: ListTile(
                             title: Text(item['name']),
