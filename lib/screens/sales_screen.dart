@@ -25,6 +25,9 @@ class _SalesScreenState extends State<SalesScreen> {
   String _generatedInvoiceNo = 'INV/001';
   int _currentInvoiceSeq = 1;
 
+  // Automatic Current Date
+  final DateTime _billDate = DateTime.now();
+
   final List<Map<String, dynamic>> _billItems = [];
 
   @override
@@ -34,10 +37,7 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Future<void> _loadInitialData() async {
-    // Parties load karein
     final parties = await DatabaseHelper.isar.parties.where().findAll();
-    
-    // Settings load karein (GST status aur Invoice Prefix ke liye)
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
     
     setState(() {
@@ -52,7 +52,6 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  // Bill mein item add karna
   void _addItemToBill() {
     final itemName = _itemController.text.trim();
     final qty = double.tryParse(_qtyController.text) ?? 0.0;
@@ -78,7 +77,6 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  // Bill Finalize & Save karna (Stock minus logic ke sath)
   Future<void> _saveBill() async {
     if (_billItems.isEmpty || _selectedParty == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,12 +86,10 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     await DatabaseHelper.isar.writeTxn(() async {
-      // 1. Stock update karein (Fresh ya Replacement ke hisaab se minus)
       for (var item in _billItems) {
         String itemName = item['name'];
         double soldQty = item['qty'];
 
-        // Check karein ki is inventory item ka record pehle se hai ya nahi
         var stockRecord = await DatabaseHelper.isar.inventoryStocks
             .filter()
             .itemNameEqualTo(itemName)
@@ -102,10 +98,9 @@ class _SalesScreenState extends State<SalesScreen> {
             .findFirst();
 
         if (stockRecord != null) {
-          stockRecord.quantity -= soldQty; // Stock se kam kar diya
+          stockRecord.quantity -= soldQty;
           await DatabaseHelper.isar.inventoryStocks.put(stockRecord);
         } else {
-          // Agar pehle se stock entry nahi thi, toh negative mein entry chali jayegi ya 0 maan lenge
           var newStock = InventoryStock()
             ..itemName = itemName
             ..stockType = _stockType
@@ -114,7 +109,6 @@ class _SalesScreenState extends State<SalesScreen> {
         }
       }
 
-      // 2. Settings mein next invoice number ko ek aage badha do (Auto-increment)
       final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
       if (settings != null) {
         settings.nextInvoiceNumber = _currentInvoiceSeq + 1;
@@ -126,7 +120,6 @@ class _SalesScreenState extends State<SalesScreen> {
       SnackBar(content: Text('Bill No: $_generatedInvoiceNo Safaltapurvak Ban Gaya aur Stock Update Ho Gaya!')),
     );
 
-    // Reset screen
     setState(() {
       _billItems.clear();
       _currentInvoiceSeq++;
@@ -137,12 +130,12 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   Widget build(BuildContext context) {
     double subTotal = _billItems.fold(0, (sum, item) => sum + item['total']);
-    double taxAmount = _isGstEnabled ? subTotal * 0.18 : 0.0; // Example 18% GST agar on ho
+    double taxAmount = _isGstEnabled ? subTotal * 0.18 : 0.0;
     double grandTotal = subTotal + taxAmount;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Sales Invoice ($_generatedInvoiceNo)'),
+        title: Text('Sales Invoice: $_generatedInvoiceNo'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
       ),
@@ -151,23 +144,15 @@ class _SalesScreenState extends State<SalesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Party & Stock Type selection row
+            // Yahan hum Automatic Date aur Stock Type dikha rahe hain
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: DropdownButtonFormField<Party>(
-                    value: _selectedParty,
-                    items: _parties.map((party) {
-                      return DropdownMenuItem(
-                        value: party,
-                        child: Text(party.name, overflow: TextOverflow.ellipsis),
-                      );
-                    }).toList(),
-                    onChanged: (val) => setState(() => _selectedParty = val),
-                    decoration: const InputDecoration(labelText: 'Select Customer', border: OutlineInputBorder()),
-                  ),
+                Chip(
+                  avatar: const Icon(Icons.calendar_today, size: 16, color: Colors.blue),
+                  label: Text('Date: ${_billDate.day}/${_billDate.month}/${_billDate.year}'),
+                  backgroundColor: Colors.blue.shade50,
                 ),
-                const SizedBox(width: 8),
                 ToggleButtons(
                   isSelected: [_stockType == 'fresh', _stockType == 'replacement'],
                   onPressed: (index) {
@@ -181,6 +166,20 @@ class _SalesScreenState extends State<SalesScreen> {
                   ],
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+
+            // Party Dropdown
+            DropdownButtonFormField<Party>(
+              value: _selectedParty,
+              items: _parties.map((party) {
+                return DropdownMenuItem(
+                  value: party,
+                  child: Text(party.name, overflow: TextOverflow.ellipsis),
+                );
+              }).toList(),
+              onChanged: (val) => setState(() => _selectedParty = val),
+              decoration: const InputDecoration(labelText: 'Select Customer', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
 
@@ -217,7 +216,6 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const Divider(height: 24),
 
-            // Items list in current bill
             const Text('Items Added in Bill:', style: TextStyle(fontWeight: FontWeight.bold)),
             Expanded(
               child: _billItems.isEmpty
@@ -237,7 +235,6 @@ class _SalesScreenState extends State<SalesScreen> {
                     ),
             ),
 
-            // Totals and Save Button
             Container(
               padding: const EdgeInsets.all(8),
               color: Colors.grey.shade100,
