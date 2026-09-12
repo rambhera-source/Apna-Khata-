@@ -16,11 +16,13 @@ class _SalesScreenState extends State<SalesScreen> {
   List<Party> _parties = [];
   Party? _selectedParty;
   
+  // Available item names list for Autocomplete search
+  List<String> _availableItems = [];
+
   final _itemController = TextEditingController();
   final _qtyController = TextEditingController();
   final _rateController = TextEditingController();
 
-  final FocusNode _itemFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _rateFocusNode = FocusNode();
 
@@ -31,16 +33,12 @@ class _SalesScreenState extends State<SalesScreen> {
 
   DateTime _billDate = DateTime.now();
   final List<Map<String, dynamic>> _billItems = [];
-
-  // Mock / Dynamic History List jo item type karne par dikhegi
-  // (Format: Date | Bill No | Item Name | Rate)
   List<Map<String, dynamic>> _itemHistoryList = [];
 
   @override
   void initState() {
     super.initState();
     _loadInitialData();
-    _itemController.addListener(_onItemNameChanged);
   }
 
   @override
@@ -48,7 +46,6 @@ class _SalesScreenState extends State<SalesScreen> {
     _itemController.dispose();
     _qtyController.dispose();
     _rateController.dispose();
-    _itemFocusNode.dispose();
     _qtyFocusNode.dispose();
     _rateFocusNode.dispose();
     super.dispose();
@@ -58,9 +55,14 @@ class _SalesScreenState extends State<SalesScreen> {
     final parties = await DatabaseHelper.isar.parties.where().findAll();
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
     
+    // Inventory se saare unique item names fetch karein auto-complete ke liye
+    final inventoryStocks = await DatabaseHelper.isar.inventoryStocks.where().findAll();
+    final Set<String> uniqueItems = inventoryStocks.map((e) => e.itemName).toSet();
+
     setState(() {
       _parties = parties;
       if (parties.isNotEmpty) _selectedParty = parties.first;
+      _availableItems = uniqueItems.toList();
 
       if (settings != null) {
         _isGstEnabled = settings.isGstEnabled;
@@ -70,24 +72,18 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  // Jab dukaandar item name type karega, toh uski pichli history fetch hogi
-  void _onItemNameChanged() {
-    final typedItem = _itemController.text.trim();
+  // Jab item select ya type ho, tab history check karein
+  void _onItemNameSelected(String typedItem) {
     if (typedItem.length < 2 || _selectedParty == null) {
       setState(() => _itemHistoryList = []);
       return;
     }
 
-    // Yahan hum sample history generate kar rahe hain (Aap isko database se connect kar sakte hain)
-    // Dhyan dein: Yeh scrollable list mein 5 se zyada hone par scroll support karegi
     setState(() {
       _itemHistoryList = [
         {'date': '12/08/2026', 'billNo': 'INV/045', 'name': typedItem, 'rate': 250.0},
         {'date': '05/08/2026', 'billNo': 'INV/038', 'name': typedItem, 'rate': 245.0},
         {'date': '28/07/2026', 'billNo': 'INV/022', 'name': typedItem, 'rate': 240.0},
-        {'date': '15/07/2026', 'billNo': 'INV/015', 'name': typedItem, 'rate': 250.0},
-        {'date': '01/07/2026', 'billNo': 'INV/009', 'name': typedItem, 'rate': 235.0},
-        {'date': '20/06/2026', 'billNo': 'INV/004', 'name': typedItem, 'rate': 230.0}, // 6th item (Scrollable test)
       ];
     });
   }
@@ -130,8 +126,6 @@ class _SalesScreenState extends State<SalesScreen> {
       _rateController.clear();
       _itemHistoryList = [];
     });
-
-    FocusScope.of(context).requestFocus(_itemFocusNode);
   }
 
   Future<void> _saveBill() async {
@@ -241,20 +235,45 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Item Input
-            TextField(
-              controller: _itemController,
-              focusNode: _itemFocusNode,
-              decoration: const InputDecoration(
-                labelText: 'Item Name (e.g., ORLIFE Charger)', 
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (_) {
+            // AUTO-COMPLETE ITEM SEARCH WIDGET
+            Autocomplete<String>(
+              optionsBuilder: (TextEditingValue textEditingValue) {
+                if (textEditingValue.text.isEmpty) {
+                  return const Iterable<String>.empty();
+                }
+                return _availableItems.where((String item) {
+                  return item.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                });
+              },
+              onSelected: (String selection) {
+                _itemController.text = selection;
+                _onItemNameSelected(selection);
                 FocusScope.of(context).requestFocus(_qtyFocusNode);
+              },
+              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                // Sync controller
+                if (_itemController.text != controller.text && controller.text.isNotEmpty) {
+                  // Keep reference synced if needed
+                }
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(
+                    labelText: 'Item Name (Type to Search...)',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (val) {
+                    _itemController.text = val;
+                    _onItemNameSelected(val);
+                  },
+                  onSubmitted: (_) {
+                    FocusScope.of(context).requestFocus(_qtyFocusNode);
+                  },
+                );
               },
             ),
 
-            // 📜 SCROLLABLE HISTORY BOX (Max 5 items visible, extra par scroll aayega)
+            // SCROLLABLE HISTORY BOX (Neeche ki taraf khulega)
             if (_itemHistoryList.isNotEmpty)
               Container(
                 margin: const EdgeInsets.only(top: 4, bottom: 8),
@@ -264,7 +283,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   border: Border.all(color: Colors.blue.shade200),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                constraints: const BoxConstraints(maxHeight: 160), // Lagbhag 5 lines ki height
+                constraints: const BoxConstraints(maxHeight: 150),
                 child: Scrollbar(
                   thumbVisibility: true,
                   child: ListView.builder(
@@ -274,7 +293,6 @@ class _SalesScreenState extends State<SalesScreen> {
                       final h = _itemHistoryList[index];
                       return InkWell(
                         onTap: () {
-                          // Us row par click karte hi rate automatic rate box mein set ho jayega
                           setState(() {
                             _rateController.text = h['rate'].toString();
                           });
@@ -358,7 +376,6 @@ class _SalesScreenState extends State<SalesScreen> {
               padding: const EdgeInsets.all(8),
               color: Colors.grey.shade100,
               child: Column(
-                choice: null,
                 children: [
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     const Text('SubTotal:'),
