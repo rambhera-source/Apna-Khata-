@@ -3,6 +3,7 @@ import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/party.dart';
 import '../models/inventory_model.dart';
+import '../widgets/searchable_field.dart'; // Reusable searchable widget import kiya
 
 class SalesReturnScreen extends StatefulWidget {
   const SalesReturnScreen({super.key});
@@ -13,9 +14,12 @@ class SalesReturnScreen extends StatefulWidget {
 
 class _SalesReturnScreenState extends State<SalesReturnScreen> {
   List<Party> _parties = [];
+  List<String> _partyNames = [];
   Party? _selectedParty;
   List<String> _availableItems = [];
   
+  // Controllers
+  final _partySearchController = TextEditingController();
   final _itemController = TextEditingController();
   final _qtyController = TextEditingController();
   final _rateController = TextEditingController();
@@ -35,6 +39,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
 
   @override
   void dispose() {
+    _partySearchController.dispose();
     _itemController.dispose();
     _qtyController.dispose();
     _rateController.dispose();
@@ -46,11 +51,17 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   Future<void> _loadInitialData() async {
     final parties = await DatabaseHelper.isar.parties.where().findAll();
     final inventoryStocks = await DatabaseHelper.isar.inventoryStocks.where().findAll();
+    
     final Set<String> uniqueItems = inventoryStocks.map((e) => e.itemName).toSet();
+    final List<String> partyNamesList = parties.map((e) => e.name).toList();
 
     setState(() {
       _parties = parties;
-      if (parties.isNotEmpty) _selectedParty = parties.first;
+      _partyNames = partyNamesList;
+      if (parties.isNotEmpty) {
+        _selectedParty = parties.first;
+        _partySearchController.text = parties.first.name;
+      }
       _availableItems = uniqueItems.toList();
     });
   }
@@ -155,16 +166,19 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<Party>(
-                    value: _selectedParty,
-                    items: _parties.map((party) {
-                      return DropdownMenuItem(
-                        value: party,
-                        child: Text(party.name, overflow: TextOverflow.ellipsis),
+                  child: SearchableField(
+                    label: 'Select Customer',
+                    items: _partyNames,
+                    controller: _partySearchController,
+                    onSelected: (selectedName) {
+                      final matchedParty = _parties.firstWhere(
+                        (p) => p.name.toLowerCase() == selectedName.toLowerCase(),
+                        orElse: () => _parties.first,
                       );
-                    }).toList(),
-                    onChanged: (val) => setState(() => _selectedParty = val),
-                    decoration: const InputDecoration(labelText: 'Select Customer', border: OutlineInputBorder()),
+                      setState(() {
+                        _selectedParty = matchedParty;
+                      });
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -184,37 +198,17 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             ),
             const SizedBox(height: 12),
 
-            // AUTO-COMPLETE ITEM SEARCH WIDGET
-            Autocomplete<String>(
-              optionsBuilder: (TextEditingValue textEditingValue) {
-                if (textEditingValue.text.isEmpty) {
-                  return const Iterable<String>.empty();
-                }
-                return _availableItems.where((String item) {
-                  return item.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                });
-              },
-              onSelected: (String selection) {
-                _itemController.text = selection;
-                _onItemNameSelected(selection);
+            // SEARCHABLE ITEM FIELD
+            SearchableField(
+              label: 'Item Name (Type to Search...)',
+              items: _availableItems,
+              controller: _itemController,
+              onSelected: (selectedItem) {
+                _onItemNameSelected(selectedItem);
                 FocusScope.of(context).requestFocus(_qtyFocusNode);
               },
-              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                return TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  decoration: const InputDecoration(
-                    labelText: 'Item Name (Type to Search...)',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (val) {
-                    _itemController.text = val;
-                    _onItemNameSelected(val);
-                  },
-                  onSubmitted: (_) {
-                    FocusScope.of(context).requestFocus(_qtyFocusNode);
-                  },
-                );
+              onSubmitted: () {
+                FocusScope.of(context).requestFocus(_qtyFocusNode);
               },
             ),
 
