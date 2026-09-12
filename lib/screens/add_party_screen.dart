@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
-import 'http://www.flutter.dev/' as http; // Agar pincode API call karni ho (optional)
+import 'http://www.flutter.dev/' as http;
 import 'dart:convert';
 import '../database/database_helper.dart';
 import '../models/party.dart';
@@ -13,11 +13,9 @@ class AddPartyScreen extends StatefulWidget {
 }
 
 class _AddPartyScreenState extends State<AddPartyScreen> {
-  // Controllers for Professional Fields
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   
-  // Detailed Address Controllers
   final _houseNoController = TextEditingController();
   final _streetController = TextEditingController();
   final _landmarkController = TextEditingController();
@@ -28,11 +26,13 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
   final _gstinController = TextEditingController();
   final _balanceController = TextEditingController();
 
-  // Professional Defaults
-  String _partyType = 'Sundry Debtor'; // Sundry Debtor (Customer) or Sundry Creditor (Supplier)
-  String _balanceType = 'Dr'; // Dr (Debit) or Cr (Credit)
+  String _partyType = 'Sundry Debtor'; 
+  String _balanceType = 'Dr'; 
+  
+  // 🔥 A se lekar Z tak ki categories ki list automatically generate karna ('A', 'B', 'C', ..., 'Z')
+  final List<String> _categoryList = List.generate(26, (index) => String.fromCharCode(65 + index));
+  String _priceCategory = 'A'; // Default Category 'A'
 
-  // Focus Nodes for Smooth Navigation
   final FocusNode _phoneFocus = FocusNode();
   final FocusNode _houseNoFocus = FocusNode();
   final FocusNode _streetFocus = FocusNode();
@@ -64,7 +64,6 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
     super.dispose();
   }
 
-  // Pincode Lookup Function (Pincode daalte hi City & State auto-fill karne ke liye)
   Future<void> _lookupPincode(String pincode) async {
     if (pincode.length == 6) {
       try {
@@ -80,19 +79,14 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
             });
           }
         }
-      } catch (e) {
-        // Fallback agar internet na ho
-      }
+      } catch (e) {}
     }
   }
 
   Future<void> _saveParty() async {
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
-    
-    // Structured Address combine karke ek professional address string banana
     final address = '${_houseNoController.text.trim()}, ${_streetController.text.trim()}, Landmark: ${_landmarkController.text.trim()}, City: ${_cityController.text.trim()}, State: ${_stateController.text.trim()} - Pincode: ${_pincodeController.text.trim()}';
-    
     final gstin = _gstinController.text.trim();
     double openingBal = double.tryParse(_balanceController.text) ?? 0.0;
 
@@ -103,7 +97,6 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
       return;
     }
 
-    // 🛑 DUPLICATE NAME CHECK (Same naam ki party dobara nahi banne degi)
     final existingParty = await DatabaseHelper.isar.parties
         .filter()
         .nameEqualTo(name, caseSensitive: false)
@@ -120,20 +113,20 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
       ..name = name
       ..phone = phone
       ..address = address
-      ..partyType = _partyType // Sundry Debtor / Sundry Creditor
+      ..partyType = _partyType 
       ..gstin = gstin.isEmpty ? null : gstin
       ..openingBalance = openingBal
-      ..balanceType = _balanceType; // Dr / Cr
+      ..balanceType = _balanceType
+      ..priceCategory = _priceCategory; // 🔥 Party ke sath A-Z wali Price Category save hogi
 
     await DatabaseHelper.isar.writeTxn(() async {
       await DatabaseHelper.isar.parties.put(newParty);
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Party "$name" safaltapurvak save ho gayi!')),
+      SnackBar(content: Text('Party "$name" (Category $_priceCategory) safaltapurvak save ho gayi!')),
     );
 
-    // Form clear kar dein
     _nameController.clear();
     _phoneController.clear();
     _houseNoController.clear();
@@ -147,6 +140,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
     setState(() {
       _partyType = 'Sundry Debtor';
       _balanceType = 'Dr';
+      _priceCategory = 'A';
     });
   }
 
@@ -154,7 +148,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Professional Party (Ledger Master)'),
+        title: const Text('Add Party with A-Z Price Categories'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
@@ -164,53 +158,54 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Party Type (Sundry Debtors / Sundry Creditors)
+              // Party Group & A-Z Price Category Dropdown Row
               Row(
                 children: [
-                  const Text('Party Group:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  const SizedBox(width: 12),
                   Expanded(
+                    flex: 3,
                     child: DropdownButtonFormField<String>(
                       value: _partyType,
                       items: const [
-                        DropdownMenuItem(value: 'Sundry Debtor', child: Text('Sundry Debtor (Customer)')),
-                        DropdownMenuItem(value: 'Sundry Creditor', child: Text('Sundry Creditor (Supplier)')),
+                        DropdownMenuItem(value: 'Sundry Debtor', child: Text('Sundry Debtor')),
+                        DropdownMenuItem(value: 'Sundry Creditor', child: Text('Sundry Creditor')),
                       ],
                       onChanged: (val) => setState(() => _partyType = val!),
-                      decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0)),
+                      decoration: const InputDecoration(labelText: 'Party Group', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<String>(
+                      value: _priceCategory,
+                      // 🔥 A se Z tak ke options dropdown mein generate honge
+                      items: _categoryList.map((cat) {
+                        return DropdownMenuItem(value: cat, child: Text('Category $cat'));
+                      }).toList(),
+                      onChanged: (val) => setState(() => _priceCategory = val!),
+                      decoration: const InputDecoration(labelText: 'Price Tier', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0)),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
 
-              // 2. Party Name
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Party / Business Name *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.business),
-                ),
+                decoration: const InputDecoration(labelText: 'Party / Business Name *', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business)),
                 onSubmitted: (_) => FocusScope.of(context).requestFocus(_phoneFocus),
               ),
               const SizedBox(height: 12),
 
-              // 3. Phone Number
               TextField(
                 controller: _phoneController,
                 focusNode: _phoneFocus,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.phone),
-                ),
+                decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone)),
                 onSubmitted: (_) => FocusScope.of(context).requestFocus(_houseNoFocus),
               ),
               const SizedBox(height: 12),
 
-              // 4. DETAILED ADDRESS SECTION
               const Text('Address Details:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
               const SizedBox(height: 6),
               Row(
@@ -255,9 +250,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
                       maxLength: 6,
                       decoration: const InputDecoration(labelText: 'Pincode', border: OutlineInputBorder(), counterText: ''),
                       onChanged: (val) {
-                        if (val.length == 6) {
-                          _lookupPincode(val);
-                        }
+                        if (val.length == 6) _lookupPincode(val);
                       },
                       onSubmitted: (_) => FocusScope.of(context).requestFocus(_gstinFocus),
                     ),
@@ -268,39 +261,24 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _cityController,
-                      decoration: const InputDecoration(labelText: 'City / District', border: OutlineInputBorder()),
-                      readOnly: false, // Auto-filled par edit bhi kar sakte hain
-                    ),
+                    child: TextField(controller: _cityController, decoration: const InputDecoration(labelText: 'City / District', border: OutlineInputBorder())),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: TextField(
-                      controller: _stateController,
-                      decoration: const InputDecoration(labelText: 'State', border: OutlineInputBorder()),
-                      readOnly: false,
-                    ),
+                    child: TextField(controller: _stateController, decoration: const InputDecoration(labelText: 'State', border: OutlineInputBorder())),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
 
-              // 5. GSTIN Number
               TextField(
                 controller: _gstinController,
                 focusNode: _gstinFocus,
-                decoration: const InputDecoration(
-                  labelText: 'GSTIN Number (Optional)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.receipt_long),
-                  hintText: 'e.g. 36AAAAA0000A1Z5',
-                ),
+                decoration: const InputDecoration(labelText: 'GSTIN Number (Optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.receipt_long)),
                 onSubmitted: (_) => FocusScope.of(context).requestFocus(_balanceFocus),
               ),
               const SizedBox(height: 12),
 
-              // 6. Opening Balance with Dr / Cr
               Row(
                 children: [
                   Expanded(
@@ -309,10 +287,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
                       controller: _balanceController,
                       focusNode: _balanceFocus,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Opening Balance (₹)',
-                        border: OutlineInputBorder(),
-                      ),
+                      decoration: const InputDecoration(labelText: 'Opening Balance (₹)', border: OutlineInputBorder()),
                       onSubmitted: (_) => _saveParty(),
                     ),
                   ),
@@ -333,17 +308,12 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Save Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
                   onPressed: _saveParty,
-                  child: const Text('Save Professional Party', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: const Text('Save Party with A-Z Price Tier', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
