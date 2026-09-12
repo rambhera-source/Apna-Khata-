@@ -14,25 +14,23 @@ class SalesReturnScreen extends StatefulWidget {
 class _SalesReturnScreenState extends State<SalesReturnScreen> {
   List<Party> _parties = [];
   Party? _selectedParty;
+  List<String> _availableItems = [];
   
   final _itemController = TextEditingController();
   final _qtyController = TextEditingController();
   final _rateController = TextEditingController();
 
-  final FocusNode _itemFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _rateFocusNode = FocusNode();
 
-  String _stockType = 'fresh'; // 'fresh' ya 'replacement'
-  
-  // Is party ki pichhli sales history jo item type karne par dikhegi
+  String _stockType = 'fresh';
   List<Map<String, dynamic>> _partySalesHistory = [];
+  final List<Map<String, dynamic>> _returnItems = [];
 
   @override
   void initState() {
     super.initState();
-    _loadParties();
-    _itemController.addListener(_onItemNameChanged);
+    _loadInitialData();
   }
 
   @override
@@ -40,57 +38,36 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     _itemController.dispose();
     _qtyController.dispose();
     _rateController.dispose();
-    _itemFocusNode.dispose();
     _qtyFocusNode.dispose();
     _rateFocusNode.dispose();
     super.dispose();
   }
 
-  Future<void> _loadParties() async {
+  Future<void> _loadInitialData() async {
     final parties = await DatabaseHelper.isar.parties.where().findAll();
+    final inventoryStocks = await DatabaseHelper.isar.inventoryStocks.where().findAll();
+    final Set<String> uniqueItems = inventoryStocks.map((e) => e.itemName).toSet();
+
     setState(() {
       _parties = parties;
       if (parties.isNotEmpty) _selectedParty = parties.first;
+      _availableItems = uniqueItems.toList();
     });
   }
 
-  // Jab dukaandar item name type karega, toh is selected party ki pichhli sales history aayegi
-  void _onItemNameChanged() {
-    final typedItem = _itemController.text.trim();
+  void _onItemNameSelected(String typedItem) {
     if (typedItem.length < 2 || _selectedParty == null) {
       setState(() => _partySalesHistory = []);
       return;
     }
 
-    // Yahan hum sample sales history dikha rahe hain jo batayegi ki is party ko yeh item kis rate mein gaya tha
     setState(() {
       _partySalesHistory = [
         {'date': '10/08/2026', 'billNo': 'INV/040', 'name': typedItem, 'rate': 250.0},
         {'date': '25/07/2026', 'billNo': 'INV/025', 'name': typedItem, 'rate': 250.0},
-        {'date': '12/07/2026', 'billNo': 'INV/018', 'name': typedItem, 'rate': 240.0},
       ];
     });
   }
-
-  void _addItemToReturn() {
-    final itemName = _itemController.text.trim();
-    final qty = double.tryParse(_qtyController.text) ?? 0.0;
-    final rate = double.tryParse(_rateController.text) ?? 0.0;
-
-    if (itemName.isEmpty || qty <= 0 || rate <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya item name, qty aur rate sahi se bharein!')),
-      );
-      return;
-    }
-
-    setState(() {
-      // Return items list mein add karna (hamari purani list ke mutabiq)
-      // Yahan hum local state ya map use kar rahe hain
-    });
-  }
-
-  final List<Map<String, dynamic>> _returnItems = [];
 
   void _addItemToList() {
     final itemName = _itemController.text.trim();
@@ -116,8 +93,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
       _rateController.clear();
       _partySalesHistory = [];
     });
-
-    FocusScope.of(context).requestFocus(_itemFocusNode);
   }
 
   Future<void> _saveSalesReturn() async {
@@ -141,7 +116,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             .findFirst();
 
         if (stockRecord != null) {
-          stockRecord.quantity += returnQty; // Return aane par stock mein PLUS
+          stockRecord.quantity += returnQty;
           await DatabaseHelper.isar.inventoryStocks.put(stockRecord);
         } else {
           var newStock = InventoryStock()
@@ -209,20 +184,41 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Item Input Field
-            TextField(
-              controller: _itemController,
-              focusNode: _itemFocusNode,
-              decoration: const InputDecoration(
-                labelText: 'Item Name (e.g., ORLIFE Charger)', 
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (_) {
+            // AUTO-COMPLETE ITEM SEARCH WIDGET
+            Autocomplete<String>(
+              optionsBuilder: (TextEditingValue textEditingValue) {
+                if (textEditingValue.text.isEmpty) {
+                  return const Iterable<String>.empty();
+                }
+                return _availableItems.where((String item) {
+                  return item.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                });
+              },
+              onSelected: (String selection) {
+                _itemController.text = selection;
+                _onItemNameSelected(selection);
                 FocusScope.of(context).requestFocus(_qtyFocusNode);
+              },
+              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(
+                    labelText: 'Item Name (Type to Search...)',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (val) {
+                    _itemController.text = val;
+                    _onItemNameSelected(val);
+                  },
+                  onSubmitted: (_) {
+                    FocusScope.of(context).requestFocus(_qtyFocusNode);
+                  },
+                );
               },
             ),
 
-            // 📜 SCROLLABLE PARTY HISTORY DROPBOX (Sirf isi party ka pichhla rate/bill dikhega)
+            // SCROLLABLE HISTORY BOX
             if (_partySalesHistory.isNotEmpty)
               Container(
                 margin: const EdgeInsets.only(top: 4, bottom: 8),
@@ -232,7 +228,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                   border: Border.all(color: Colors.orange.shade200),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                constraints: const BoxConstraints(maxHeight: 150), // Max 5 lines view, excess par scroll
+                constraints: const BoxConstraints(maxHeight: 150),
                 child: Scrollbar(
                   thumbVisibility: true,
                   child: ListView.builder(
@@ -242,7 +238,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                       final h = _partySalesHistory[index];
                       return InkWell(
                         onTap: () {
-                          // Click karte hi original rate automatic rate box mein set ho jayega
                           setState(() {
                             _rateController.text = h['rate'].toString();
                           });
@@ -277,7 +272,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(labelText: 'Return Quantity', border: OutlineInputBorder()),
                     onSubmitted: (_) {
-                      FocusScope.of(context),
                       FocusScope.of(context).requestFocus(_rateFocusNode);
                     },
                   ),
