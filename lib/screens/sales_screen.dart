@@ -4,7 +4,7 @@ import '../database/database_helper.dart';
 import '../models/settings_model.dart';
 import '../models/party.dart';
 import '../models/inventory_model.dart';
-import '../widgets/searchable_field.dart'; // Apna naya reusable widget import kiya
+import 'searchable_field.dart'; // Local screens folder se import
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
