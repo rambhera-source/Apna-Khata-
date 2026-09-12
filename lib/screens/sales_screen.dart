@@ -4,6 +4,7 @@ import '../database/database_helper.dart';
 import '../models/settings_model.dart';
 import '../models/party.dart';
 import '../models/inventory_model.dart';
+import '../widgets/searchable_field.dart'; // Apna naya reusable widget import kiya
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -14,11 +15,13 @@ class SalesScreen extends StatefulWidget {
 
 class _SalesScreenState extends State<SalesScreen> {
   List<Party> _parties = [];
+  List<String> _partyNames = [];
   Party? _selectedParty;
   
-  // Available item names list for Autocomplete search
   List<String> _availableItems = [];
 
+  // Controllers
+  final _partySearchController = TextEditingController();
   final _itemController = TextEditingController();
   final _qtyController = TextEditingController();
   final _rateController = TextEditingController();
@@ -43,6 +46,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   void dispose() {
+    _partySearchController.dispose();
     _itemController.dispose();
     _qtyController.dispose();
     _rateController.dispose();
@@ -54,14 +58,18 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _loadInitialData() async {
     final parties = await DatabaseHelper.isar.parties.where().findAll();
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
-    
-    // Inventory se saare unique item names fetch karein auto-complete ke liye
     final inventoryStocks = await DatabaseHelper.isar.inventoryStocks.where().findAll();
+    
     final Set<String> uniqueItems = inventoryStocks.map((e) => e.itemName).toSet();
+    final List<String> partyNamesList = parties.map((e) => e.name).toList();
 
     setState(() {
       _parties = parties;
-      if (parties.isNotEmpty) _selectedParty = parties.first;
+      _partyNames = partyNamesList;
+      if (parties.isNotEmpty) {
+        _selectedParty = parties.first;
+        _partySearchController.text = parties.first.name;
+      }
       _availableItems = uniqueItems.toList();
 
       if (settings != null) {
@@ -72,13 +80,13 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  // Jab item select ya type ho, tab history check karein
   void _onItemNameSelected(String typedItem) {
     if (typedItem.length < 2 || _selectedParty == null) {
       setState(() => _itemHistoryList = []);
       return;
     }
 
+    // Scrollable History (Date | Bill No | Item | Rate)
     setState(() {
       _itemHistoryList = [
         {'date': '12/08/2026', 'billNo': 'INV/045', 'name': typedItem, 'rate': 250.0},
@@ -219,61 +227,38 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Party Dropdown
-            DropdownButtonFormField<Party>(
-              value: _selectedParty,
-              items: _parties.map((party) {
-                return DropdownMenuItem(
-                  value: party,
-                  child: Text(party.name, overflow: TextOverflow.ellipsis),
+            // 🔍 SEARCHABLE PARTY / CUSTOMER FIELD (Universal Widget)
+            SearchableField(
+              label: 'Select Customer / Party',
+              items: _partyNames,
+              controller: _partySearchController,
+              onSelected: (selectedName) {
+                final matchedParty = _parties.firstWhere(
+                  (p) => p.name.toLowerCase() == selectedName.toLowerCase(),
+                  orElse: () => _parties.first,
                 );
-              }).toList(),
-              onChanged: (val) {
-                setState(() => _selectedParty = val);
+                setState(() {
+                  _selectedParty = matchedParty;
+                });
               },
-              decoration: const InputDecoration(labelText: 'Select Customer', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
 
-            // AUTO-COMPLETE ITEM SEARCH WIDGET
-            Autocomplete<String>(
-              optionsBuilder: (TextEditingValue textEditingValue) {
-                if (textEditingValue.text.isEmpty) {
-                  return const Iterable<String>.empty();
-                }
-                return _availableItems.where((String item) {
-                  return item.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                });
-              },
-              onSelected: (String selection) {
-                _itemController.text = selection;
-                _onItemNameSelected(selection);
+            // 🔍 SEARCHABLE ITEM FIELD (Universal Widget)
+            SearchableField(
+              label: 'Item Name (Type to Search...)',
+              items: _availableItems,
+              controller: _itemController,
+              onSelected: (selectedItem) {
+                _onItemNameSelected(selectedItem);
                 FocusScope.of(context).requestFocus(_qtyFocusNode);
               },
-              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                // Sync controller
-                if (_itemController.text != controller.text && controller.text.isNotEmpty) {
-                  // Keep reference synced if needed
-                }
-                return TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  decoration: const InputDecoration(
-                    labelText: 'Item Name (Type to Search...)',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (val) {
-                    _itemController.text = val;
-                    _onItemNameSelected(val);
-                  },
-                  onSubmitted: (_) {
-                    FocusScope.of(context).requestFocus(_qtyFocusNode);
-                  },
-                );
+              onSubmitted: () {
+                FocusScope.of(context).requestFocus(_qtyFocusNode);
               },
             ),
 
-            // SCROLLABLE HISTORY BOX (Neeche ki taraf khulega)
+            // 📜 SCROLLABLE HISTORY BOX
             if (_itemHistoryList.isNotEmpty)
               Container(
                 margin: const EdgeInsets.only(top: 4, bottom: 8),
