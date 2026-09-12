@@ -4,7 +4,7 @@ import '../database/database_helper.dart';
 import '../models/settings_model.dart';
 import '../models/party.dart';
 import '../models/inventory_model.dart';
-import '../widgets/searchable_field.dart'; // Reusable searchable widget import kiya
+import 'searchable_field.dart'; // Ekdum sahi import path (screens folder ke liye)
 
 class PurchaseScreen extends StatefulWidget {
   const PurchaseScreen({super.key});
