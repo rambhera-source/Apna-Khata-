@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/party.dart';
 import '../models/inventory_model.dart';
-import '../widgets/searchable_field.dart'; // Reusable searchable widget import kiya
+import 'searchable_field.dart'; // Ekdum sahi import path (screens folder ke liye)
 
 class SalesReturnScreen extends StatefulWidget {
   const SalesReturnScreen({super.key});
