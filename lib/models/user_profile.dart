@@ -19,3 +19,4 @@ class UserProfile {
   
   bool isActive = true;
 }
+
