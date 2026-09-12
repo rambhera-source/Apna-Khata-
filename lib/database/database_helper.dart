@@ -4,6 +4,7 @@ import '../models/party.dart';
 import '../models/user_profile.dart';
 import '../models/bom_model.dart';
 import '../models/settings_model.dart';
+import '../models/inventory_model.dart';
 
 class DatabaseHelper {
   static late Isar isar;
@@ -18,7 +19,8 @@ class DatabaseHelper {
           PartySchema, 
           UserProfileSchema, 
           BillOfMaterialsSchema, 
-          CompanySettingsSchema
+          CompanySettingsSchema,
+          InventoryStockSchema // <-- Yeh naya stock schema jud gaya hai
         ],
         directory: dir.path,
       );
