@@ -150,7 +150,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
           if (itemName.isEmpty || sku.isEmpty) continue;
 
-          // Check duplicate in DB
           final existingInDb = await DatabaseHelper.isar.inventoryItems
               .filter()
               .skuEqualTo(sku, caseSensitive: false)
@@ -192,6 +191,128 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         SnackBar(content: Text('Import Failed: $e')),
       );
     }
+  }
+
+  // ✏️ Edit Product Dialog & Update Logic
+  void _editProductDialog(InventoryItem item) {
+    final nameController = TextEditingController(text: item.itemName);
+    final skuController = TextEditingController(text: item.sku);
+    final categoryController = TextEditingController(text: item.category);
+    final stockController = TextEditingController(text: item.stockQuantity.toString());
+    final unitController = TextEditingController(text: item.unit);
+    final priceController = TextEditingController(text: item.priceA.toString());
+    String stockType = item.stockType.isEmpty ? 'Fresh' : item.stockType;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Edit Product: ${item.itemName}'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Product Name', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: skuController,
+                      decoration: const InputDecoration(labelText: 'SKU Code', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: categoryController,
+                      decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: stockController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Stock Qty', border: OutlineInputBorder()),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: unitController,
+                            decoration: const InputDecoration(labelText: 'Unit', border: OutlineInputBorder()),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: priceController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const Text('Type: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ChoiceChip(
+                          label: const Text('Fresh'),
+                          selected: stockType == 'Fresh',
+                          selectedColor: Colors.green.shade100,
+                          onSelected: (val) => setDialogState(() => stockType = 'Fresh'),
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('Replacement'),
+                          selected: stockType == 'Replacement',
+                          selectedColor: Colors.orange.shade100,
+                          onSelected: (val) => setDialogState(() => stockType = 'Replacement'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                  onPressed: () async {
+                    if (nameController.text.trim().isEmpty || skuController.text.trim().isEmpty) {
+                      return;
+                    }
+
+                    item.itemName = nameController.text.trim();
+                    item.sku = skuController.text.trim();
+                    item.category = categoryController.text.trim();
+                    item.stockQuantity = double.tryParse(stockController.text) ?? item.stockQuantity;
+                    item.unit = unitController.text.trim();
+                    item.priceA = double.tryParse(priceController.text) ?? item.priceA;
+                    item.stockType = stockType;
+
+                    await DatabaseHelper.isar.writeTxn(() async {
+                      await DatabaseHelper.isar.inventoryItems.put(item);
+                    });
+
+                    Navigator.pop(context);
+                    setState(() {});
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Product successfully update ho gaya!')),
+                    );
+                  },
+                  child: const Text('Update Product'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   // 🗑️ Delete Product from Database
@@ -424,7 +545,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
           backgroundColor: Colors.teal,
           foregroundColor: Colors.white,
           actions: [
-            // 📊 Bulk Import Menu Button in AppBar
             PopupMenuButton<String>(
               onSelected: (val) {
                 if (val == 'template') _downloadSampleTemplate();
@@ -705,10 +825,22 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                                               ],
                                             ),
                                           ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete, color: Colors.red),
-                                            tooltip: 'Delete Product',
-                                            onPressed: () => _deleteProduct(item),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              // ✏️ Edit Button Added Here
+                                              IconButton(
+                                                icon: const Icon(Icons.edit, color: Colors.blue),
+                                                tooltip: 'Edit Product',
+                                                onPressed: () => _editProductDialog(item),
+                                              ),
+                                              // 🗑️ Delete Button
+                                              IconButton(
+                                                icon: const Icon(Icons.delete, color: Colors.red),
+                                                tooltip: 'Delete Product',
+                                                onPressed: () => _deleteProduct(item),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
