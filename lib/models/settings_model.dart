@@ -9,10 +9,10 @@ class CompanySettings {
   late String businessName;
   String? gstin;
   
-  // Yeh batayega ki GST on hai ya off
-  late bool isGstEnabled;
+  // ✅ GST On/Off ke liye (User apni marzi se set karega)
+  bool isGstEnabled = false; 
 
-  // Invoice Numbering ke liye fields
-  String invoicePrefix = 'INV/'; // Jaise: CI/ ya ORLIFE/
-  int nextInvoiceNumber = 1;     // Agla bill number jo auto-generate hoga
+  // ✅ Neutral default prefix (User baad mein apni company ke hisaab se badal lega)
+  String invoicePrefix = 'INV/'; 
+  int nextInvoiceNumber = 1;     
 }
