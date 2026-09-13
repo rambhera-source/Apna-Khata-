@@ -11,18 +11,78 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
   // Storage & Backup State Variables
   String _storageMode = 'Local (Offline Isar DB)';
   bool _autoBackupEnabled = true;
+  bool _compulsoryBackupEnabled = true; // 🎛️ High Priority Compulsory Backup Toggle State
   String _backupDestination = 'Google Drive / Local Pen Drive Folder';
   String _backupFrequency = 'Daily on App Close';
   bool _isActionRunning = false;
 
+  // 🚨 High Priority Compulsory Backup Popup (Sirf tabhi aayega jab toggle ON hoga)
+  void _showCompulsoryBackupPopup() {
+    if (!_compulsoryBackupEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('High-Priority Backup Reminder currently OFF hai!')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User bina backup kiye dialog cut nahi kar payega
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false, // Android back button disable
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: Colors.red.shade50,
+            title: Row(
+              children: const [
+                Icon(Icons.warning_amber_rounded, color: Colors.red, size: 30),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'HIGH PRIORITY: Compulsory Backup!',
+                    style: TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: const Text(
+              'Aapka data local storage (offline) par save ho raha hai. High-Priority reminder ke anusaar yeh compulsory backup session hai.\n\n'
+              'Kripya turant apni backup file ko export/save karein.',
+              style: TextStyle(fontSize: 14, color: Colors.black87),
+            ),
+            actions: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                icon: const Icon(Icons.backup),
+                label: const Text('Backup & Export Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _exportBackup();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   // 📤 Export Backup to File / Pen Drive
   void _exportBackup() async {
     setState(() => _isActionRunning = true);
-    await Future.delayed(const Duration(seconds: 2)); // Simulate file export process
+    await Future.delayed(const Duration(seconds: 2));
     setState(() => _isActionRunning = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Backup File Successfully Exported & Saved to Pen Drive/Folder!')),
+      const SnackBar(
+        content: Text('Backup Successfully Exported & Saved!'),
+        backgroundColor: Colors.green,
+      ),
     );
   }
 
@@ -46,7 +106,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
 
     if (confirm == true) {
       setState(() => _isActionRunning = true);
-      await Future.delayed(const Duration(seconds: 2)); // Simulate restore process
+      await Future.delayed(const Duration(seconds: 2));
       setState(() => _isActionRunning = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -102,9 +162,9 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
           ),
           const SizedBox(height: 20),
 
-          // ================= AUTOMATED BACKUP SECTION =================
+          // ================= AUTOMATED & COMPULSORY BACKUP SETTINGS =================
           const Text(
-            'Automated Backup System',
+            'Automated & Compulsory Backup Settings',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal),
           ),
           const SizedBox(height: 8),
@@ -122,6 +182,20 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                     onChanged: (val) => setState(() => _autoBackupEnabled = val),
                   ),
                   const Divider(),
+                  // 🎛️ High Priority Compulsory Backup Toggle Switch
+                  SwitchListTile(
+                    title: const Text('High-Priority Compulsory Reminder', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                    subtitle: const Text('Bar-bar backup ke liye compulsory popup dikhayein (ON/OFF)'),
+                    value: _compulsoryBackupEnabled,
+                    activeColor: Colors.red,
+                    onChanged: (val) {
+                      setState(() => _compulsoryBackupEnabled = val);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(val ? 'Compulsory Backup Reminder ON kar diya gaya hai.' : 'Compulsory Backup Reminder OFF kar diya gaya hai.')),
+                      );
+                    },
+                  ),
+                  const Divider(),
                   ListTile(
                     leading: const Icon(Icons.folder_shared, color: Colors.teal),
                     title: const Text('Backup Destination'),
@@ -133,16 +207,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                         );
                       },
                       child: const Text('Change'),
-                    ),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.schedule, color: Colors.teal),
-                    title: const Text('Backup Frequency'),
-                    subtitle: Text(_backupFrequency),
-                    trailing: DropdownButton<String>(
-                      value: _backupFrequency,
-                      items: ['Daily on App Close', 'Every 3 Days', 'Weekly'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                      onChanged: (val) => setState(() => _backupFrequency = val!),
                     ),
                   ),
                 ],
@@ -159,7 +223,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
           const SizedBox(height: 8),
           Row(
             children: [
-              // 📤 Export Button
               Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
@@ -173,7 +236,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              // 📥 Import Button
               Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
@@ -190,18 +252,16 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Instant Manual Backup Button
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+          // Test Compulsory Popup Button (Sirf testing ke liye check karne ko)
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
+              padding: const EdgeInsets.symmetric(vertical: 12),
             ),
-            icon: _isActionRunning
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.backup),
-            label: Text(_isActionRunning ? 'Processing...' : 'Backup Now (Save to Pen Drive / Drive)', style: const TextStyle(fontSize: 15)),
-            onPressed: _isActionRunning ? null : _exportBackup,
+            icon: const Icon(Icons.notification_important),
+            label: const Text('Test High-Priority Popup Now'),
+            onPressed: _showCompulsoryBackupPopup,
           ),
         ],
       ),
