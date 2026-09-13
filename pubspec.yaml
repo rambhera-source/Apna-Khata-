@@ -16,6 +16,11 @@ dependencies:
   provider: ^6.1.1
   excel: ^4.0.3        # 🔥 Excel read/write aur template generate karne ke liye
   file_picker: ^8.0.0  # 🔥 File select aur save dialog ke liye
+  
+  # 🔥 Naye packages added (PDF generation aur WhatsApp sharing ke liye)
+  pdf: ^3.10.4             
+  printing: ^5.11.1        
+  share_plus: ^7.2.1       
 
 dev_dependencies:
   flutter_test:
