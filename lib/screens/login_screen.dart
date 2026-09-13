@@ -11,7 +11,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _pinController = TextEditingController();
   final String _correctPin = "1234"; // Aap apna default PIN ya password yahan change kar sakte hain
-  final String _firmName = 'ORLIFE Mobile Accessories';
+  final String _firmName = 'Orlife ERP'; // ✅ Branding updated
 
   void _handleLogin() {
     if (_pinController.text.trim() == _correctPin) {
@@ -63,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   // Firm Title
                   Text(
                     _firmName,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal),
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.teal),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 6),
