@@ -5,7 +5,6 @@ import 'purchase_screen.dart';
 import 'sales_screen.dart';
 import 'purchase_return_screen.dart';
 import 'sales_return_screen.dart';
-import 'bulk_import_screen.dart';
 import 'backup_settings_screen.dart';
 import 'settings_screen.dart';
 
@@ -97,14 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReturnScreen()));
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.upload_file, color: Colors.purple),
-              title: const Text('Bulk Data Import'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const BulkImportScreen()));
-              },
-            ),
+            // ❌ Bulk Import ka option yahan se hata diya gaya hai, ab yeh Inventory screen ke andar hai
             ListTile(
               leading: const Icon(Icons.backup, color: Colors.teal),
               title: const Text('Backup & Restore Settings'),
@@ -184,13 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.deepOrange,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReturnScreen())),
                   ),
-                  _buildDashboardCard(
-                    context,
-                    title: 'Bulk Import',
-                    icon: Icons.upload_file,
-                    color: Colors.purple,
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BulkImportScreen())),
-                  ),
+                  // ❌ Bulk Import card yahan se bhi hata diya gaya hai
                   _buildDashboardCard(
                     context,
                     title: 'Backup & Restore',
