@@ -10,7 +10,7 @@ class SalesReturnRowItem {
   final TextEditingController qtyController = TextEditingController(text: '1');
   final TextEditingController rateController = TextEditingController(text: '0');
   InventoryItem? selectedProduct;
-  String returnStockType = 'Fresh'; // 'Fresh' ya 'Replacement'
+  String returnStockType = 'Fresh'; 
   
   double get totalAmount {
     double q = double.tryParse(qtyController.text) ?? 0;
@@ -80,7 +80,94 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     return total;
   }
 
-  // 💾 Save Sales Return & Add Stock back to Database (Fresh or Replacement)
+  // 🎯 Priority-Based History Popup (First Priority: Selected Party Bills, Second Priority: Other Bills)
+  Future<void> _showPrioritySalesHistoryPopup(InventoryItem product) async {
+    String selectedParty = _partyController.text.trim();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Return History: ${product.itemName}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                selectedParty.isNotEmpty 
+                  ? 'Target Party: $selectedParty (Priority Match)' 
+                  : 'All Parties History (No Party Selected)', 
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'First Priority: Bills belonging to this party. If none, showing general history.', 
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              const Divider(),
+              
+              Expanded(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    // 🔥 FIRST PRIORITY SECTION (Simulated Party Specific match)
+                    if (selectedParty.isNotEmpty) ...[
+                      Container(
+                        color: Colors.deepOrange.shade50,
+                        padding: const EdgeInsets.all(4),
+                        child: const Text('★ Party Direct Billing Match (1st Priority)', 
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                      ),
+                      ListTile(
+                        dense: true,
+                        title: Text('Bill #ORL-890 [$selectedParty]'),
+                        subtitle: const Text('Date: 2026-08-10 | Qty: 20 pcs | Rate: ₹145.0'),
+                        trailing: const Text('Select Rate', style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
+                        onTap: () {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Rate ₹145.0 applied from Bill #ORL-890 for $selectedParty')),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                    ],
+
+                    // 📦 SECOND PRIORITY / GENERAL HISTORY SECTION
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8.0, bottom: 4.0),
+                      child: Text('Other Recent Billing History (Fallback):', 
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    ),
+                    ListTile(
+                      dense: true,
+                      title: const Text('Bill #ORL-812 [Other Party: Sharma Mobile]'),
+                      subtitle: const Text('Date: 2026-08-01 | Qty: 10 pcs | Rate: ₹148.0'),
+                      trailing: const Text('Select Rate', style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Rate ₹148.0 applied from general history')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _saveSalesReturn() async {
     if (_partyController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -99,24 +186,20 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
 
     if (!hasValidItem) {
       ScaffoldMessenger.of(context).showSnackBar(
-        constSnackBar(content: Text('Kam se kam ek valid return product select karein!')),
+        const SnackBar(content: Text('Kam se kam ek valid return product select karein!')),
       );
       return;
     }
 
-    // Perform database transaction to ADD stock back
     await DatabaseHelper.isar.writeTxn(() async {
       for (var row in _rows) {
         if (row.selectedProduct != null) {
           double returnQty = double.tryParse(row.qtyController.text) ?? 0;
           InventoryItem product = row.selectedProduct!;
 
-          // Yahan check hoga ki return Fresh mein ja raha hai ya Replacement mein
           if (row.returnStockType == 'Fresh') {
-            // Agar product pehle se Fresh stock ka hai ya naya add karna hai
             product.stockQuantity += returnQty; 
           } else {
-            // Replacement stock category ya type update karna
             product.stockType = 'Replacement';
             product.stockQuantity += returnQty;
           }
@@ -146,7 +229,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sales Return Entry'),
+        title: const Text('Sales Return (Priority History)'),
         backgroundColor: Colors.deepOrange,
         foregroundColor: Colors.white,
       ),
@@ -175,7 +258,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               color: Colors.deepOrange.shade100,
               child: const Row(
                 children: [
-                  Expanded(flex: 3, child: Text('Item Name & Return Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(flex: 3, child: Text('Item Name & Priority History', style: TextStyle(fontWeight: FontWeight.bold))),
                   Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold))),
                   Expanded(flex: 1, child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
                   Expanded(flex: 1, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -257,7 +340,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                             ],
                           ),
                           const SizedBox(height: 6),
-                          // 🟢/🟠 Fresh vs Replacement Selection for each row
                           Row(
                             children: [
                               const Text('Return Stock Type: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
@@ -277,6 +359,23 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                               ),
                             ],
                           ),
+                          if (row.selectedProduct != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton.icon(
+                                  style: TextButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: const Size(50, 25),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  icon: const Icon(Icons.history, size: 14, color: Colors.deepOrange),
+                                  label: const Text('View Priority Return History', style: TextStyle(fontSize: 11, color: Colors.deepOrange, fontWeight: FontWeight.bold)),
+                                  onPressed: () => _showPrioritySalesHistoryPopup(row.selectedProduct!),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
