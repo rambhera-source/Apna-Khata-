@@ -1,9 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
-import '../models/party.dart';
 import '../models/inventory_model.dart';
-import 'searchable_field.dart'; // Local screens folder se import
+import '../models/account.dart';
+import 'searchable_field.dart';
+
+class PurchaseReturnRowItem {
+  final TextEditingController searchController = TextEditingController();
+  final TextEditingController qtyController = TextEditingController(text: '1');
+  final TextEditingController rateController = TextEditingController(text: '0');
+  InventoryItem? selectedProduct;
+  String returnStockType = 'Fresh'; // 'Fresh' ya 'Replacement'
+  
+  double get totalAmount {
+    double q = double.tryParse(qtyController.text) ?? 0;
+    double r = double.tryParse(rateController.text) ?? 0;
+    return q * r;
+  }
+
+  void dispose() {
+    searchController.dispose();
+    qtyController.dispose();
+    rateController.dispose();
+  }
+}
 
 class PurchaseReturnScreen extends StatefulWidget {
   const PurchaseReturnScreen({super.key});
@@ -13,319 +33,274 @@ class PurchaseReturnScreen extends StatefulWidget {
 }
 
 class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
-  List<Party> _parties = [];
-  List<String> _partyNames = [];
-  Party? _selectedSupplier;
-  List<String> _availableItems = [];
+  final TextEditingController _partyController = TextEditingController();
   
-  // Controllers
-  final _supplierSearchController = TextEditingController();
-  final _itemController = TextEditingController();
-  final _qtyController = TextEditingController();
-  final _rateController = TextEditingController();
-
-  final FocusNode _qtyFocusNode = FocusNode();
-  final FocusNode _rateFocusNode = FocusNode();
-
-  String _stockType = 'fresh';
-  List<Map<String, dynamic>> _supplierReturnHistory = [];
-  final List<Map<String, dynamic>> _purchaseReturnItems = [];
+  final List<PurchaseReturnRowItem> _rows = [];
+  List<String> _allProductNames = [];
+  List<InventoryItem> _allProducts = [];
+  List<String> _allParties = [];
 
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    _loadData();
+    _addNewRow();
   }
 
-  @override
-  void dispose() {
-    _supplierSearchController.dispose();
-    _itemController.dispose();
-    _qtyController.dispose();
-    _rateController.dispose();
-    _qtyFocusNode.dispose();
-    _rateFocusNode.dispose();
-    super.dispose();
+  Future<void> _loadData() async {
+    _allProducts = await DatabaseHelper.isar.inventoryItems.where().findAll();
+    _allProductNames = _allProducts.map((p) => p.itemName).toList();
+
+    final parties = await DatabaseHelper.isar.accounts.where().findAll();
+    _allParties = parties.map((a) => a.name).toList();
+    setState(() {});
   }
 
-  Future<void> _loadInitialData() async {
-    final parties = await DatabaseHelper.isar.parties.where().findAll();
-    final inventoryStocks = await DatabaseHelper.isar.inventoryStocks.where().findAll();
-    
-    final Set<String> uniqueItems = inventoryStocks.map((e) => e.itemName).toSet();
-    final List<String> partyNamesList = parties.map((e) => e.name).toList();
-
+  void _addNewRow() {
     setState(() {
-      _parties = parties;
-      _partyNames = partyNamesList;
-      if (parties.isNotEmpty) {
-        _selectedSupplier = parties.first;
-        _supplierSearchController.text = parties.first.name;
+      _rows.add(PurchaseReturnRowItem());
+    });
+  }
+
+  void _removeRow(int index) {
+    setState(() {
+      _rows[index].dispose();
+      _rows.removeAt(index);
+      if (_rows.isEmpty) {
+        _addNewRow();
       }
-      _availableItems = uniqueItems.toList();
     });
   }
 
-  void _onItemNameSelected(String typedItem) {
-    if (typedItem.length < 2 || _selectedSupplier == null) {
-      setState(() => _supplierReturnHistory = []);
-      return;
+  double get _grandTotal {
+    double total = 0;
+    for (var row in _rows) {
+      total += row.totalAmount;
     }
-
-    setState(() {
-      _supplierReturnHistory = [
-        {'date': '05/08/2026', 'billNo': 'SUP-880', 'name': typedItem, 'rate': 200.0},
-        {'date': '10/07/2026', 'billNo': 'SUP-790', 'name': typedItem, 'rate': 195.0},
-      ];
-    });
+    return total;
   }
 
-  void _addItemToReturn() {
-    final itemName = _itemController.text.trim();
-    final qty = double.tryParse(_qtyController.text) ?? 0.0;
-    final rate = double.tryParse(_rateController.text) ?? 0.0;
-
-    if (itemName.isEmpty || qty <= 0 || rate <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya item name, qty aur rate sahi se bharein!')),
-      );
-      return;
-    }
-
-    setState(() {
-      _purchaseReturnItems.add({
-        'name': itemName,
-        'qty': qty,
-        'rate': rate,
-        'total': qty * rate,
-      });
-      _itemController.clear();
-      _qtyController.clear();
-      _rateController.clear();
-      _supplierReturnHistory = [];
-    });
-  }
-
+  // 💾 Save Purchase Return & DEDUCT Stock from Database
   Future<void> _savePurchaseReturn() async {
-    if (_purchaseReturnItems.isEmpty || _selectedSupplier == null) {
+    if (_partyController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Supplier select karein aur return item add karein!')),
+        const SnackBar(content: Text('Kripya Supplier (Party Name) select karein!')),
       );
       return;
     }
 
+    bool hasValidItem = false;
+    for (var row in _rows) {
+      if (row.selectedProduct != null && row.totalAmount > 0) {
+        hasValidItem = true;
+        break;
+      }
+    }
+
+    if (!hasValidItem) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kam se kam ek valid return product select karein!')),
+      );
+      return;
+    }
+
+    // Perform database transaction to DEDUCT stock (Purchase Return reduces stock)
     await DatabaseHelper.isar.writeTxn(() async {
-      for (var item in _purchaseReturnItems) {
-        String itemName = item['name'];
-        double returnQty = item['qty'];
+      for (var row in _rows) {
+        if (row.selectedProduct != null) {
+          double returnQty = double.tryParse(row.qtyController.text) ?? 0;
+          InventoryItem product = row.selectedProduct!;
 
-        var stockRecord = await DatabaseHelper.isar.inventoryStocks
-            .filter()
-            .itemNameEqualTo(itemName)
-            .and()
-            .stockTypeEqualTo(_stockType)
-            .findFirst();
+          // Stock minus karna (Fresh ya Replacement stock mein se)
+          product.stockQuantity -= returnQty;
+          if (product.stockQuantity < 0) product.stockQuantity = 0;
 
-        if (stockRecord != null) {
-          stockRecord.quantity -= returnQty;
-          await DatabaseHelper.isar.inventoryStocks.put(stockRecord);
-        } else {
-          var newStock = InventoryStock()
-            ..itemName = itemName
-            ..stockType = _stockType
-            ..quantity = -returnQty;
-          await DatabaseHelper.isar.inventoryStocks.put(newStock);
+          // Agar replacement stock se wapas kiya hai toh type update kar sakte hain
+          if (row.returnStockType == 'Replacement') {
+            product.stockType = 'Replacement';
+          }
+
+          await DatabaseHelper.isar.inventoryItems.put(product);
         }
       }
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Purchase Return Safaltapurvak Save Ho Gaya aur Stock Update Ho Gaya!')),
+      const SnackBar(content: Text('Purchase Return Successfully Saved & Stock Deducted!')),
     );
 
-    setState(() {
-      _purchaseReturnItems.clear();
-    });
+    Navigator.pop(context);
+  }
+
+  @override
+  void dispose() {
+    _partyController.dispose();
+    for (var row in _rows) {
+      row.dispose();
+    }
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    double grandTotal = _purchaseReturnItems.fold(0, (sum, item) => sum + item['total']);
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Purchase Return (Debit Note)'),
+        title: const Text('Purchase Return Entry'),
         backgroundColor: Colors.redAccent,
         foregroundColor: Colors.white,
       ),
       body: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: SearchableField(
-                    label: 'Select Supplier',
-                    items: _partyNames,
-                    controller: _supplierSearchController,
-                    onSelected: (selectedName) {
-                      final matchedParty = _parties.firstWhere(
-                        (p) => p.name.toLowerCase() == selectedName.toLowerCase(),
-                        orElse: () => _parties.first,
-                      );
-                      setState(() {
-                        _selectedSupplier = matchedParty;
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ToggleButtons(
-                  isSelected: [_stockType == 'fresh', _stockType == 'replacement'],
-                  onPressed: (index) {
-                    setState(() {
-                      _stockType = index == 0 ? 'fresh' : 'replacement';
-                    });
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: SearchableField(
+                  label: 'Select Supplier (Party Name) *',
+                  items: _allParties,
+                  controller: _partyController,
+                  onSelected: (selected) {
+                    setState(() {});
                   },
-                  children: const [
-                    Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Fresh')),
-                    Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Replace')),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // SEARCHABLE ITEM FIELD
-            SearchableField(
-              label: 'Item Name (Type to Search...)',
-              items: _availableItems,
-              controller: _itemController,
-              onSelected: (selectedItem) {
-                _onItemNameSelected(selectedItem);
-                FocusScope.of(context).requestFocus(_qtyFocusNode);
-              },
-              onSubmitted: () {
-                FocusScope.of(context).requestFocus(_qtyFocusNode);
-              },
-            ),
-
-            // SCROLLABLE SUPPLIER RETURN HISTORY BOX
-            if (_supplierReturnHistory.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(top: 4, bottom: 8),
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  border: Border.all(color: Colors.red.shade200),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                constraints: const BoxConstraints(maxHeight: 150),
-                child: Scrollbar(
-                  thumbVisibility: true,
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _supplierReturnHistory.length,
-                    itemBuilder: (context, index) {
-                      final h = _supplierReturnHistory[index];
-                      return InkWell(
-                        onTap: () {
-                          setState(() {
-                            _rateController.text = h['rate'].toString();
-                          });
-                          FocusScope.of(context).requestFocus(_qtyFocusNode);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('${h['date']} | ${h['billNo']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                              Expanded(
-                                child: Text('  ${h['name']}', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
-                              ),
-                              Text('₹${h['rate']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
                 ),
               ),
+            ),
+            const SizedBox(height: 10),
 
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _qtyController,
-                    focusNode: _qtyFocusNode,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Return Quantity', border: OutlineInputBorder()),
-                    onSubmitted: (_) {
-                      FocusScope.of(context).requestFocus(_rateFocusNode);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _rateController,
-                    focusNode: _rateFocusNode,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Rate (₹)', border: OutlineInputBorder()),
-                    onSubmitted: (_) {
-                      _addItemToReturn();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-                  onPressed: _addItemToReturn,
-                  child: const Text('Add'),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            const Text('Purchase Return Items List:', style: TextStyle(fontWeight: FontWeight.bold)),
-            Expanded(
-              child: _purchaseReturnItems.isEmpty
-                  ? const Center(child: Text('Abhi koi purchase return item add nahi kiya gaya hai.'))
-                  : ListView.builder(
-                      itemCount: _purchaseReturnItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _purchaseReturnItems[index]; // Yeh line theek kar di gayi hai
-                        return Card(
-                          child: ListTile(
-                            title: Text(item['name']),
-                            subtitle: Text('Qty: ${item['qty']} | Rate: ₹${item['rate']}'),
-                            trailing: Text('₹${item['total'].toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                        );
-                      },
-                    ),
-            ),
             Container(
-              padding: const EdgeInsets.all(8),
-              color: Colors.grey.shade100,
-              child: Column(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              color: Colors.redAccent.shade150,
+              child: const Row(
                 children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    const Text('Total Return Amount:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    Text('₹${grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                  ]),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-                      onPressed: _savePurchaseReturn,
-                      child: const Text('Save Purchase Return & Reduce Stock', style: TextStyle(fontSize: 16)),
+                  Expanded(flex: 3, child: Text('Item Name & Return Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(flex: 1, child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(flex: 1, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
+                  SizedBox(width: 40),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: ListView.builder(
+                itemCount: _rows.length,
+                itemBuilder: (context, index) {
+                  final row = _rows[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: SearchableField(
+                                  label: 'Return Item ${index + 1}',
+                                  items: _allProductNames,
+                                  controller: row.searchController,
+                                  onSelected: (selectedItemName) {
+                                    final match = _allProducts.firstWhere(
+                                      (p) => p.itemName.toLowerCase() == selectedItemName.toLowerCase(),
+                                      orElse: () => InventoryItem(),
+                                    );
+                                    setState(() {
+                                      row.selectedProduct = match.id != 0 ? match : null;
+                                      if (row.selectedProduct != null) {
+                                        row.rateController.text = row.selectedProduct!.priceA.toString();
+                                      }
+                                    });
+                                    if (index == _rows.length - 1) {
+                                      _addNewRow();
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                flex: 1,
+                                child: TextField(
+                                  controller: row.qtyController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 12)),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                flex: 1,
+                                child: TextField(
+                                  controller: row.rateController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 12)),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                flex: 1,
+                                child: Center(
+                                  child: Text(
+                                    '₹${row.totalAmount.toStringAsFixed(2)}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                onPressed: () => _removeRow(index),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Text('Return From Stock: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                              const SizedBox(width: 8),
+                              ChoiceChip(
+                                label: const Text('Fresh'),
+                                selected: row.returnStockType == 'Fresh',
+                                selectedColor: Colors.green.shade100,
+                                onSelected: (val) => setState(() => row.returnStockType = 'Fresh'),
+                              ),
+                              const SizedBox(width: 8),
+                              ChoiceChip(
+                                label: const Text('Replacement'),
+                                selected: row.returnStockType == 'Replacement',
+                                selectedColor: Colors.orange.shade100,
+                                onSelected: (val) => setState(() => row.returnStockType = 'Replacement'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
+                  );
+                },
+              ),
+            ),
+
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Return Total: ₹ ${_grandTotal.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                    onPressed: _savePurchaseReturn,
+                    child: const Text('Save Purchase Return', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
