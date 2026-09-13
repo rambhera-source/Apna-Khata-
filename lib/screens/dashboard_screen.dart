@@ -5,6 +5,7 @@ import 'sales_return_screen.dart';
 import 'purchase_return_screen.dart';
 import 'product_inventory_screen.dart';
 import 'manufacturing_screen.dart'; // Naya combined manufacturing & BOM screen
+import 'super_admin_dashboard_screen.dart'; // ✅ Super Admin Panel ka import
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -17,6 +18,19 @@ class DashboardScreen extends StatelessWidget {
         backgroundColor: Colors.teal.shade800,
         foregroundColor: Colors.white,
         centerTitle: true,
+        actions: [
+          // 🛡️ Super Admin Control Button (Pending Requests & Active Companies manage karne ke liye)
+          IconButton(
+            icon: const Icon(Icons.admin_panel_settings, size: 28),
+            tooltip: 'Super Admin Control',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SuperAdminDashboardScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
