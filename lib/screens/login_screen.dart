@@ -3,7 +3,6 @@ import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/user_model.dart';
 import 'dashboard_screen.dart';
-import 'signup_screen.dart'; // ✅ Signup screen ka import
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,12 +12,22 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _pinController = TextEditingController();
+  bool _isLoginMode = true; // True = Login View, False = Signup View
+
+  // Controllers for Login
+  final TextEditingController _loginPinController = TextEditingController();
+  
+  // Controllers for Signup
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _signupPinController = TextEditingController();
+
   final String _masterPin = "1234"; // Master Super Admin PIN
   final String _firmName = 'Orlife ERP';
 
+  // 🟢 Login Logic
   Future<void> _handleLogin() async {
-    final enteredPin = _pinController.text.trim();
+    final enteredPin = _loginPinController.text.trim();
 
     if (enteredPin.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -27,7 +36,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // 1. Check if Master Admin PIN is entered
+    // 1. Master Admin Check
     if (enteredPin == _masterPin) {
       Navigator.pushReplacement(
         context,
@@ -36,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // 2. Check if entered PIN belongs to an Approved Staff User in Database
+    // 2. Approved Staff Check from Database
     final staffUser = await DatabaseHelper.isar.userAccounts
         .filter()
         .pinEqualTo(enteredPin)
@@ -44,13 +53,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (staffUser != null) {
       if (staffUser.isApproved) {
-        // ✅ Approved Staff: Allow login to Dashboard
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const DashboardScreen()),
         );
       } else {
-        // ⏳ Pending Approval: Block login and show warning
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Aapka account abhi Admin approval ke liye pending hai!'),
@@ -59,7 +66,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } else {
-      // ❌ Invalid PIN
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Galat PIN! Kripya sahi PIN darj karein.'),
@@ -69,9 +75,66 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // 🟢 Signup Logic
+  Future<void> _handleSignup() async {
+    final name = _nameController.text.trim();
+    final username = _usernameController.text.trim();
+    final pin = _signupPinController.text.trim();
+
+    if (name.isEmpty || username.isEmpty || pin.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kripya sabhi fields sahi bharein (PIN min 4 digits)!'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    // Check if user already exists
+    final existingUser = await DatabaseHelper.isar.userAccounts
+        .filter()
+        .usernameEqualTo(username)
+        .findFirst();
+
+    if (existingUser != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Yeh Username/Mobile pehle se registered hai!'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    // Save to Database with isApproved = false (Pending)
+    await DatabaseHelper.isar.writeTxn(() async {
+      final newUser = UserAccount()
+        ..name = name
+        ..username = username
+        ..pin = pin
+        ..role = 'Staff'
+        ..isApproved = false;
+
+      await DatabaseHelper.isar.userAccounts.put(newUser);
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Signup Request Submitted! Admin approval ke baad login kar payenge.'),
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    // Switch back to login mode after successful signup
+    setState(() {
+      _isLoginMode = true;
+      _nameController.clear();
+      _usernameController.clear();
+      _signupPinController.clear();
+    });
+  }
+
   @override
   void dispose() {
-    _pinController.dispose();
+    _loginPinController.dispose();
+    _nameController.dispose();
+    _usernameController.dispose();
+    _signupPinController.dispose();
     super.dispose();
   }
 
@@ -82,81 +145,133 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
-          child: Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Logo / Icon
-                  CircleAvatar(
-                    radius: 35,
-                    backgroundColor: Colors.teal.shade100,
-                    child: const Icon(Icons.lock_outline, size: 40, color: Colors.teal),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Firm Title
-                  Text(
-                    _firmName,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.teal),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Secure Business Login',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // PIN Input Field
-                  TextField(
-                    controller: _pinController,
-                    keyboardType: TextInputType.number,
-                    obscureText: true, // PIN hide karne ke liye
-                    maxLength: 6,
-                    decoration: InputDecoration(
-                      labelText: 'Enter Security PIN',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      prefixIcon: const Icon(Icons.vpn_key),
-                      counterText: '',
+          child: SingleChildScrollView(
+            child: Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Logo / Icon
+                    CircleAvatar(
+                      radius: 35,
+                      backgroundColor: Colors.teal.shade100,
+                      child: Icon(_isLoginMode ? Icons.lock_outline : Icons.person_add, size: 35, color: Colors.teal),
                     ),
-                    onSubmitted: (_) => _handleLogin(),
-                  ),
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 16),
+                    
+                    // Firm Title
+                    Text(
+                      _firmName,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.teal),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _isLoginMode ? 'Secure Business Login' : 'Staff Account Request',
+                      style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 24),
 
-                  // Login Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    // ================= DYNAMIC FORM FIELDS =================
+                    if (_isLoginMode) ...[
+                      // LOGIN VIEW FIELDS
+                      TextField(
+                        controller: _loginPinController,
+                        keyboardType: TextInputType.number,
+                        obscureText: true,
+                        maxLength: 6,
+                        decoration: InputDecoration(
+                          labelText: 'Enter Security PIN',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          prefixIcon: const Icon(Icons.vpn_key),
+                          counterText: '',
+                        ),
+                        onSubmitted: (_) => _handleLogin(),
                       ),
-                      onPressed: _handleLogin,
-                      child: const Text('Login to Dashboard', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                      const SizedBox(height: 20),
 
-                  // Signup Navigation Button for New Staff
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const SignupScreen()),
-                      );
-                    },
-                    child: const Text(
-                      'New User? Request Signup',
-                      style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: _handleLogin,
+                          child: const Text('Login to Dashboard', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ] else ...[
+                      // SIGNUP VIEW FIELDS
+                      TextField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          labelText: 'Full Name',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          prefixIcon: const Icon(Icons.person),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _usernameController,
+                        keyboardType: TextInputType.phone,
+                        decoration: InputDecoration(
+                          labelText: 'Mobile Number / Username',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          prefixIcon: const Icon(Icons.phone),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _signupPinController,
+                        keyboardType: TextInputType.number,
+                        obscureText: true,
+                        maxLength: 6,
+                        decoration: InputDecoration(
+                          labelText: 'Create Security PIN',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          prefixIcon: const Icon(Icons.lock),
+                          counterText: '',
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: _handleSignup,
+                          child: const Text('Submit Request to Admin', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 12),
+
+                    // Toggle Button between Login and Signup
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _isLoginMode = !_isLoginMode; // Mode switch karega
+                        });
+                      },
+                      child: Text(
+                        _isLoginMode ? 'New User? Request Signup' : 'Already have an account? Login',
+                        style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
