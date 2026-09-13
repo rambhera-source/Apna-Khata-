@@ -7,6 +7,7 @@ import 'purchase_return_screen.dart';
 import 'sales_return_screen.dart';
 import 'backup_settings_screen.dart';
 import 'settings_screen.dart';
+import 'manufacturing_screen.dart'; // ✅ Naya Manufacturing & BOM screen import kiya gaya hai
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,7 +17,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool _isLoggedIn = true;
+  final bool _isLoggedIn = true;
   final String _selectedBusinessMode = 'Wholesale';
   final TextEditingController _firmNameController = TextEditingController(text: 'ORLIFE Mobile Accessories');
 
@@ -31,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
-            onPressed: () => setState(() => _isLoggedIn = false),
+            onPressed: () => setState(() {}),
           ),
         ],
       ),
@@ -41,7 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             UserAccountsDrawerHeader(
               accountName: Text(_firmNameController.text, style: const TextStyle(fontWeight: FontWeight.bold)),
-              accountText: Text('Mode: $_selectedBusinessMode'),
+              accountEmail: Text('Mode: $_selectedBusinessMode'),
               currentAccountPicture: const CircleAvatar(
                 backgroundColor: Colors.white,
                 child: Icon(Icons.store, color: Colors.teal, size: 40),
@@ -62,6 +63,14 @@ class _LoginScreenState extends State<LoginScreen> {
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.precision_manufacturing, color: Colors.purple),
+              title: const Text('Manufacturing & BOM'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const ManufacturingScreen()));
               },
             ),
             ListTile(
@@ -96,7 +105,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReturnScreen()));
               },
             ),
-            // ❌ Bulk Import ka option yahan se hata diya gaya hai, ab yeh Inventory screen ke andar hai
             ListTile(
               leading: const Icon(Icons.backup, color: Colors.teal),
               title: const Text('Backup & Restore Settings'),
@@ -148,6 +156,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.teal,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen())),
                   ),
+                  // ✅ Naya Manufacturing & BOM card dashboard grid mein joda gaya hai
+                  _buildDashboardCard(
+                    context,
+                    title: 'Manufacturing & BOM',
+                    icon: Icons.precision_manufacturing,
+                    color: Colors.purple,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ManufacturingScreen())),
+                  ),
                   _buildDashboardCard(
                     context,
                     title: 'Purchase Bill',
@@ -176,7 +192,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.deepOrange,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReturnScreen())),
                   ),
-                  // ❌ Bulk Import card yahan se bhi hata diya gaya hai
                   _buildDashboardCard(
                     context,
                     title: 'Backup & Restore',
