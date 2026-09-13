@@ -22,7 +22,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.x'
+          flutter-version: '3.22.x' # Naya stable version jo modern gradle ko support karta hai
           channel: 'stable'
           cache: true
 
