@@ -1,17 +1,23 @@
-import 'isar.dart';
+import 'package:isar/isar.dart';
 
 part 'party.g.dart';
 
 @collection
 class Party {
-  Id id = Isar.autoIncrement; // Fast auto-incrementing ID
+  Id id = Isar.autoIncrement;
 
-  @Index(type: IndexType.value) // Search fast karne ke liye index
+  @Index(unique: true, replace: true)
   late String name;
 
   late String phone;
+  late String address;
+  late String partyType; // 'Sundry Debtor' ya 'Sundry Creditor'
+
+  String? gstin;
   
-  late String partyType; // 'Customer' ya 'Supplier'
-  
-  double balance = 0.0; // Positive = Lena hai, Negative = Dena hai
+  double openingBalance = 0.0; 
+  String balanceType = 'Dr'; // 'Dr' ya 'Cr'
+
+  // 🔥 A se Z tak ki Price Category store karne ke liye
+  String priceCategory = 'A'; 
 }
