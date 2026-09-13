@@ -67,6 +67,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
     if (picked != null) setState(() => _toDate = picked);
   }
 
+  // 🔍 Saari Transactions (Sales, Purchase, Returns, Vouchers) fetch karne ka function
   Future<void> _generateLedgerReport() async {
     final accountName = _accountController.text.trim();
     if (accountName.isEmpty) {
@@ -78,6 +79,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
     setState(() => _isLoading = true);
 
+    // 1. Account ka current balance fetch karna
     final accountObj = await DatabaseHelper.isar.accounts
         .filter()
         .nameEqualTo(accountName)
@@ -85,16 +87,19 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
     _currentBalance = accountObj?.balance ?? 0.0;
 
+    // 2. Date range setup
     final startDateTime = DateTime(_fromDate.year, _fromDate.month, _fromDate.day);
     final endDateTime = DateTime(_toDate.year, _toDate.month, _toDate.day, 23, 59, 59);
 
+    // 3. Query: Party Name ya Cash/Bank match karne wali sabhi entries (Sales, Purchase, Payment, Receipt, etc.)
     final txns = await DatabaseHelper.isar.accountingTransactions
         .filter()
         .dateBetween(startDateTime, endDateTime)
         .and()
-        .-(
-          (q) => q.partyNameContains(accountName, caseSensitive: false).or().cashOrBankEqualTo(accountName)
-        )
+        .group((q) => q
+            .partyNameEqualTo(accountName, caseSensitive: false)
+            .or()
+            .cashOrBankEqualTo(accountName))
         .sortByDateDesc()
         .findAll();
 
@@ -105,28 +110,23 @@ class _LedgerScreenState extends State<LedgerScreen> {
     });
   }
 
-  // ================= 1. EXPORT TO EXCEL FUNCTION =================
+  // ================= 1. EXPORT TO EXCEL =================
   Future<void> _exportToExcel() async {
-    if (_ledgerTransactions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Export ke liye koi data nahi hai!')));
-      return;
-    }
+    if (_ledgerTransactions.isEmpty) return;
 
     var excel = excel_lib.Excel.createExcel();
     excel_lib.Sheet sheetObject = excel['Ledger Statement'];
     excel.setDefaultSheet('Ledger Statement');
 
-    // Header Row
     sheetObject.appendRow([
       excel_lib.TextCellValue('Date'),
-      excel_lib.TextCellValue('Voucher Type'),
-      excel_lib.TextCellValue('Voucher No'),
-      excel_lib.TextCellValue('Party / Mode'),
+      excel_lib.TextCellValue('Entry Type'),
+      excel_lib.TextCellValue('Bill / Voucher No'),
+      excel_lib.TextCellValue('Mode / Source'),
       excel_lib.TextCellValue('Amount (INR)'),
       excel_lib.TextCellValue('Notes')
     ]);
 
-    // Data Rows
     for (var txn in _ledgerTransactions) {
       sheetObject.appendRow([
         excel_lib.TextCellValue(DateFormat('dd-MM-yyyy').format(txn.date)),
@@ -140,20 +140,13 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
     final directory = await getTemporaryDirectory();
     final filePath = '${directory.path}/Ledger_${_accountController.text.trim()}.xlsx';
-    File(filePath)
-      ..createSync(recursive: true)
-      ..writeAsBytesSync(excel.encode()!);
-
-    // Share via WhatsApp / File system
+    File(filePath)..createSync(recursive: true)..writeAsBytesSync(excel.encode()!);
     await Share.shareXFiles([XFile(filePath)], text: 'Ledger Statement for ${_accountController.text.trim()} (ORLIFE ERP)');
   }
 
-  // ================= 2. GENERATE & DOWNLOAD / SHARE PDF FUNCTION =================
+  // ================= 2. SHARE PDF VIA WHATSAPP =================
   Future<void> _downloadOrSharePdf() async {
-    if (_ledgerTransactions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF ke liye koi data nahi hai!')));
-      return;
-    }
+    if (_ledgerTransactions.isEmpty) return;
 
     final pdf = pw.Document();
     pdf.addPage(
@@ -176,7 +169,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
           pw.Text('Current Balance: Rs. ${_currentBalance.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 15),
           pw.Table.fromTextArray(
-            headers: ['Date', 'Type', 'Voucher No', 'Mode', 'Amount'],
+            headers: ['Date', 'Type', 'Bill / Voucher No', 'Mode', 'Amount'],
             data: _ledgerTransactions.map((txn) => [
               DateFormat('dd-MM-yyyy').format(txn.date),
               txn.voucherType,
@@ -189,13 +182,53 @@ class _LedgerScreenState extends State<LedgerScreen> {
       ),
     );
 
-    // Save PDF to temp and share / print
     final output = await getTemporaryDirectory();
     final file = File('${output.path}/Ledger_${_accountController.text.trim()}.pdf');
     await file.writeAsBytes(await pdf.save());
-
-    // Share via WhatsApp or other apps
     await Share.shareXFiles([XFile(file.path)], text: 'Ledger Statement PDF - ${_accountController.text.trim()}');
+  }
+
+  // ================= 3. DIRECT PHYSICAL PRINT =================
+  Future<void> _printLedger() async {
+    if (_ledgerTransactions.isEmpty) return;
+
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) => [
+          pw.Header(
+            level: 0,
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Account Ledger Statement', style: const pw.TextStyle(fontSize: 14)),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Text('Account Name: ${_accountController.text}', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.Text('Period: ${DateFormat('dd-MM-yyyy').format(_fromDate)} to ${DateFormat('dd-MM-yyyy').format(_toDate)}'),
+          pw.Text('Current Balance: Rs. ${_currentBalance.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 15),
+          pw.Table.fromTextArray(
+            headers: ['Date', 'Type', 'Bill / Voucher No', 'Mode', 'Amount'],
+            data: _ledgerTransactions.map((txn) => [
+              DateFormat('dd-MM-yyyy').format(txn.date),
+              txn.voucherType,
+              txn.voucherNumber,
+              txn.cashOrBank,
+              'Rs. ${txn.amount.toStringAsFixed(2)}',
+            ]).toList(),
+          ),
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
   }
 
   @override
@@ -211,20 +244,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
         title: const Text('Account / Party Ledger Statement'),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
-        actions: [
-          if (_isReportLoaded) ...[
-            IconButton(
-              icon: const Icon(Icons.table_chart),
-              tooltip: 'Export & Share Excel',
-              onPressed: _exportToExcel,
-            ),
-            IconButton(
-              icon: const Icon(Icons.picture_as_pdf),
-              tooltip: 'Download & Share PDF',
-              onPressed: _downloadOrSharePdf,
-            ),
-          ],
-        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -283,19 +302,26 @@ class _LedgerScreenState extends State<LedgerScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Transactions in Selected Date Range:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey)),
-                  Row(
+                  const Text('All Transactions (Sales, Purchase, Vouchers):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                  Wrap(
+                    spacing: 6,
                     children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white, isDense: true),
+                        icon: const Icon(Icons.print, size: 16),
+                        label: const Text('Print'),
+                        onPressed: _printLedger,
+                      ),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, isDense: true),
                         icon: const Icon(Icons.share, size: 16),
-                        label: const Text('WhatsApp PDF'),
+                        label: const Text('WhatsApp'),
                         onPressed: _downloadOrSharePdf,
                       ),
-                      const SizedBox(width: 8),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, isDense: true),
                         icon: const Icon(Icons.table_view, size: 16),
@@ -316,19 +342,45 @@ class _LedgerScreenState extends State<LedgerScreen> {
                             itemCount: _ledgerTransactions.length,
                             itemBuilder: (context, index) {
                               final txn = _ledgerTransactions[index];
-                              bool isPayment = txn.voucherType == 'Payment';
+                              
+                              // Color coding based on type
+                              Color badgeColor = Colors.indigo;
+                              if (txn.voucherType == 'Sales') badgeColor = Colors.teal;
+                              if (txn.voucherType == 'Purchase') badgeColor = Colors.blue;
+                              if (txn.voucherType == 'Payment') badgeColor = Colors.red;
+                              if (txn.voucherType == 'Receipt') badgeColor = Colors.green;
+                              if (txn.voucherType == 'Journal') badgeColor = Colors.purple;
+
                               return Card(
                                 elevation: 2,
                                 margin: const EdgeInsets.symmetric(vertical: 4),
                                 child: ListTile(
                                   leading: CircleAvatar(
-                                    backgroundColor: isPayment ? Colors.red.shade100 : Colors.green.shade100,
-                                    child: Icon(isPayment ? Icons.arrow_upward : Icons.arrow_downward, color: isPayment ? Colors.red : Colors.green),
+                                    backgroundColor: badgeColor.withOpacity(0.15),
+                                    child: Text(
+                                      txn.voucherType.substring(0, 1),
+                                      style: TextStyle(fontWeight: FontWeight.bold, color: badgeColor),
+                                    ),
                                   ),
-                                  title: Text('${txn.voucherType} (${txn.voucherNumber})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text('Date: ${DateFormat('dd-MM-yyyy').format(txn.date)}\nMode: ${txn.cashOrBank}\nNotes: ${txn.notes ?? "N/A"}'),
+                                  title: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('${txn.voucherType} (${txn.voucherNumber})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                      Text('₹ ${txn.amount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: badgeColor)),
+                                    ],
+                                  ),
+                                  subtitle: Padding(
+                                    padding: const EdgeInsets.only(top: 4.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Date: ${DateFormat('dd-MM-yyyy').format(txn.date)} | Mode: ${txn.cashOrBank}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                                        if (txn.notes != null && txn.notes!.isNotEmpty)
+                                          Text('Notes: ${txn.notes}', style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 11, color: Colors.grey)),
+                                      ],
+                                    ),
+                                  ),
                                   isThreeLine: true,
-                                  trailing: Text('₹ ${txn.amount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isPayment ? Colors.red : Colors.green)),
                                 ),
                               );
                             },
