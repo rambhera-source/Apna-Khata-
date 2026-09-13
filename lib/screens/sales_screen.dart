@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/inventory_model.dart';
 import '../models/account.dart';
-import 'searchable_field.dart'; // Aapka reusable searchable field widget
+import 'searchable_field.dart';
 
 class SalesRowItem {
   final TextEditingController searchController = TextEditingController();
@@ -33,9 +33,7 @@ class SalesScreen extends StatefulWidget {
 
 class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _partyController = TextEditingController();
-  Account? _selectedParty;
   
-  // List of active rows for continuous billing
   final List<SalesRowItem> _rows = [];
   List<String> _allProductNames = [];
   List<InventoryItem> _allProducts = [];
@@ -45,7 +43,6 @@ class _SalesScreenState extends State<SalesScreen> {
   void initState() {
     super.initState();
     _loadData();
-    // Start with one empty row
     _addNewRow();
   }
 
@@ -82,6 +79,54 @@ class _SalesScreenState extends State<SalesScreen> {
     return total;
   }
 
+  // 💾 Save Invoice & Deduct Stock from Database
+  Future<void> _saveSalesInvoice() async {
+    if (_partyController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kripya Customer (Party Name) select karein!')),
+      );
+      return;
+    }
+
+    // Validate rows
+    bool hasValidItem = false;
+    for (var row in _rows) {
+      if (row.selectedProduct != null && row.totalAmount > 0) {
+        hasValidItem = true;
+        break;
+      }
+    }
+
+    if (!hasValidItem) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kam se kam ek valid product select karein!')),
+      );
+      return;
+    }
+
+    // Perform database transaction to reduce stock
+    await DatabaseHelper.isar.writeTxn(() async {
+      for (var row in _rows) {
+        if (row.selectedProduct != null) {
+          double soldQty = double.tryParse(row.qtyController.text) ?? 0;
+          
+          // Update product stock in memory/database
+          InventoryItem product = row.selectedProduct!;
+          product.stockQuantity -= soldQty; // Stock minus karna
+          if (product.stockQuantity < 0) product.stockQuantity = 0;
+
+          await DatabaseHelper.isar.inventoryItems.put(product);
+        }
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sales Invoice Successfully Saved & Stock Updated!')),
+    );
+
+    Navigator.pop(context); // Go back to Dashboard
+  }
+
   @override
   void dispose() {
     _partyController.dispose();
@@ -103,7 +148,6 @@ class _SalesScreenState extends State<SalesScreen> {
         padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
-            // Party Selection Section
             Card(
               elevation: 2,
               child: Padding(
@@ -120,7 +164,6 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const SizedBox(height: 10),
 
-            // Table Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               color: Colors.teal.shade100,
@@ -135,7 +178,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ),
 
-            // Continuous Rows List
             Expanded(
               child: ListView.builder(
                 itemCount: _rows.length,
@@ -145,7 +187,6 @@ class _SalesScreenState extends State<SalesScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
                     child: Row(
                       children: [
-                        // 1. Searchable Product Field
                         Expanded(
                           flex: 3,
                           child: SearchableField(
@@ -163,7 +204,6 @@ class _SalesScreenState extends State<SalesScreen> {
                                   row.rateController.text = row.selectedProduct!.priceA.toString();
                                 }
                               });
-                              // Automatically add a new row if this is the last row and item is selected
                               if (index == _rows.length - 1) {
                                 _addNewRow();
                               }
@@ -172,7 +212,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         ),
                         const SizedBox(width: 4),
 
-                        // 2. Quantity Field
                         Expanded(
                           flex: 1,
                           child: TextField(
@@ -184,7 +223,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         ),
                         const SizedBox(width: 4),
 
-                        // 3. Rate / Price Field
                         Expanded(
                           flex: 1,
                           child: TextField(
@@ -196,7 +234,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         ),
                         const SizedBox(width: 4),
 
-                        // 4. Line Total Amount
                         Expanded(
                           flex: 1,
                           child: Center(
@@ -207,7 +244,6 @@ class _SalesScreenState extends State<SalesScreen> {
                           ),
                         ),
 
-                        // 5. Delete Row Button
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                           onPressed: () => _removeRow(index),
@@ -219,7 +255,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ),
 
-            // Footer & Grand Total
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -236,11 +271,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Sales Bill Successfully Saved!')),
-                      );
-                    },
+                    onPressed: _saveSalesInvoice,
                     child: const Text('Save Invoice', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ],
