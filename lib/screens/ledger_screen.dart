@@ -31,6 +31,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
   DateTime _toDate = DateTime.now();
 
   double _currentBalance = 0.0;
+  double _filteredTotalAmount = 0.0;
   bool _isLoading = false;
   bool _isReportLoaded = false;
 
@@ -67,7 +68,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
     if (picked != null) setState(() => _toDate = picked);
   }
 
-  // 🔍 Saari Transactions (Sales, Purchase, Returns, Vouchers) fetch karne ka function
+  // 🔍 Generate Ledger & Calculate Totals
   Future<void> _generateLedgerReport() async {
     final accountName = _accountController.text.trim();
     if (accountName.isEmpty) {
@@ -91,7 +92,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
     final startDateTime = DateTime(_fromDate.year, _fromDate.month, _fromDate.day);
     final endDateTime = DateTime(_toDate.year, _toDate.month, _toDate.day, 23, 59, 59);
 
-    // 3. Query: Party Name ya Cash/Bank match karne wali sabhi entries (Sales, Purchase, Payment, Receipt, etc.)
+    // 3. Transactions Fetching
     final txns = await DatabaseHelper.isar.accountingTransactions
         .filter()
         .dateBetween(startDateTime, endDateTime)
@@ -103,8 +104,15 @@ class _LedgerScreenState extends State<LedgerScreen> {
         .sortByDateDesc()
         .findAll();
 
+    // 4. Filtered total amount calculation
+    double totalAmt = 0.0;
+    for (var t in txns) {
+      totalAmt += t.amount;
+    }
+
     setState(() {
       _ledgerTransactions = txns;
+      _filteredTotalAmount = totalAmt;
       _isLoading = false;
       _isReportLoaded = true;
     });
@@ -138,6 +146,16 @@ class _LedgerScreenState extends State<LedgerScreen> {
       ]);
     }
 
+    // Closing Balance Row in Excel
+    sheetObject.appendRow([
+      excel_lib.TextCellValue('CLOSING BALANCE'),
+      excel_lib.TextCellValue(''),
+      excel_lib.TextCellValue(''),
+      excel_lib.TextCellValue(''),
+      excel_lib.DoubleCellValue(_currentBalance),
+      excel_lib.TextCellValue('')
+    ]);
+
     final directory = await getTemporaryDirectory();
     final filePath = '${directory.path}/Ledger_${_accountController.text.trim()}.xlsx';
     File(filePath)..createSync(recursive: true)..writeAsBytesSync(excel.encode()!);
@@ -166,7 +184,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
           pw.SizedBox(height: 10),
           pw.Text('Account Name: ${_accountController.text}', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
           pw.Text('Period: ${DateFormat('dd-MM-yyyy').format(_fromDate)} to ${DateFormat('dd-MM-yyyy').format(_toDate)}'),
-          pw.Text('Current Balance: Rs. ${_currentBalance.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 15),
           pw.Table.fromTextArray(
             headers: ['Date', 'Type', 'Bill / Voucher No', 'Mode', 'Amount'],
@@ -177,6 +194,15 @@ class _LedgerScreenState extends State<LedgerScreen> {
               txn.cashOrBank,
               'Rs. ${txn.amount.toStringAsFixed(2)}',
             ]).toList(),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Divider(),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Closing Balance:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+              pw.Text('Rs. ${_currentBalance.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+            ],
           ),
         ],
       ),
@@ -210,7 +236,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
           pw.SizedBox(height: 10),
           pw.Text('Account Name: ${_accountController.text}', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
           pw.Text('Period: ${DateFormat('dd-MM-yyyy').format(_fromDate)} to ${DateFormat('dd-MM-yyyy').format(_toDate)}'),
-          pw.Text('Current Balance: Rs. ${_currentBalance.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 15),
           pw.Table.fromTextArray(
             headers: ['Date', 'Type', 'Bill / Voucher No', 'Mode', 'Amount'],
@@ -221,6 +246,15 @@ class _LedgerScreenState extends State<LedgerScreen> {
               txn.cashOrBank,
               'Rs. ${txn.amount.toStringAsFixed(2)}',
             ]).toList(),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Divider(),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Closing Balance:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+              pw.Text('Rs. ${_currentBalance.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+            ],
           ),
         ],
       ),
@@ -290,6 +324,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
             ),
             const SizedBox(height: 16),
             if (_isReportLoaded) ...[
+              // Top Summary Card
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.indigo.shade200)),
@@ -306,7 +341,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('All Transactions (Sales, Purchase, Vouchers):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                  const Text('All Transactions:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
                   Wrap(
                     spacing: 6,
                     children: [
@@ -333,6 +368,8 @@ class _LedgerScreenState extends State<LedgerScreen> {
                 ],
               ),
               const SizedBox(height: 6),
+
+              // Transactions List View
               Expanded(
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
@@ -343,7 +380,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
                             itemBuilder: (context, index) {
                               final txn = _ledgerTransactions[index];
                               
-                              // Color coding based on type
                               Color badgeColor = Colors.indigo;
                               if (txn.voucherType == 'Sales') badgeColor = Colors.teal;
                               if (txn.voucherType == 'Purchase') badgeColor = Colors.blue;
@@ -385,6 +421,33 @@ class _LedgerScreenState extends State<LedgerScreen> {
                               );
                             },
                           ),
+              ),
+
+              // 🔥 SABSE LAST MEIN CLOSING BALANCE FOOTER BANNER
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.shade900,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'CLOSING BALANCE:',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                    ),
+                    Text(
+                      '₹ ${_currentBalance.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold, 
+                        fontSize: 17, 
+                        color: _currentBalance >= 0 ? Colors.greenAccent : Colors.redAccent,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ] else ...[
               const Expanded(
