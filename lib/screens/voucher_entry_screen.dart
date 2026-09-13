@@ -14,32 +14,42 @@ class VoucherEntryScreen extends StatefulWidget {
 }
 
 class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
-  // 1. Voucher Type: 'Payment', 'Receipt', 'Journal'
+  // Voucher Type: 'Payment', 'Receipt', 'Journal'
   String _voucherType = 'Payment';
 
-  // 2. Date Selection
   DateTime _selectedDate = DateTime.now();
-
-  // 3. Auto Voucher Number (State ke sath update hoga)
   String _voucherNumber = '';
 
-  // Controllers
-  final TextEditingController _partyController = TextEditingController(); // Party Name (Payment/Receipt)
-  final TextEditingController _debitController = TextEditingController();   // Journal ke liye (Dr)
-  final TextEditingController _creditController = TextEditingController();  // Journal ke liye (Cr)
+  // Controllers & FocusNodes for Enter Key Flow
+  final TextEditingController _partyController = TextEditingController();
+  final TextEditingController _debitController = TextEditingController();
+  final TextEditingController _creditController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
 
-  // 4. Mode of Payment / Receipt fields
-  String _paymentMode = 'Cash'; // 'Cash', 'Bank', 'Third Party'
-  final List<String> _paymentModes = ['Cash', 'Bank', 'Third Party'];
+  final FocusNode _amountFocusNode = FocusNode();
+  final FocusNode _modeFocusNode = FocusNode();
+  final FocusNode _notesFocusNode = FocusNode();
 
-  // Specific Sub-Dropdown selections
+  // Mode of Payment & Options (Aapke bataye hue saare options included)
+  String _paymentMode = 'Cash';
+  final List<String> _paymentModes = [
+    'Cash', 
+    'Bank Transfer (NEFT/RTGS)', 
+    'UPI / QR Code', 
+    'Cheque', 
+    'Third Party Gateway'
+  ];
+
+  // Sub-Selections
   String _selectedBank = 'HDFC Bank A/c';
-  final List<String> _bankList = ['HDFC Bank A/c', 'IDFC First Bank A/c', 'Kotak Bank A/c'];
+  final List<String> _bankList = ['HDFC Bank A/c', 'IDFC First Bank A/c', 'Kotak Bank A/c', 'SBI Current A/c'];
 
-  String _selectedThirdParty = 'PhonePe / Google Pay';
-  final List<String> _thirdPartyList = ['PhonePe / Google Pay', 'Paytm Business', 'Razorpay Gateway'];
+  String _selectedUpiApp = 'PhonePe / Google Pay';
+  final List<String> _upiList = ['PhonePe / Google Pay', 'Paytm Business', 'BharatPe QR'];
+
+  String _selectedThirdParty = 'Razorpay Gateway';
+  final List<String> _thirdPartyList = ['Razorpay Gateway', 'Cashfree', 'Instamojo'];
 
   List<String> _allAccounts = [];
 
@@ -50,13 +60,11 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     _generateVoucherNumber();
   }
 
-  // Auto Voucher Number Generator based on Type
   void _generateVoucherNumber() {
     String prefix = 'PMT';
     if (_voucherType == 'Receipt') prefix = 'RCP';
     if (_voucherType == 'Journal') prefix = 'GEN';
     
-    // Unique ID ya timestamp ke aadhar par auto number
     _voucherNumber = '$prefix-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     setState(() {});
   }
@@ -68,7 +76,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     });
   }
 
-  // Date Picker Dialog
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -83,7 +90,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     }
   }
 
-  // Save Transaction to Isar DB
   Future<void> _saveVoucher() async {
     final amount = double.tryParse(_amountController.text) ?? 0.0;
     final notes = _notesController.text.trim();
@@ -107,17 +113,20 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
         return;
       }
 
-      // Source decide karna ki paisa kahan se gaya / kahan aaya
+      // Mode ke anusaar source decide hoga
       if (_paymentMode == 'Cash') {
         cashOrBankSource = 'Cash-in-Hand';
-      } else if (_paymentMode == 'Bank') {
+      } else if (_paymentMode.contains('Bank')) {
         cashOrBankSource = _selectedBank;
+      } else if (_paymentMode.contains('UPI')) {
+        cashOrBankSource = 'UPI: $_selectedUpiApp';
+      } else if (_paymentMode == 'Cheque') {
+        cashOrBankSource = 'Cheque Payment via $_selectedBank';
       } else {
         cashOrBankSource = 'Third Party: $_selectedThirdParty';
       }
 
     } else {
-      // Journal Entry
       final dr = _debitController.text.trim();
       final cr = _creditController.text.trim();
       if (dr.isEmpty || cr.isEmpty) {
@@ -148,7 +157,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
       SnackBar(content: Text('$_voucherType Voucher ($_voucherNumber) safaltapurvak save ho gaya!'), backgroundColor: Colors.green),
     );
 
-    // Reset Form & Generate New Voucher Number for next entry
+    // Reset Form
     _partyController.clear();
     _debitController.clear();
     _creditController.clear();
@@ -165,6 +174,9 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     _creditController.dispose();
     _amountController.dispose();
     _notesController.dispose();
+    _amountFocusNode.dispose();
+    _modeFocusNode.dispose();
+    _notesFocusNode.dispose();
     super.dispose();
   }
 
@@ -177,7 +189,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Accounting Voucher Entry ($_voucherType)'),
+        title: Text('Voucher Entry Entry ($_voucherType)'),
         backgroundColor: themeColor,
         foregroundColor: Colors.white,
       ),
@@ -213,7 +225,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                           onChanged: (val) {
                             setState(() {
                               _voucherType = val!;
-                              _generateVoucherNumber(); // Type badalte hi naya voucher code generate hoga
+                              _generateVoucherNumber();
                             });
                           },
                         ),
@@ -224,10 +236,9 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 2. Row: Date Selection & Auto Voucher Number
+              // 2. Date & Voucher Number Row
               Row(
                 children: [
-                  // Date Picker Box
                   Expanded(
                     child: InkWell(
                       onTap: () => _selectDate(context),
@@ -245,10 +256,9 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // Auto Voucher Number Box
                   Expanded(
                     child: TextField(
-                      readOnly: true, // Auto generated hai toh user manually edit nahi karega
+                      readOnly: true,
                       controller: TextEditingController(text: _voucherNumber),
                       decoration: const InputDecoration(
                         labelText: 'Voucher No (Auto)',
@@ -264,20 +274,24 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 3. Conditional Fields based on Voucher Type
+              // 3. Conditional Fields
               if (_voucherType == 'Payment' || _voucherType == 'Receipt') ...[
-                // Party Name (Supplier for Payment, Customer for Receipt)
+                // Party Name with Search capability
                 SearchableField(
                   label: (_voucherType == 'Payment') ? 'Party Name (Paid To) *' : 'Party Name (Received From) *',
                   items: _allAccounts,
                   controller: _partyController,
-                  onSelected: (_) {},
+                  onSelected: (selectedName) {
+                    // Party select hone ke turant baad focus Amount field par chal jayega (Enter key flow)
+                    FocusScope.of(context).requestFocus(_amountFocusNode);
+                  },
                 ),
                 const SizedBox(height: 16),
 
                 // Amount Field
                 TextField(
                   controller: _amountController,
+                  focusNode: _amountFocusNode,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: 'Amount (₹) *',
@@ -286,12 +300,17 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                     fillColor: themeColor.withOpacity(0.08),
                     filled: true,
                   ),
+                  onSubmitted: (_) {
+                    // Amount me Enter dabate hi focus Mode of Payment par jayega
+                    FocusScope.of(context).requestFocus(_modeFocusNode);
+                  },
                 ),
                 const SizedBox(height: 16),
 
-                // 4. Payment / Receipt Mode Selection (Cash / Bank / Third Party)
+                // Mode of Payment Dropdown
                 DropdownButtonFormField<String>(
                   value: _paymentMode,
+                  focusNode: _modeFocusNode,
                   items: _paymentModes.map((mode) {
                     return DropdownMenuItem(value: mode, child: Text(mode, style: const TextStyle(fontWeight: FontWeight.bold)));
                   }).toList(),
@@ -303,8 +322,8 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   ),
                 ),
 
-                // 5. Dynamic Sub-Dropdown agar Bank ya Third Party select kiya ho
-                if (_paymentMode == 'Bank') ...[
+                // 4. Dynamic Sub-Dropdowns (Aapke bataye hue anusaar party/amount ke theek niche)
+                if (_paymentMode.contains('Bank') || _paymentMode == 'Cheque') ...[
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     value: _selectedBank,
@@ -318,7 +337,21 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                       prefixIcon: Icon(Icons.account_balance),
                     ),
                   ),
-                ] else if (_paymentMode == 'Third Party') ...[
+                ] else if (_paymentMode.contains('UPI')) ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: _selectedUpiApp,
+                    items: _upiList.map((upi) {
+                      return DropdownMenuItem(value: upi, child: Text(upi));
+                    }).toList(),
+                    onChanged: (val) => setState(() => _selectedUpiApp = val!),
+                    decoration: const InputDecoration(
+                      labelText: 'Select UPI App / QR *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.phone_android),
+                    ),
+                  ),
+                ] else if (_paymentMode == 'Third Party Gateway') ...[
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     value: _selectedThirdParty,
@@ -327,15 +360,15 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                     }).toList(),
                     onChanged: (val) => setState(() => _selectedThirdParty = val!),
                     decoration: const InputDecoration(
-                      labelText: 'Select Third Party Portal / Gateway *',
+                      labelText: 'Select Third Party Portal *',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.phone_android),
+                      prefixIcon: Icon(Icons.cloud_sync),
                     ),
                   ),
                 ],
 
               ] else ...[
-                // Journal / General Entry fields (Debit & Credit)
+                // Journal Entry Fields
                 SearchableField(
                   label: 'Debit Account (Dr) *',
                   items: _allAccounts,
@@ -350,8 +383,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   onSelected: (_) {},
                 ),
                 const SizedBox(height: 16),
-
-                // Amount Field for Journal
                 TextField(
                   controller: _amountController,
                   keyboardType: TextInputType.number,
@@ -366,15 +397,17 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
               ],
               const SizedBox(height: 16),
 
-              // 6. Narration / Remarks
+              // 5. Remarks / Narration
               TextField(
                 controller: _notesController,
+                focusNode: _notesFocusNode,
                 maxLines: 2,
                 decoration: const InputDecoration(
                   labelText: 'Narration / Remarks (Optional)',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.note),
                 ),
+                onSubmitted: (_) => _saveVoucher(),
               ),
               const SizedBox(height: 24),
 
