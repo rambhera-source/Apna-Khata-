@@ -126,15 +126,17 @@ class _ProductionTabState extends State<ProductionTab> {
     double productionQty = double.tryParse(_qtyController.text) ?? 0.0;
 
     if (finishedProduct.isEmpty || productionQty <= 0) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya Product aur valid Quantity enter karein!')),
+        const SnackBar(content: Text('Kripya Product aur valid Quantity enter karein!'), backgroundColor: Colors.red),
       );
       return;
     }
 
     if (_currentBOMList.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Is product ka koi BOM (Recipe) nahi mila! Pehle Tab 2 mein BOM set karein.')),
+        const SnackBar(content: Text('Is product ka koi BOM (Recipe) nahi mila! Pehle Tab 2 mein BOM set karein.'), backgroundColor: Colors.orange),
       );
       return;
     }
@@ -148,8 +150,9 @@ class _ProductionTabState extends State<ProductionTab> {
       );
 
       if (rawMaterial.stockQuantity == -1 || rawMaterial.stockQuantity < requiredTotalQty) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Stock Kam Hai! "${bomItem.rawMaterialName}" ka stock insufficient hai.')),
+          SnackBar(content: Text('Stock Kam Hai! "${bomItem.rawMaterialName}" ka stock insufficient hai.'), backgroundColor: Colors.red),
         );
         return;
       }
@@ -186,8 +189,9 @@ class _ProductionTabState extends State<ProductionTab> {
       }
     });
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Production Successful! Cost per piece: ₹${finalUnitCost.toStringAsFixed(2)}')),
+      SnackBar(content: Text('Production Successful! Cost per piece: ₹${finalUnitCost.toStringAsFixed(2)}'), backgroundColor: Colors.green),
     );
 
     _productController.clear();
@@ -391,8 +395,9 @@ class _BomTabState extends State<BomTab> {
     final unit = _unitController.text.trim();
 
     if (product.isEmpty || material.isEmpty || qty <= 0) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya Product, Raw Material aur Qty sahi se bharein!')),
+        const SnackBar(content: Text('Kripya Product, Raw Material aur Qty sahi se bharein!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -407,6 +412,7 @@ class _BomTabState extends State<BomTab> {
     await DatabaseHelper.isar.writeTxn(() async {
       if (existingBom != null) {
         existingBom.quantityRequired += qty;
+        existingBom.unit = unit; // Unit update agar change hui ho
         await DatabaseHelper.isar.billOfMaterials.put(existingBom);
       } else {
         final bom = BillOfMaterials()
@@ -420,10 +426,12 @@ class _BomTabState extends State<BomTab> {
 
     _materialController.clear();
     _qtyController.text = '1';
+    _unitController.clear(); // Unit controller bhi clear ho jayega
     await _loadBomForSelectedProduct(product);
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('BOM Recipe Updated Successfully!')),
+      const SnackBar(content: Text('BOM Recipe Updated Successfully!'), backgroundColor: Colors.green),
     );
   }
 
@@ -432,8 +440,9 @@ class _BomTabState extends State<BomTab> {
       await DatabaseHelper.isar.billOfMaterials.delete(id);
     });
     await _loadBomForSelectedProduct(productName);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('BOM Item Removed!')),
+      const SnackBar(content: Text('BOM Item Removed!'), backgroundColor: Colors.orange),
     );
   }
 
