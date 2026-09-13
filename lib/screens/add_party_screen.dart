@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
-import 'http://www.flutter.dev/' as http;
+import 'package:http/http.dart' as http; // Sahi HTTP package import
 import 'dart:convert';
 import '../database/database_helper.dart';
 import '../models/party.dart';
@@ -29,7 +29,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
   String _partyType = 'Sundry Debtor'; 
   String _balanceType = 'Dr'; 
   
-  // 🔥 A se lekar Z tak ki categories ki list automatically generate karna ('A', 'B', 'C', ..., 'Z')
+  // A se lekar Z tak ki categories ki list automatically generate karna ('A', 'B', 'C', ..., 'Z')
   final List<String> _categoryList = List.generate(26, (index) => String.fromCharCode(65 + index));
   String _priceCategory = 'A'; // Default Category 'A'
 
@@ -117,7 +117,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
       ..gstin = gstin.isEmpty ? null : gstin
       ..openingBalance = openingBal
       ..balanceType = _balanceType
-      ..priceCategory = _priceCategory; // 🔥 Party ke sath A-Z wali Price Category save hogi
+      ..priceCategory = _priceCategory;
 
     await DatabaseHelper.isar.writeTxn(() async {
       await DatabaseHelper.isar.parties.put(newParty);
@@ -158,7 +158,6 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Party Group & A-Z Price Category Dropdown Row
               Row(
                 children: [
                   Expanded(
@@ -178,7 +177,6 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
                     flex: 2,
                     child: DropdownButtonFormField<String>(
                       value: _priceCategory,
-                      // 🔥 A se Z tak ke options dropdown mein generate honge
                       items: _categoryList.map((cat) {
                         return DropdownMenuItem(value: cat, child: Text('Category $cat'));
                       }).toList(),
