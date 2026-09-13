@@ -6,6 +6,7 @@ import 'purchase_return_screen.dart';
 import 'product_inventory_screen.dart';
 import 'manufacturing_screen.dart'; // Naya combined manufacturing & BOM screen
 import 'super_admin_dashboard_screen.dart'; // ✅ Super Admin Panel ka import
+import 'backup_settings_screen.dart'; // ✅ Naya Backup & Restore screen import kiya gaya hai
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -27,6 +28,17 @@ class DashboardScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const SuperAdminDashboardScreen()),
+              );
+            },
+          ),
+          // 💾 Backup & Restore Manager Button
+          IconButton(
+            icon: const Icon(Icons.backup, size: 26),
+            tooltip: 'Storage & Backup Manager',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const BackupSettingsScreen()),
               );
             },
           ),
