@@ -14,7 +14,8 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _isLoginMode = true; // True = Login View, False = Signup View
 
-  // Controllers for Login
+  // Controllers for Login (ID and PIN)
+  final TextEditingController _loginIdController = TextEditingController();
   final TextEditingController _loginPinController = TextEditingController();
   
   // Controllers for Signup
@@ -22,32 +23,36 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _signupPinController = TextEditingController();
 
-  final String _masterPin = "1234"; // Master Super Admin PIN
+  // 🛡️ Master Super Admin Credentials
+  final String _masterAdminId = "Admin";
+  final String _masterPin = "2029";
   final String _firmName = 'Orlife ERP';
 
   // 🟢 Login Logic
   Future<void> _handleLogin() async {
+    final enteredId = _loginIdController.text.trim();
     final enteredPin = _loginPinController.text.trim();
 
-    if (enteredPin.isEmpty) {
+    if (enteredId.isEmpty || enteredPin.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya PIN darj karein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Kripya Admin ID aur PIN dono darj karein!'), backgroundColor: Colors.red),
       );
       return;
     }
 
-    // 1. Master Admin Check
-    if (enteredPin == _masterPin) {
+    // 1. 🛡️ Super Admin Check (ID: Admin, PIN: 2029)
+    if (enteredId == _masterAdminId && enteredPin == _masterPin) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        MaterialPageRoute(builder: (context) => const DashboardScreen(isAdmin: true)),
       );
       return;
     }
 
-    // 2. Approved Staff Check from Database
+    // 2. 👤 Staff Database Check (Username & PIN matching)
     final staffUser = await DatabaseHelper.isar.userAccounts
         .filter()
+        .usernameEqualTo(enteredId)
         .pinEqualTo(enteredPin)
         .findFirst();
 
@@ -55,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (staffUser.isApproved) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          MaterialPageRoute(builder: (context) => const DashboardScreen(isAdmin: false)),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -68,7 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Galat PIN! Kripya sahi PIN darj karein.'),
+          content: Text('Galat Admin ID ya PIN! Kripya sahi jankari bharein.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -84,6 +89,14 @@ class _LoginScreenState extends State<LoginScreen> {
     if (name.isEmpty || username.isEmpty || pin.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kripya sabhi fields sahi bharein (PIN min 4 digits)!'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    // Restrict staff from using 'Admin' as username
+    if (username.toLowerCase() == 'admin') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Yeh username allowed nahi hai!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -131,6 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _loginIdController.dispose();
     _loginPinController.dispose();
     _nameController.dispose();
     _usernameController.dispose();
@@ -177,14 +191,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     // ================= DYNAMIC FORM FIELDS =================
                     if (_isLoginMode) ...[
-                      // LOGIN VIEW FIELDS
+                      // LOGIN VIEW FIELDS (ID & PIN)
+                      TextField(
+                        controller: _loginIdController,
+                        decoration: InputDecoration(
+                          labelText: 'Admin ID / Username',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          prefixIcon: const Icon(Icons.person_outline),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: _loginPinController,
                         keyboardType: TextInputType.number,
                         obscureText: true,
                         maxLength: 6,
                         decoration: InputDecoration(
-                          labelText: 'Enter Security PIN',
+                          labelText: 'Enter Security PIN / Password',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           prefixIcon: const Icon(Icons.vpn_key),
                           counterText: '',
