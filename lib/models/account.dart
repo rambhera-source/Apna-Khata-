@@ -1,0 +1,35 @@
+import 'package:isar/isar.dart';
+
+part 'party.g.dart';
+
+@collection
+class Party {
+  Id id = Isar.autoIncrement;
+
+  @Index(unique: true, replace: true)
+  late String name; // Party or Account Name
+
+  late String groupCategory; 
+  // e.g., 'Sundry Debtor', 'Sundry Creditor', 'Bank Account', 'Cash-in-Hand', 'Direct Expense', 'Indirect Expense'
+
+  // 📞 Contact & Address Details
+  String? phone;
+  String? email;
+  String? address;
+  String? gstin;
+
+  // 🏷️ Pricing & Credit Control (Sirf Debtors ke liye)
+  String priceCategory = 'A'; // A to Z Price Tier
+  double creditLimitAmount = 0.0;
+  int creditDaysLimit = 0;
+  bool isCreditControlEnabled = false;
+
+  // 💰 Opening Balance
+  double openingBalance = 0.0; 
+  String balanceType = 'Dr'; // 'Dr' ya 'Cr'
+
+  // 🔐 🔥 Client Portal Login Credentials
+  bool isPortalAccessEnabled = false; 
+  String? loginUsername; 
+  String? loginPassword; 
+}
