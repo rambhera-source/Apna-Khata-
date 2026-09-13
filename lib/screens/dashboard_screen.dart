@@ -4,9 +4,11 @@ import 'purchase_screen.dart';
 import 'sales_return_screen.dart';
 import 'purchase_return_screen.dart';
 import 'product_inventory_screen.dart';
-import 'manufacturing_screen.dart'; // Naya combined manufacturing & BOM screen
-import 'super_admin_dashboard_screen.dart'; // ✅ Super Admin Panel ka import
-import 'backup_settings_screen.dart'; // ✅ Naya Backup & Restore screen import kiya gaya hai
+import 'manufacturing_screen.dart'; 
+import 'super_admin_dashboard_screen.dart'; 
+import 'backup_settings_screen.dart'; 
+import 'settings_screen.dart'; 
+import 'voucher_entry_screen.dart'; // ✅ Naya Accounting Voucher Entry screen import kiya gaya hai
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -20,7 +22,18 @@ class DashboardScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         centerTitle: true,
         actions: [
-          // 🛡️ Super Admin Control Button (Pending Requests & Active Companies manage karne ke liye)
+          // ⚙️ Company & GST Settings Button
+          IconButton(
+            icon: const Icon(Icons.settings, size: 26),
+            tooltip: 'Company & GST Settings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
+          ),
+          // 🛡️ Super Admin Control Button
           IconButton(
             icon: const Icon(Icons.admin_panel_settings, size: 28),
             tooltip: 'Super Admin Control',
@@ -73,7 +86,7 @@ class DashboardScreen extends StatelessWidget {
                       ),
                       SizedBox(height: 4),
                       Text(
-                        'Billing, Inventory & Manufacturing Control',
+                        'Billing, Inventory & Accounting Control',
                         style: TextStyle(fontSize: 12, color: Colors.white70),
                       ),
                     ],
@@ -142,13 +155,22 @@ class DashboardScreen extends StatelessWidget {
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen())),
                   ),
 
-                  // 6. Manufacturing & BOM Dashboard (Combined)
+                  // 6. Manufacturing & BOM Dashboard
                   _buildDashboardCard(
                     context,
                     title: 'Manufacturing & BOM',
                     icon: Icons.precision_manufacturing,
                     color: Colors.purple,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ManufacturingScreen())),
+                  ),
+
+                  // 7. 🔥 Accounting Voucher Entry (Payment, Receipt, Journal)
+                  _buildDashboardCard(
+                    context,
+                    title: 'Vouchers (Pay/Rcpt)',
+                    icon: Icons.account_balance_wallet,
+                    color: Colors.amber.shade900,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VoucherEntryScreen())),
                   ),
                 ],
               ),
@@ -185,7 +207,7 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 title,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 textAlign: TextAlign.center,
               ),
             ],
