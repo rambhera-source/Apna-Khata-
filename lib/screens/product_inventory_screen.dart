@@ -1,148 +1,265 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:isar/isar.dart';
+import '../database/database_helper.dart';
 import '../models/inventory_model.dart';
 
-class ProductHistoryScreen extends StatefulWidget {
-  final InventoryItem product;
-  const ProductHistoryScreen({super.key, required.product});
+class ProductInventoryScreen extends StatefulWidget {
+  const ProductInventoryScreen({super.key});
 
   @override
-  State<ProductHistoryScreen> createState() => _ProductHistoryScreenState();
+  State<ProductInventoryScreen> createState() => _ProductInventoryScreenState();
 }
 
-class _ProductHistoryScreenState extends State<ProductHistoryScreen> {
-  // 📅 Date Range Filter State Variables
-  DateTime? _startDate;
-  DateTime? _endDate;
+class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
+  // 📝 Controllers for Adding Single Product
+  final _nameController = TextEditingController();
+  final _skuController = TextEditingController();
+  final _categoryController = TextEditingController();
+  final _stockController = TextEditingController();
+  final _unitController = TextEditingController(text: 'Pcs');
+  final _priceAController = TextEditingController(); // Purchase / Tier A price
+  
+  String _selectedStockType = 'Fresh'; // 'Fresh' ya 'Replacement'
 
-  // Date Range Picker Dialog
-  Future<void> _selectDateRange(BuildContext context) async {
-    final DateTimeRange? picked = await showDateRangePicker(
+  // 🔍 Filters for Inventory List
+  String _searchQuery = '';
+  final Set<String> _selectedCategories = {};
+  String _stockTypeFilter = 'All';
+
+  // 💾 Save Single Product to Isar Database
+  Future<void> _saveProduct() async {
+    if (_nameController.text.trim().isEmpty || _skuController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Product Name aur SKU bharna zaroori hai!')),
+      );
+      return;
+    }
+
+    final newItem = InventoryItem()
+      ..itemName = _nameController.text.trim()
+      ..sku = _skuController.text.trim()
+      ..category = _categoryController.text.trim().isEmpty ? 'General' : _categoryController.text.trim()
+      ..stockQuantity = double.tryParse(_stockController.text) ?? 0.0
+      ..unit = _unitController.text.trim()
+      ..priceA = double.tryParse(_priceAController.text) ?? 0.0
+      ..stockType = _selectedStockType;
+
+    await DatabaseHelper.isar.writeTxn(() async {
+      await DatabaseHelper.isar.inventoryItems.put(newItem);
+    });
+
+    // Clear form fields after save
+    _nameController.clear();
+    _skuController.clear();
+    _categoryController.clear();
+    _stockController.clear();
+    _priceAController.clear();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Product successfully add ho gaya!')),
+    );
+    FocusScope.of(context).unfocus();
+  }
+
+  // 🗑️ Delete Product from Database
+  Future<void> _deleteProduct(InventoryItem item) async {
+    bool? confirm = await showDialog(
       context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-      initialDateRange: _startDate != null && _endDate != null
-          ? DateTimeRange(start: _startDate!, end: _endDate!)
-          : null,
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: Colors.teal,
-            colorScheme: const ColorScheme.light(primary: Colors.teal),
+      builder: (context) => AlertDialog(
+        title: const Text('Product Delete Karein?'),
+        content: Text('Kya aap "${item.itemName}" ko inventory se permanently delete karna chahte hain?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
           ),
-          child: child!,
-        );
-      },
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
 
-    if (picked != null) {
-      setState(() {
-        _startDate = picked.start;
-        _endDate = picked.end;
+    if (confirm == true) {
+      await DatabaseHelper.isar.writeTxn(() async {
+        await DatabaseHelper.isar.inventoryItems.delete(item.id);
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Product delete kar diya gaya hai!')),
+      );
+      setState(() {});
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3, // Purchases, Sales, Manufacturing
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('History & Stock: ${widget.product.itemName}'),
-          backgroundColor: Colors.teal,
-          foregroundColor: Colors.white,
-          bottom: const TabBar(
-            indicatorColor: Colors.white,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            tabs: [
-              Tab(icon: Icon(Icons.shopping_cart), text: 'Purchases'),
-              Tab(icon: Icon(Icons.sell), text: 'Sales'),
-              Tab(icon: Icon(Icons.factory), text: 'Manufacturing'),
-            ],
-          ),
-        ),
-        body: Column(
-          children: [
-            // 📊 Live Stock & Closing Stock Summary Card
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.teal.shade50,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildStockBadge('Live Current Stock', '${widget.product.stockQuantity} ${widget.product.unit}', Colors.teal),
-                  const VerticalDivider(color: Colors.grey),
-                  _buildStockBadge('Closing Stock (Filtered)', '${widget.product.stockQuantity} ${widget.product.unit}', Colors.indigo),
-                ],
-              ),
-            ),
+  // Database se saari unique categories nikalne ke liye
+  Future<List<String>> _fetchAllCategories() async {
+    final allProducts = await DatabaseHelper.isar.inventoryItems.where().findAll();
+    Set<String> categories = allProducts.map((p) => p.category).toSet();
+    return categories.toList();
+  }
 
-            // 📅 Date Range Filter Bar
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              color: Colors.teal.shade100.withOpacity(0.5),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      _startDate == null || _endDate == null
-                          ? 'Date Filter: All Time (Tap to filter)'
-                          : 'From: ${_startDate!.day}/${_startDate!.month}/${_startDate!.year}  To: ${_endDate!.day}/${_endDate!.month}/${_endDate!.year}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.teal.shade900,
-                        fontSize: 12,
+  // 📋 Multi-Select Category Dialog
+  void _showCategoryMultiSelectDialog(List<String> allCategories) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Select Product Categories'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: allCategories.isEmpty
+                    ? const Text('Koi category available nahi hai.')
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: allCategories.length,
+                        itemBuilder: (context, index) {
+                          String category = allCategories[index];
+                          bool isSelected = _selectedCategories.contains(category);
+                          return CheckboxListTile(
+                            title: Text(category),
+                            value: isSelected,
+                            activeColor: Colors.teal,
+                            onChanged: (bool? value) {
+                              setDialogState(() {
+                                if (value == true) {
+                                  _selectedCategories.add(category);
+                                } else {
+                                  _selectedCategories.remove(category);
+                                }
+                              });
+                              setState(() {});
+                            },
+                          );
+                        },
                       ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      if (_startDate != null)
-                        IconButton(
-                          icon: const Icon(Icons.clear, size: 16, color: Colors.red),
-                          tooltip: 'Clear Date Filter',
-                          onPressed: () => setState(() {
-                            _startDate = null;
-                            _endDate = null;
-                          }),
-                        ),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        ),
-                        icon: const Icon(Icons.date_range, size: 14),
-                        label: const Text('Select Dates', style: TextStyle(fontSize: 11)),
-                        onPressed: () => _selectDateRange(context),
-                      ),
-                    ],
-                  ),
-                ],
               ),
-            ),
-
-            // Tab Views for Purchases, Sales & Manufacturing
-            Expanded(
-              child: TabBarView(
-                children: [
-                  _buildPurchaseHistoryList(context, widget.product),
-                  _buildSalesHistoryList(context, widget.product),
-                  _buildManufacturingHistoryList(context, widget.product),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    setState(() => _selectedCategories.clear());
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Clear All', style: TextStyle(color: Colors.red)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Apply Filter'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  // Stock Badge UI Helper
+  // 📊 Open Product History & Closing Stock as an Integrated Bottom Sheet (Ek hi page par popup)
+  void _showProductHistoryBottomSheet(InventoryItem product) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: DefaultTabController(
+                length: 3,
+                child: Column(
+                  children: [
+                    // Handle Bar
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2)),
+                      ),
+                    ),
+                    // Title Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'History: ${product.itemName}',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Live Stock & Closing Stock Summary Box
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildStockBadge('Live Current Stock', '${product.stockQuantity} ${product.unit}', Colors.teal),
+                          const VerticalDivider(color: Colors.grey),
+                          _buildStockBadge('Closing Stock', '${product.stockQuantity} ${product.unit}', Colors.indigo),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Tabs Header
+                    const TabBar(
+                      labelColor: Colors.teal,
+                      unselectedLabelColor: Colors.grey,
+                      indicatorColor: Colors.teal,
+                      tabs: [
+                        Tab(text: 'Purchases'),
+                        Tab(text: 'Sales'),
+                        Tab(text: 'Manufacturing'),
+                      ],
+                    ),
+                    // Tabs Content View inside BottomSheet
+                    Expanded(
+                      child: TabBarView(
+                        controller: DefaultTabController.of(context),
+                        children: [
+                          _buildHistoryList(scrollController, 'Purchase', 'Sharma Electronics', 'PUR-1092', '+500 Pcs', Colors.green),
+                          _buildHistoryList(scrollController, 'Sale', 'Chamunda Mobile (Jalore)', 'INV-2026-88', '-50 Pcs', Colors.red),
+                          _buildHistoryList(scrollController, 'Production', 'Batch #PRD-2026-08', 'PRD-08', '+1000 Pcs', Colors.teal),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildStockBadge(String title, String value, Color color) {
     return Column(
       children: [
@@ -153,87 +270,322 @@ class _ProductHistoryScreenState extends State<ProductHistoryScreen> {
     );
   }
 
-  // 🛒 Purchase History List
-  Widget _buildPurchaseHistoryList(BuildContext context, InventoryItem product) {
+  Widget _buildHistoryList(ScrollController controller, String type, String party, String refNo, String qty, Color qtyColor) {
     return ListView(
-      padding: const EdgeInsets.all(12),
+      controller: controller,
+      padding: const EdgeInsets.all(16),
       children: [
-        const Text('Purchase Transactions (Tap to open bill)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-        const SizedBox(height: 8),
         Card(
           elevation: 2,
           child: ListTile(
-            leading: const Icon(Icons.arrow_downward, color: Colors.indigo),
-            title: const Text('Vendor: Sharma Electronics'),
-            subtitle: const Text('Date: 12 Aug 2026 | Bill No: PUR-1092'),
-            trailing: const Text('+500 Pcs', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 15)),
-            onTap: () => _openVoucherScreen(context, 'Purchase Bill', 'PUR-1092'),
+            leading: Icon(type == 'Purchase' ? Icons.arrow_downward : (type == 'Sale' ? Icons.arrow_upward : Icons.factory), color: Colors.teal),
+            title: Text(party, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('Ref: $refNo | Tap to view bill'),
+            trailing: Text(qty, style: TextStyle(fontWeight: FontWeight.bold, color: qtyColor, fontSize: 15)),
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Opening $refNo details...')));
+            },
           ),
         ),
       ],
     );
   }
 
-  // 🏷️ Sales History List
-  Widget _buildSalesHistoryList(BuildContext context, InventoryItem product) {
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        const Text('Sales Transactions (Tap to open invoice)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-        const SizedBox(height: 8),
-        Card(
-          elevation: 2,
-          child: ListTile(
-            leading: const Icon(Icons.arrow_upward, color: Colors.orange),
-            title: const Text('Customer: Chamunda Mobile (Jalore)'),
-            subtitle: const Text('Date: 14 Aug 2026 | Invoice No: INV-2026-88'),
-            trailing: const Text('-50 Pcs', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 15)),
-            onTap: () => _openVoucherScreen(context, 'Sales Invoice', 'INV-2026-88'),
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Product & Inventory Management'),
+          backgroundColor: Colors.teal,
+          foregroundColor: Colors.white,
+          bottom: const TabBar(
+            indicatorColor: Colors.white,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            tabs: [
+              Tab(icon: Icon(Icons.add_box), text: 'Add Single Product'),
+              Tab(icon: Icon(Icons.inventory), text: 'Inventory List & Filter'),
+            ],
           ),
         ),
-      ],
-    );
-  }
+        body: TabBarView(
+          children: [
+            // ================= TAB 1: ADD SINGLE PRODUCT =================
+            SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Naya Product Add Karein', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(labelText: 'Product Name', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _skuController,
+                    decoration: const InputDecoration(labelText: 'SKU Code', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _categoryController,
+                    decoration: const InputDecoration(labelText: 'Category (e.g., Chargers)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _stockController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Opening Stock', border: OutlineInputBorder()),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _unitController,
+                          decoration: const InputDecoration(labelText: 'Unit (Pcs/Box)', border: OutlineInputBorder()),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _priceAController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Purchase / Default Price (₹)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 16),
+                  // Stock Type Selection (Fresh vs Replacement)
+                  Row(
+                    children: [
+                      const Text('Stock Type: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 12),
+                      ChoiceChip(
+                        label: const Text('Fresh'),
+                        selected: _selectedStockType == 'Fresh',
+                        selectedColor: Colors.green.shade100,
+                        onSelected: (selected) => setState(() => _selectedStockType = 'Fresh'),
+                      ),
+                      const SizedBox(width: 12),
+                      ChoiceChip(
+                        label: const Text('Replacement'),
+                        selected: _selectedStockType == 'Replacement',
+                        selectedColor: Colors.orange.shade100,
+                        onSelected: (selected) => setState(() => _selectedStockType = 'Replacement'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    icon: const Icon(Icons.save),
+                    label: const Text('Save Product', style: TextStyle(fontSize: 16)),
+                    onPressed: _saveProduct,
+                  ),
+                ],
+              ),
+            ),
 
-  // 🏭 Manufacturing History List
-  Widget _buildManufacturingHistoryList(BuildContext context, InventoryItem product) {
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        const Text('Production Batches (Tap to open production slip)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-        const SizedBox(height: 8),
-        Card(
-          elevation: 2,
-          child: ListTile(
-            leading: const Icon(Icons.precision_manufacturing, color: Colors.purple),
-            title: const Text('Batch Production #PRD-2026-08'),
-            subtitle: const Text('Date: 10 Aug 2026 | Status: Completed'),
-            trailing: const Text('+1000 Pcs', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 15)),
-            onTap: () => _openVoucherScreen(context, 'Production Voucher', 'PRD-2026-08'),
-          ),
+            // ================= TAB 2: INVENTORY LIST & FILTERS =================
+            Column(
+              children: [
+                // 🔍 Search Bar
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Search by Product Name or SKU...',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.search, color: Colors.teal),
+                    ),
+                    onChanged: (value) => setState(() => _searchQuery = value.trim()),
+                  ),
+                ),
+
+                // 📂 Multi-Category Dropdown Filter Button
+                FutureBuilder<List<String>>(
+                  future: _fetchAllCategories(),
+                  builder: (context, snapshot) {
+                    final categories = snapshot.data ?? [];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                      child: InkWell(
+                        onTap: () => _showCategoryMultiSelectDialog(categories),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(4),
+                            color: Colors.white,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _selectedCategories.isEmpty
+                                      ? 'Filter by Category: All Categories Selected (Tap)'
+                                      : 'Selected Categories: ${_selectedCategories.join(', ')}',
+                                  style: TextStyle(
+                                    color: _selectedCategories.isEmpty ? Colors.grey.shade700 : Colors.teal.shade800,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(Icons.arrow_drop_down, color: Colors.teal),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                // 🎛️ Fresh vs Replacement Filter Chips
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                  child: Row(
+                    children: [
+                      const Text('Stock Type: ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 13)),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('All'),
+                        selected: _stockTypeFilter == 'All',
+                        selectedColor: Colors.teal.shade100,
+                        onSelected: (selected) => setState(() => _stockTypeFilter == 'All' ? null : _stockTypeFilter = 'All'),
+                      ),
+                      const SizedBox(width: 6),
+                      ChoiceChip(
+                        label: const Text('Fresh'),
+                        selected: _stockTypeFilter == 'Fresh',
+                        selectedColor: Colors.green.shade100,
+                        onSelected: (selected) => setState(() => _stockTypeFilter = 'Fresh'),
+                      ),
+                      const SizedBox(width: 6),
+                      ChoiceChip(
+                        label: const Text('Replacement'),
+                        selected: _stockTypeFilter == 'Replacement',
+                        selectedColor: Colors.orange.shade100,
+                        onSelected: (selected) => setState(() => _stockTypeFilter = 'Replacement'),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 10),
+
+                // 📦 Product List View with History BottomSheet & Delete Option
+                Expanded(
+                  child: StreamBuilder<List<InventoryItem>>(
+                    stream: DatabaseHelper.isar.inventoryItems.watch(fireImmediately: true),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return const Center(
+                          child: Text('Koi product nahi mila! Tab 1 se naya product add karein.', style: TextStyle(color: Colors.grey)),
+                        );
+                      }
+
+                      var products = snapshot.data!.where((item) {
+                        bool matchesSearch = _searchQuery.isEmpty ||
+                            item.itemName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                            item.sku.toLowerCase().contains(_searchQuery.toLowerCase());
+
+                        bool matchesCategory = _selectedCategories.isEmpty ||
+                            _selectedCategories.contains(item.category);
+
+                        String itemStockType = item.stockType.isEmpty ? 'Fresh' : item.stockType;
+                        bool matchesStockType = _stockTypeFilter == 'All' ||
+                            (itemStockType.toLowerCase() == _stockTypeFilter.toLowerCase());
+
+                        return matchesSearch && matchesCategory && matchesStockType;
+                      }).toList();
+
+                      if (products.isEmpty) {
+                        return const Center(
+                          child: Text('Is filter ke anusaار koi product nahi mila!', style: TextStyle(color: Colors.grey)),
+                        );
+                      }
+
+                      return ListView.builder(
+                        itemCount: products.length,
+                        itemBuilder: (context, index) {
+                          final item = products[index];
+
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            elevation: 2,
+                            child: InkWell(
+                              onTap: () => _showProductHistoryBottomSheet(item), // Click opens History Popup inside same screen
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                              ),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: item.stockType.toLowerCase() == 'replacement' ? Colors.orange.shade100 : Colors.green.shade100,
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  item.stockType.isEmpty ? 'Fresh' : item.stockType,
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: item.stockType.toLowerCase() == 'replacement' ? Colors.orange.shade900 : Colors.green.shade900,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text('SKU: ${item.sku} | Category: ${item.category}', style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+                                          const SizedBox(height: 4),
+                                          Text('Stock: ${item.stockQuantity} ${item.unit}', style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.teal)),
+                                        ],
+                                      ),
+                                    ),
+                                    // 🗑️ Delete Button at the corner
+                                    IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      tooltip: 'Delete Product',
+                                      onPressed: () => _deleteProduct(item),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-      ],
-    );
-  }
-
-  // Voucher / Bill open karne ka helper function
-  void _openVoucherScreen(BuildContext context, String voucherType, String voucherNumber) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Open $voucherType'),
-        content: Text('Aap "$voucherNumber" ko modify karne ke liye open karna chahte hain?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Open for Edit'),
-          ),
-        ],
       ),
     );
   }
