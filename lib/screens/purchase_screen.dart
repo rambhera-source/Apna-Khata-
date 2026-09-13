@@ -1,10 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
-import '../models/settings_model.dart';
-import '../models/party.dart';
 import '../models/inventory_model.dart';
-import 'searchable_field.dart'; // Ekdum sahi import path (screens folder ke liye)
+import '../models/account.dart';
+import 'searchable_field.dart';
+
+class PurchaseRowItem {
+  final TextEditingController searchController = TextEditingController();
+  final TextEditingController qtyController = TextEditingController(text: '1');
+  final TextEditingController rateController = TextEditingController(text: '0');
+  InventoryItem? selectedProduct;
+  
+  double get totalAmount {
+    double q = double.tryParse(qtyController.text) ?? 0;
+    double r = double.tryParse(rateController.text) ?? 0;
+    return q * r;
+  }
+
+  void dispose() {
+    searchController.dispose();
+    qtyController.dispose();
+    rateController.dispose();
+  }
+}
 
 class PurchaseScreen extends StatefulWidget {
   const PurchaseScreen({super.key});
@@ -14,392 +32,248 @@ class PurchaseScreen extends StatefulWidget {
 }
 
 class _PurchaseScreenState extends State<PurchaseScreen> {
-  List<Party> _parties = [];
-  List<String> _partyNames = [];
-  Party? _selectedSupplier;
-  List<String> _availableItems = [];
+  final TextEditingController _partyController = TextEditingController();
   
-  // Controllers
-  final _supplierSearchController = TextEditingController();
-  final _billNoController = TextEditingController();
-  final _itemController = TextEditingController();
-  final _qtyController = TextEditingController();
-  final _rateController = TextEditingController();
-
-  final FocusNode _qtyFocusNode = FocusNode();
-  final FocusNode _rateFocusNode = FocusNode();
-
-  DateTime _selectedDate = DateTime.now();
-  String _stockType = 'fresh';
-  bool _isGstEnabled = false;
-
-  List<Map<String, dynamic>> _supplierHistoryList = [];
-  final List<Map<String, dynamic>> _purchaseItems = [];
+  final List<PurchaseRowItem> _rows = [];
+  List<String> _allProductNames = [];
+  List<InventoryItem> _allProducts = [];
+  List<String> _allParties = [];
 
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    _loadData();
+    _addNewRow();
   }
 
-  @override
-  void dispose() {
-    _supplierSearchController.dispose();
-    _billNoController.dispose();
-    _itemController.dispose();
-    _qtyController.dispose();
-    _rateController.dispose();
-    _qtyFocusNode.dispose();
-    _rateFocusNode.dispose();
-    super.dispose();
+  Future<void> _loadData() async {
+    _allProducts = await DatabaseHelper.isar.inventoryItems.where().findAll();
+    _allProductNames = _allProducts.map((p) => p.itemName).toList();
+
+    final parties = await DatabaseHelper.isar.accounts.where().findAll();
+    _allParties = parties.map((a) => a.name).toList();
+    setState(() {});
   }
 
-  Future<void> _loadInitialData() async {
-    final parties = await DatabaseHelper.isar.parties.where().findAll();
-    final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
-    final inventoryStocks = await DatabaseHelper.isar.inventoryStocks.where().findAll();
-    
-    final Set<String> uniqueItems = inventoryStocks.map((e) => e.itemName).toSet();
-    final List<String> partyNamesList = parties.map((e) => e.name).toList();
-    
+  void _addNewRow() {
     setState(() {
-      _parties = parties;
-      _partyNames = partyNamesList;
-      if (parties.isNotEmpty) {
-        _selectedSupplier = parties.first;
-        _supplierSearchController.text = parties.first.name;
-      }
-      _availableItems = uniqueItems.toList();
-      if (settings != null) {
-        _isGstEnabled = settings.isGstEnabled;
+      _rows.add(PurchaseRowItem());
+    });
+  }
+
+  void _removeRow(int index) {
+    setState(() {
+      _rows[index].dispose();
+      _rows.removeAt(index);
+      if (_rows.isEmpty) {
+        _addNewRow();
       }
     });
   }
 
-  void _onItemNameSelected(String typedItem) {
-    if (typedItem.length < 2 || _selectedSupplier == null) {
-      setState(() => _supplierHistoryList = []);
-      return;
+  double get _grandTotal {
+    double total = 0;
+    for (var row in _rows) {
+      total += row.totalAmount;
     }
-
-    setState(() {
-      _supplierHistoryList = [
-        {'date': '01/08/2026', 'billNo': 'SUP-901', 'name': typedItem, 'rate': 200.0},
-        {'date': '15/07/2026', 'billNo': 'SUP-842', 'name': typedItem, 'rate': 195.0},
-      ];
-    });
+    return total;
   }
 
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
-  }
-
-  void _addItemToPurchase() {
-    final itemName = _itemController.text.trim();
-    final qty = double.tryParse(_qtyController.text) ?? 0.0;
-    final rate = double.tryParse(_rateController.text) ?? 0.0;
-
-    if (itemName.isEmpty || qty <= 0 || rate <= 0) {
+  // 💾 Save Purchase Bill & Add Stock to Database
+  Future<void> _savePurchaseBill() async {
+    if (_partyController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya item name, qty aur purchase rate sahi se bharein!')),
+        const SnackBar(content: Text('Kripya Supplier (Party Name) select karein!')),
       );
       return;
     }
 
-    setState(() {
-      _purchaseItems.add({
-        'name': itemName,
-        'qty': qty,
-        'rate': rate,
-        'total': qty * rate,
-      });
-      _itemController.clear();
-      _qtyController.clear();
-      _rateController.clear();
-      _supplierHistoryList = [];
-    });
-  }
+    bool hasValidItem = false;
+    for (var row in _rows) {
+      if (row.selectedProduct != null && row.totalAmount > 0) {
+        hasValidItem = true;
+        break;
+      }
+    }
 
-  Future<void> _savePurchase() async {
-    final billNo = _billNoController.text.trim();
-
-    if (_selectedSupplier == null || billNo.isEmpty) {
+    if (!hasValidItem) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya Supplier aur Manual Bill Number darj karein!')),
+        const SnackBar(content: Text('Kam se kam ek valid product select karein!')),
       );
       return;
     }
 
-    if (_purchaseItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kam se kam ek item add karna anivarya hai!')),
-      );
-      return;
-    }
-
+    // Perform database transaction to ADD stock (Purchase increases stock)
     await DatabaseHelper.isar.writeTxn(() async {
-      for (var item in _purchaseItems) {
-        String itemName = item['name'];
-        double purchasedQty = item['qty'];
+      for (var row in _rows) {
+        if (row.selectedProduct != null) {
+          double purchasedQty = double.tryParse(row.qtyController.text) ?? 0;
+          
+          InventoryItem product = row.selectedProduct!;
+          product.stockQuantity += purchasedQty; // Purchase hone par stock plus karna
 
-        var stockRecord = await DatabaseHelper.isar.inventoryStocks
-            .filter()
-            .itemNameEqualTo(itemName)
-            .and()
-            .stockTypeEqualTo(_stockType)
-            .findFirst();
+          // Update latest purchase price if needed
+          double newRate = double.tryParse(row.rateController.text) ?? product.priceA;
+          if (newRate > 0) product.priceA = newRate;
 
-        if (stockRecord != null) {
-          stockRecord.quantity += purchasedQty;
-          await DatabaseHelper.isar.inventoryStocks.put(stockRecord);
-        } else {
-          var newStock = InventoryStock()
-            ..itemName = itemName
-            ..stockType = _stockType
-            ..quantity = purchasedQty;
-          await DatabaseHelper.isar.inventoryStocks.put(newStock);
+          await DatabaseHelper.isar.inventoryItems.put(product);
         }
       }
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Purchase Bill ($billNo) Safaltapurvak Save Ho Gaya!')),
+      const SnackBar(content: Text('Purchase Bill Successfully Saved & Stock Updated!')),
     );
 
-    setState(() {
-      _purchaseItems.clear();
-      _billNoController.clear();
-    });
+    Navigator.pop(context); // Go back to Dashboard
+  }
+
+  @override
+  void dispose() {
+    _partyController.dispose();
+    for (var row in _rows) {
+      row.dispose();
+    }
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    double subTotal = _purchaseItems.fold(0, (sum, item) => sum + item['total']);
-    double taxAmount = _isGstEnabled ? subTotal * 0.18 : 0.0;
-    double grandTotal = subTotal + taxAmount;
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Purchase / Inward Bill Entry'),
+        title: const Text('Purchase Bill Entry'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
       ),
       body: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: SearchableField(
-                    label: 'Select Supplier',
-                    items: _partyNames,
-                    controller: _supplierSearchController,
-                    onSelected: (selectedName) {
-                      final matchedParty = _parties.firstWhere(
-                        (p) => p.name.toLowerCase() == selectedName.toLowerCase(),
-                        orElse: () => _parties.first,
-                      );
-                      setState(() {
-                        _selectedSupplier = matchedParty;
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 1,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _selectDate(context),
-                    icon: const Icon(Icons.calendar_today, size: 16),
-                    label: Text('${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _billNoController,
-                    decoration: const InputDecoration(
-                      labelText: 'Supplier Bill No (Manual)', 
-                      border: OutlineInputBorder(),
-                      hintText: 'e.g. SUP-102',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ToggleButtons(
-                  isSelected: [_stockType == 'fresh', _stockType == 'replacement'],
-                  onPressed: (index) {
-                    setState(() {
-                      _stockType = index == 0 ? 'fresh' : 'replacement';
-                    });
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: SearchableField(
+                  label: 'Select Supplier (Party Name) *',
+                  items: _allParties,
+                  controller: _partyController,
+                  onSelected: (selected) {
+                    setState(() {});
                   },
-                  children: const [
-                    Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Fresh')),
-                    Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Replace')),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // SEARCHABLE ITEM FIELD
-            SearchableField(
-              label: 'Item Name (Type to Search...)',
-              items: _availableItems,
-              controller: _itemController,
-              onSelected: (selectedItem) {
-                _onItemNameSelected(selectedItem);
-                FocusScope.of(context).requestFocus(_qtyFocusNode);
-              },
-              onSubmitted: () {
-                FocusScope.of(context).requestFocus(_qtyFocusNode);
-              },
-            ),
-
-            // SCROLLABLE SUPPLIER HISTORY BOX
-            if (_supplierHistoryList.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(top: 4, bottom: 8),
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  border: Border.all(color: Colors.blue.shade200),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                constraints: const BoxConstraints(maxHeight: 150),
-                child: Scrollbar(
-                  thumbVisibility: true,
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _supplierHistoryList.length,
-                    itemBuilder: (context, index) {
-                      final h = _supplierHistoryList[index];
-                      return InkWell(
-                        onTap: () {
-                          setState(() {
-                            _rateController.text = h['rate'].toString();
-                          });
-                          FocusScope.of(context).requestFocus(_qtyFocusNode);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('${h['date']} | ${h['billNo']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-                              Expanded(
-                                child: Text('  ${h['name']}', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
-                              ),
-                              Text('₹${h['rate']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
                 ),
               ),
-
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _qtyController,
-                    focusNode: _qtyFocusNode,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder()),
-                    onSubmitted: (_) {
-                      FocusScope.of(context).requestFocus(_rateFocusNode);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _rateController,
-                    focusNode: _rateFocusNode,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Purchase Rate (₹)', border: OutlineInputBorder()),
-                    onSubmitted: (_) {
-                      _addItemToPurchase();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                  onPressed: _addItemToPurchase,
-                  child: const Text('Add'),
-                ),
-              ],
             ),
-            const Divider(height: 24),
+            const SizedBox(height: 10),
 
-            const Text('Items Added in Purchase:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              color: Colors.blue.shade100,
+              child: const Row(
+                children: [
+                  Expanded(flex: 3, child: Text('Item Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(flex: 1, child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(flex: 1, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
+                  SizedBox(width: 40),
+                ],
+              ),
+            ),
+
             Expanded(
-              child: _purchaseItems.isEmpty
-                  ? const Center(child: Text('Abhi koi purchase item add nahi kiya gaya hai.'))
-                  : ListView.builder(
-                      itemCount: _purchaseItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _purchaseItems[index];
-                        return Card(
-                          child: ListTile(
-                            title: Text(item['name']),
-                            subtitle: Text('Qty: ${item['qty']} | Rate: ₹${item['rate']}'),
-                            trailing: Text('₹${item['total'].toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              child: ListView.builder(
+                itemCount: _rows.length,
+                itemBuilder: (context, index) {
+                  final row = _rows[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: SearchableField(
+                            label: 'Item ${index + 1}',
+                            items: _allProductNames,
+                            controller: row.searchController,
+                            onSelected: (selectedItemName) {
+                              final match = _allProducts.firstWhere(
+                                (p) => p.itemName.toLowerCase() == selectedItemName.toLowerCase(),
+                                orElse: () => InventoryItem(),
+                              );
+                              setState(() {
+                                row.selectedProduct = match.id != 0 ? match : null;
+                                if (row.selectedProduct != null) {
+                                  row.rateController.text = row.selectedProduct!.priceA.toString();
+                                }
+                              });
+                              if (index == _rows.length - 1) {
+                                _addNewRow();
+                              }
+                            },
                           ),
-                        );
-                      },
+                        ),
+                        const SizedBox(width: 4),
+
+                        Expanded(
+                          flex: 1,
+                          child: TextField(
+                            controller: row.qtyController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 12)),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+
+                        Expanded(
+                          flex: 1,
+                          child: TextField(
+                            controller: row.rateController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 12)),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+
+                        Expanded(
+                          flex: 1,
+                          child: Center(
+                            child: Text(
+                              '₹${row.totalAmount.toStringAsFixed(2)}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                          ),
+                        ),
+
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                          onPressed: () => _removeRow(index),
+                        ),
+                      ],
                     ),
+                  );
+                },
+              ),
             ),
 
             Container(
-              padding: const EdgeInsets.all(8),
-              color: Colors.grey.shade100,
-              child: Column(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    const Text('SubTotal:'),
-                    Text('₹${subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ]),
-                  if (_isGstEnabled)
-                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      const Text('GST (18% Auto):'),
-                      Text('₹${taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ]),
-                  const Divider(),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    const Text('Grand Total:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    Text('₹${grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
-                  ]),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                      onPressed: _savePurchase,
-                      child: const Text('Save Purchase & Update Stock', style: TextStyle(fontSize: 16)),
-                    ),
+                  Text(
+                    'Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                    onPressed: _savePurchaseBill,
+                    child: const Text('Save Purchase Bill', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
