@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../database/database_helper.dart';
-import '../models/account.dart';
+import '../models/party.dart'; // ✅ Party model import kiya gaya hai
 
 class AddAccountScreen extends StatefulWidget {
   const AddAccountScreen({super.key});
@@ -132,25 +132,27 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     final password = _passwordController.text.trim();
 
     if (name.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya Account / Party ka Naam likhein!')),
+        const SnackBar(content: Text('Kripya Account / Party ka Naam likhein!'), backgroundColor: Colors.red),
       );
       return;
     }
 
-    final existingAccount = await DatabaseHelper.isar.accounts
+    final existingParty = await DatabaseHelper.isar.parties
         .filter()
         .nameEqualTo(name, caseSensitive: false)
         .findFirst();
 
-    if (existingAccount != null) {
+    if (existingParty != null) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: "$name" naam ka account pehle se bana hua hai!')),
+        SnackBar(content: Text('Error: "$name" naam ka account pehle se bana hua hai!'), backgroundColor: Colors.red),
       );
       return;
     }
 
-    final newAccount = Account()
+    final newParty = Party()
       ..name = name
       ..groupCategory = _groupCategory
       ..phone = phone.isEmpty ? null : phone
@@ -168,11 +170,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       ..loginPassword = password.isEmpty ? null : password;
 
     await DatabaseHelper.isar.writeTxn(() async {
-      await DatabaseHelper.isar.accounts.put(newAccount);
+      await DatabaseHelper.isar.parties.put(newParty);
     });
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Account "$name" safaltapurvak save ho gaya!')),
+      SnackBar(content: Text('Account "$name" safaltapurvak save ho gaya!'), backgroundColor: Colors.green),
     );
 
     // Reset Form
