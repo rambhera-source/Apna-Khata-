@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'sales_screen.dart';
 import 'purchase_screen.dart';
 import 'sales_return_screen.dart';
@@ -11,6 +10,8 @@ import 'backup_settings_screen.dart';
 import 'settings_screen.dart'; 
 import 'voucher_entry_screen.dart'; 
 import 'ledger_screen.dart';
+import 'day_book_screen.dart';
+import 'financial_reports_screen.dart'; // ✅ Financial Reports screen import kiya gaya hai
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -94,7 +95,7 @@ class DashboardScreen extends StatelessWidget {
                   // Grid Menu for Modules
                   Expanded(
                     child: GridView.count(
-                      crossAxisCount: 3, // 3 columns taaki grid balanced rahe
+                      crossAxisCount: 3,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
                       childAspectRatio: 1.2,
@@ -107,6 +108,16 @@ class DashboardScreen extends StatelessWidget {
                         _buildDashboardCard(context, title: 'Manufacturing & BOM', icon: Icons.precision_manufacturing, color: Colors.purple, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManufacturingScreen()))),
                         _buildDashboardCard(context, title: 'Vouchers (Pay/Rcpt)', icon: Icons.account_balance_wallet, color: Colors.amber.shade900, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VoucherEntryScreen()))),
                         _buildDashboardCard(context, title: 'Account Ledger', icon: Icons.menu_book, color: Colors.indigo.shade700, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LedgerScreen()))),
+                        _buildDashboardCard(context, title: 'Day Book Register', icon: Icons.book, color: Colors.blueGrey, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DayBookScreen()))),
+                        
+                        // 🔥 Financial Reports Card Added
+                        _buildDashboardCard(
+                          context, 
+                          title: 'Financial Reports', 
+                          icon: Icons.trending_up, 
+                          color: Colors.green.shade700, 
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FinancialReportsScreen())),
+                        ),
                       ],
                     ),
                   ),
@@ -125,7 +136,6 @@ class DashboardScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
                 Container(
                   padding: const EdgeInsets.all(16),
                   color: Colors.teal.shade900,
@@ -147,8 +157,6 @@ class DashboardScreen extends StatelessWidget {
                     style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold),
                   ),
                 ),
-
-                // Shortcut List Items (Clickable & Informative)
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -160,11 +168,10 @@ class DashboardScreen extends StatelessWidget {
                       _buildShortcutTile(context, title: 'Journal Entry', shortcut: 'Alt + J', icon: Icons.note_alt, color: Colors.purple, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VoucherEntryScreen()))),
                       _buildShortcutTile(context, title: 'Account Ledger', shortcut: 'Ctrl + L', icon: Icons.menu_book, color: Colors.indigo, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LedgerScreen()))),
                       _buildShortcutTile(context, title: 'Inventory Stock', shortcut: 'Ctrl + I', icon: Icons.inventory_2, color: Colors.blueGrey, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductInventoryScreen()))),
+                      _buildShortcutTile(context, title: 'Financial Reports', shortcut: 'Alt + F', icon: Icons.trending_up, color: Colors.green.shade700, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FinancialReportsScreen()))),
                     ],
                   ),
                 ),
-
-                // Footer note inside sidebar
                 Container(
                   padding: const EdgeInsets.all(12),
                   alignment: Alignment.center,
@@ -181,7 +188,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // Grid Dashboard Card Builder
   Widget _buildDashboardCard(
     BuildContext context, {
     required String title,
@@ -218,7 +224,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // Right Sidebar Shortcut Tile Builder
   Widget _buildShortcutTile(
     BuildContext context, {
     required String title,
