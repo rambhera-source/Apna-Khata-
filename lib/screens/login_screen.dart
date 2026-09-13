@@ -34,6 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final enteredPin = _loginPinController.text.trim();
 
     if (enteredId.isEmpty || enteredPin.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kripya Admin ID aur PIN dono darj karein!'), backgroundColor: Colors.red),
       );
@@ -42,9 +43,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
     // 1. 🛡️ Super Admin Check (ID: Admin, PIN: 2029)
     if (enteredId == _masterAdminId && enteredPin == _masterPin) {
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const DashboardScreen(isAdmin: true)),
+        MaterialPageRoute(builder: (context) => const DashboardScreen()),
       );
       return;
     }
@@ -57,10 +59,11 @@ class _LoginScreenState extends State<LoginScreen> {
         .findFirst();
 
     if (staffUser != null) {
+      if (!mounted) return;
       if (staffUser.isApproved) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const DashboardScreen(isAdmin: false)),
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -71,6 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Galat Admin ID ya PIN! Kripya sahi jankari bharein.'),
@@ -87,6 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final pin = _signupPinController.text.trim();
 
     if (name.isEmpty || username.isEmpty || pin.length < 4) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kripya sabhi fields sahi bharein (PIN min 4 digits)!'), backgroundColor: Colors.red),
       );
@@ -95,6 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     // Restrict staff from using 'Admin' as username
     if (username.toLowerCase() == 'admin') {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Yeh username allowed nahi hai!'), backgroundColor: Colors.red),
       );
@@ -108,6 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
         .findFirst();
 
     if (existingUser != null) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Yeh Username/Mobile pehle se registered hai!'), backgroundColor: Colors.red),
       );
@@ -126,6 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await DatabaseHelper.isar.userAccounts.put(newUser);
     });
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Signup Request Submitted! Admin approval ke baad login kar payenge.'),
