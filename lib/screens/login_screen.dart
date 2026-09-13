@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http; // Pincode fetch karne ke liye http package
 import 'product_inventory_screen.dart';
 import 'purchase_screen.dart';
 import 'sales_screen.dart';
@@ -12,45 +14,91 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool _isLoggedIn = false; // Check karega ki user logged in hai ya nahi
-  bool _isSignupMode = false; // Toggle karne ke liye (Login vs Signup)
+  bool _isLoggedIn = false;
+  bool _isSignupMode = false;
 
-  // Controllers for Form
+  // Controllers
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
+  final _firmNameController = TextEditingController();
+  final _ownerNameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _gstController = TextEditingController();
+  final _pincodeController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _stateController = TextEditingController();
+  final _addressController = TextEditingController();
+  
+  String _selectedBusinessMode = 'Wholesale';
+  bool _isLoadingPincode = false;
 
-  // Handle Login or Signup submission
+  // 🌍 Pincode Auto-Fetch Function (India Post API)
+  Future<void> _fetchCityStateByPincode(String pincode) async {
+    if (pincode.length != 6) return;
+
+    setState(() => _isLoadingPincode = true);
+
+    try {
+      final url = Uri.parse('https://api.postalpincode.in/pincode/$pincode');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data[0]['Status'] == 'Success') {
+          final postOffice = data[0]['PostOffice'][0];
+          setState(() {
+            _cityController.text = postOffice['District'] ?? postOffice['Region'] ?? '';
+            _stateController.text = postOffice['State'] ?? '';
+            _addressController.text = '${postOffice['Name']}, ${_cityController.text}, ${_stateController.text} - $pincode';
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Galat Pincode! Kripya sahi PIN code darj karein.')),
+          );
+        }
+      }
+    } catch (e) {
+      // Network error handling
+    } finally {
+      setState(() => _isLoadingPincode = false);
+    }
+  }
+
   void _submitAuth() {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya Email aur Password bharein!')),
-      );
-      return;
+    if (_isSignupMode) {
+      if (_firmNameController.text.trim().isEmpty ||
+          _phoneController.text.trim().isEmpty ||
+          _emailController.text.trim().isEmpty ||
+          _passwordController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kripya Firm Name, Phone, Email aur Password zaroor bharein!')),
+        );
+        return;
+      }
+    } else {
+      if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kripya Email aur Password darj karein!')),
+        );
+        return;
+      }
     }
 
-    // Success hone par user ko Dashboard par bhej denge
-    setState(() {
-      _isLoggedIn = true;
-    });
+    setState(() => _isLoggedIn = true);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(_isSignupMode ? 'Account Successfully Created!' : 'Login Successful!')),
+      SnackBar(content: Text(_isSignupMode ? 'Account Created! Mode: $_selectedBusinessMode' : 'Login Successful!')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Agar user logged in nahi hai, toh Login/Signup Form dikhao
     if (!_isLoggedIn) {
       return Scaffold(
         backgroundColor: Colors.teal.shade50,
         body: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(16.0),
             child: Card(
               elevation: 6,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -60,44 +108,147 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(Icons.store, size: 60, color: Colors.teal),
-                    const SizedBox(height: 12),
+                    const Icon(Icons.store, size: 50, color: Colors.teal),
+                    const SizedBox(height: 8),
                     Text(
-                      _isSignupMode ? 'Create New Account' : 'Welcome to ORLIFE',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.teal),
+                      _isSignupMode ? 'Create ORLIFE Business Account' : 'Welcome Back to ORLIFE',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _isSignupMode ? 'Sign up to get started' : 'Login to your account',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                      _isSignupMode ? 'Enter your firm & business details' : 'Login to access your inventory hub',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
-                    // Name field sirf Signup ke time dikhegi
+                    // ================= SIGNUP FIELDS =================
                     if (_isSignupMode) ...[
                       TextField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
+                        controller: _firmNameController,
+                        decoration: const InputDecoration(labelText: 'Firm / Business Name', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business)),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _ownerNameController,
+                        decoration: const InputDecoration(labelText: 'Owner / Contact Person Name', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone)),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _gstController,
+                        decoration: const InputDecoration(labelText: 'GST Number (Optional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.receipt_long)),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      // PINCODE FIELD WITH AUTO-FETCH
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _pincodeController,
+                              keyboardType: TextInputType.number,
+                              maxLength: 6,
+                              decoration: InputDecoration(
+                                labelText: 'Pincode (Auto-Fill City/State)',
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.pin_drop),
+                                counterText: '',
+                                suffixIcon: _isLoadingPincode
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(10.0),
+                                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                      )
+                                    : null,
+                              ),
+                              onChanged: (value) {
+                                if (value.length == 6) {
+                                  _fetchCityStateByPincode(value);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // CITY & STATE (Auto Filled)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _cityController,
+                              decoration: const InputDecoration(labelText: 'City / District', border: OutlineInputBorder()),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _stateController,
+                              decoration: const InputDecoration(labelText: 'State', border: OutlineInputBorder()),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      TextField(
+                        controller: _addressController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(labelText: 'Full Address', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on)),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Business Mode Selection
+                      const Text('Select Business Mode:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: RadioListTile<String>(
+                              title: const Text('Wholesale', style: TextStyle(fontSize: 13)),
+                              value: 'Wholesale',
+                              groupValue: _selectedBusinessMode,
+                              activeColor: Colors.teal,
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (val) => setState(() => _selectedBusinessMode = val!),
+                            ),
+                          ),
+                          Expanded(
+                            child: RadioListTile<String>(
+                              title: const Text('Manufacturing', style: TextStyle(fontSize: 13)),
+                              value: 'Manufacturing',
+                              groupValue: _selectedBusinessMode,
+                              activeColor: Colors.teal,
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (val) => setState(() => _selectedBusinessMode = val!),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                     ],
 
+                    // COMMON FIELDS (Email & Password)
                     TextField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(labelText: 'Email Address', border: OutlineInputBorder(), prefixIcon: Icon(Icons.email)),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: _passwordController,
                       obscureText: true,
                       decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder(), prefixIcon: Icon(Icons.lock)),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
-                    // Submit Button
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.teal,
@@ -106,19 +257,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: _submitAuth,
-                      child: Text(_isSignupMode ? 'Sign Up' : 'Login', style: const TextStyle(fontSize: 16)),
+                      child: Text(_isSignupMode ? 'Register & Setup Account' : 'Login', style: const TextStyle(fontSize: 16)),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
 
-                    // Switch between Login and Signup mode
                     TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _isSignupMode = !_isSignupMode;
-                        });
-                      },
+                      onPressed: () => setState(() => _isSignupMode = !_isSignupMode),
                       child: Text(
-                        _isSignupMode ? 'Already have an account? Login here' : 'New user? Create an account (Sign Up)',
+                        _isSignupMode ? 'Already have an account? Login here' : 'New user? Create a Business Account (Sign Up)',
                         style: const TextStyle(color: Colors.teal),
                       ),
                     ),
@@ -131,9 +277,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
 
-    // ==========================================
-    // AGAR USER LOGGED IN HAI, TOH MAIN DASHBOARD DIKHAO
-    // ==========================================
+    // ================= DASHBOARD HUB =================
     return Scaffold(
       appBar: AppBar(
         title: const Text('ORLIFE Business Hub - Dashboard'),
@@ -143,11 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
-            onPressed: () {
-              setState(() {
-                _isLoggedIn = false; // Logout karke wapas login screen par le aayega
-              });
-            },
+            onPressed: () => setState(() => _isLoggedIn = false),
           ),
         ],
       ),
@@ -155,14 +295,14 @@ class _LoginScreenState extends State<LoginScreen> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const UserAccountsDrawerHeader(
-              accountName: Text('ORLIFE Mobile Accessories', style: TextStyle(fontWeight: FontWeight.bold)),
-              accountText: Text('Admin Dashboard'),
-              currentAccountPicture: CircleAvatar(
+            UserAccountsDrawerHeader(
+              accountName: Text(_firmNameController.text.isEmpty ? 'ORLIFE Mobile Accessories' : _firmNameController.text, style: const TextStyle(fontWeight: FontWeight.bold)),
+              accountText: Text('Mode: $_selectedBusinessMode'),
+              currentAccountPicture: const CircleAvatar(
                 backgroundColor: Colors.white,
                 child: Icon(Icons.store, color: Colors.teal, size: 40),
               ),
-              decoration: BoxDecoration(color: Colors.teal),
+              decoration: const BoxDecoration(color: Colors.teal),
             ),
             ListTile(
               leading: const Icon(Icons.inventory, color: Colors.teal),
@@ -205,12 +345,12 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Welcome to ORLIFE Management System',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal),
+            Text(
+              'Welcome, ${_firmNameController.text.isEmpty ? 'Admin' : _firmNameController.text} ($_selectedBusinessMode Mode)',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
