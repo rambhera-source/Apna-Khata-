@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
-import 'dashboard_screen.dart'; // ✅ Dashboard ka rasta yahan import kar diya gaya hai
+import 'package:isar/isar.dart';
+import '../database/database_helper.dart';
+import '../models/user_model.dart';
+import 'dashboard_screen.dart';
+import 'signup_screen.dart'; // ✅ Signup screen ka import
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,18 +14,52 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _pinController = TextEditingController();
-  final String _correctPin = "1234"; // Aap apna default PIN ya password yahan change kar sakte hain
-  final String _firmName = 'Orlife ERP'; // ✅ Branding updated
+  final String _masterPin = "1234"; // Master Super Admin PIN
+  final String _firmName = 'Orlife ERP';
 
-  void _handleLogin() {
-    if (_pinController.text.trim() == _correctPin) {
-      // ✅ PIN sahi hone par yeh code user ko seedha Dashboard screen par le jayega
+  Future<void> _handleLogin() async {
+    final enteredPin = _pinController.text.trim();
+
+    if (enteredPin.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kripya PIN darj karein!'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    // 1. Check if Master Admin PIN is entered
+    if (enteredPin == _masterPin) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const DashboardScreen()),
       );
+      return;
+    }
+
+    // 2. Check if entered PIN belongs to an Approved Staff User in Database
+    final staffUser = await DatabaseHelper.isar.userAccounts
+        .filter()
+        .pinEqualTo(enteredPin)
+        .findFirst();
+
+    if (staffUser != null) {
+      if (staffUser.isApproved) {
+        // ✅ Approved Staff: Allow login to Dashboard
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
+      } else {
+        // ⏳ Pending Approval: Block login and show warning
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Aapka account abhi Admin approval ke liye pending hai!'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     } else {
-      // ❌ Galat PIN par error message dikhayega
+      // ❌ Invalid PIN
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Galat PIN! Kripya sahi PIN darj karein.'),
@@ -101,6 +139,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       onPressed: _handleLogin,
                       child: const Text('Login to Dashboard', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Signup Navigation Button for New Staff
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SignupScreen()),
+                      );
+                    },
+                    child: const Text(
+                      'New User? Request Signup',
+                      style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
