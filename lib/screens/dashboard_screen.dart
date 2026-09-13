@@ -8,7 +8,7 @@ import '../models/order_model.dart';
 import 'searchable_field.dart';
 
 class OrdersManagementScreen extends StatefulWidget {
-  final int initialTab; // 0 for Add New Order, 1 for Orders History
+  final int initialTab; // 0 for Book New Order, 1 for Orders History
   const OrdersManagementScreen({super.key, this.initialTab = 0});
 
   @override
@@ -37,6 +37,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
   @override
   void initState() {
     super.initState();
+    // 🔥 Dashboard se aaye hue initialTab ke hisab se tab open hoga
     _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
     _loadData();
     _fetchOrders();
