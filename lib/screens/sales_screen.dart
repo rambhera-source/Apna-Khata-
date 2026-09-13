@@ -34,8 +34,9 @@ class _SalesScreenState extends State<SalesScreen> {
   String _paymentMode = 'Cash';
   final List<String> _paymentModes = ['Cash', 'Bank / UPI', 'Credit'];
 
-  // Pending Order tracking for selected party
-  SalesOrder? _pendingOrder;
+  // 🔥 Multi-Pending Order Tracking Variables
+  List<SalesOrder> _pendingOrdersList = [];
+  SalesOrder? _selectedPendingOrder;
   bool _isLoadingOrder = false;
 
   @override
@@ -53,29 +54,29 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  // 🔍 Party select hote hi check karein ki uska koi Pending Order hai ya nahi
-  Future<void> _checkForPendingOrder(String partyName) async {
+  // 🔍 Step 1: Party select hote hi saare pending orders fetch karna
+  Future<void> _checkForPendingOrders(String partyName) async {
     if (partyName.isEmpty) return;
 
     setState(() => _isLoadingOrder = true);
 
-    // Isar se is party ka pending order dhundhein
-    final order = await DatabaseHelper.isar.salesOrders
+    final orders = await DatabaseHelper.isar.salesOrders
         .filter()
         .partyNameEqualTo(partyName, caseSensitive: false)
         .and()
         .statusEqualTo('Pending')
-        .findFirst();
+        .findAll();
 
     setState(() {
-      _pendingOrder = order;
+      _pendingOrdersList = orders;
+      _selectedPendingOrder = orders.isNotEmpty ? orders.first : null;
       _isLoadingOrder = false;
     });
 
-    if (order != null) {
+    if (orders.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('⚠️ Pending Order found (${order.orderNo}) for $partyName!'),
+          content: Text('⚠️ ${orders.length} Pending Order(s) found for $partyName!'),
           backgroundColor: Colors.amber.shade900,
           duration: const Duration(seconds: 4),
         ),
@@ -83,15 +84,14 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // 📥 Pending Order items ko bill cart mein load karna
-  Future<void> _loadPendingOrderIntoBill() async {
-    if (_pendingOrder == null) return;
-
-    await _pendingOrder!.items.load(); // Isar link load karein
+  // 📥 Step 2: Specific selected order ko bill cart mein load karna
+  Future<void> _loadSpecificOrderIntoBill(SalesOrder order) async {
+    await order.items.load();
 
     setState(() {
+      _selectedPendingOrder = order;
       _cartItems.clear();
-      for (var item in _pendingOrder!.items) {
+      for (var item in order.items) {
         if (!item.isDelivered) {
           _cartItems.add({
             'name': item.productName,
@@ -103,10 +103,48 @@ class _SalesScreenState extends State<SalesScreen> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pending order items successfully loaded into bill!'), backgroundColor: Colors.green),
+      SnackBar(content: Text('Order ${order.orderNo} successfully loaded into bill!'), backgroundColor: Colors.green),
     );
   }
 
+  // 📋 Step 3: Agar 1 se zyada orders hain, toh user ko select karne ka Dialog dikhana
+  void _showSelectOrderDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Pending Order to Load'),
+        content: SizedBox(
+          width: 350,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _pendingOrdersList.length,
+            itemBuilder: (context, index) {
+              final ord = _pendingOrdersList[index];
+              return Card(
+                child: ListTile(
+                  title: Text('Order No: ${ord.orderNo}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('Date: ${DateFormat('dd-MM-yyyy').format(ord.date)}'),
+                  trailing: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, isDense: true),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _loadSpecificOrderIntoBill(ord);
+                    },
+                    child: const Text('Load'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  // 🛒 Add Item to Cart Manually
   void _addItemToCart() {
     if (_allProducts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pehle inventory mein products add karein!')));
@@ -115,6 +153,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
     Product selectedProduct = _allProducts.first;
     final TextEditingController qtyController = TextEditingController(text: '1');
+    final TextEditingController priceController = TextEditingController(text: selectedProduct.sellingPrice.toString());
 
     showDialog(
       context: context,
@@ -127,7 +166,10 @@ class _SalesScreenState extends State<SalesScreen> {
               DropdownButtonFormField<Product>(
                 value: selectedProduct,
                 items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text('${p.name} (Stock: ${p.stock})'))).toList(),
-                onChanged: (val) => selectedProduct = val!,
+                onChanged: (val) {
+                  selectedProduct = val!;
+                  priceController.text = selectedProduct.sellingPrice.toString();
+                },
                 decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder(), isDense: true),
               ),
               const SizedBox(height: 12),
@@ -136,6 +178,12 @@ class _SalesScreenState extends State<SalesScreen> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder(), isDense: true),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: priceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Selling Price (₹)', border: OutlineInputBorder(), isDense: true),
+              ),
             ],
           ),
           actions: [
@@ -143,11 +191,12 @@ class _SalesScreenState extends State<SalesScreen> {
             ElevatedButton(
               onPressed: () {
                 int q = int.tryParse(qtyController.text) ?? 1;
+                double pr = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
                 setState(() {
                   _cartItems.add({
                     'name': selectedProduct.name,
                     'qty': q,
-                    'price': selectedProduct.sellingPrice,
+                    'price': pr,
                   });
                 });
                 Navigator.pop(context);
@@ -272,35 +321,32 @@ class _SalesScreenState extends State<SalesScreen> {
         ..notes = 'Sales Invoice generated via ORLIFE ERP';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
-      // 2. Agar koi pending order se bill bana hai toh order status update karein
-      if (_pendingOrder != null) {
-        await _pendingOrder!.items.load();
+      // 2. Update Pending Order status if loaded
+      if (_selectedPendingOrder != null) {
+        await _selectedPendingOrder!.items.load();
         
-        // Check karein ki saare items deliver ho gaye ya kuch bache hain
         bool allDelivered = true;
-        for (var orderItem in _pendingOrder!.items) {
-          // Check if item exists in current cart
+        for (var orderItem in _selectedPendingOrder!.items) {
           var cartMatch = _cartItems.any((c) => c['name'] == orderItem.productName && c['qty'] >= orderItem.qty);
           if (cartMatch) {
             orderItem.isDelivered = true;
           } else {
-            allDelivered = false; // Kuch item kam ya remove kiye gaye hain, toh order pending rahega
+            allDelivered = false; // Item remove/kam karne par order pending rahega
           }
           await DatabaseHelper.isar.orderItemModels.put(orderItem);
         }
 
         if (allDelivered) {
-          _pendingOrder!.status = 'Converted to Bill';
+          _selectedPendingOrder!.status = 'Converted to Bill';
         } else {
-          _pendingOrder!.status = 'Pending (Partial)';
+          _selectedPendingOrder!.status = 'Pending (Partial)';
         }
-        await DatabaseHelper.isar.salesOrders.put(_pendingOrder!);
+        await DatabaseHelper.isar.salesOrders.put(_selectedPendingOrder!);
       }
     });
 
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sales Bill Successfully Saved!'), backgroundColor: Colors.green));
     
-    // Show Action Dialog for Print / WhatsApp
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -344,7 +390,6 @@ class _SalesScreenState extends State<SalesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Party Selection and Invoice No
             Row(
               children: [
                 Expanded(
@@ -354,7 +399,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     controller: _partyController,
                     onSelected: (val) {
                       _partyController.text = val;
-                      _checkForPendingOrder(val);
+                      _checkForPendingOrders(val); // 🔥 Party select hote hi trigger hoga
                     },
                   ),
                 ),
@@ -369,8 +414,8 @@ class _SalesScreenState extends State<SalesScreen> {
               ],
             ),
 
-            // 🔥 PENDING ORDER BANNER (Agar party ka order pending hoga toh yahan dikhega)
-            if (_pendingOrder != null) ...[
+            // 🔥 PENDING ORDER NOTIFICATION BANNER (1 ya 1 se zyada orders ke liye)
+            if (_pendingOrdersList.isNotEmpty) ...[
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.all(10),
@@ -387,16 +432,30 @@ class _SalesScreenState extends State<SalesScreen> {
                         const Icon(Icons.notifications_active, color: Colors.amber, size: 22),
                         const SizedBox(width: 8),
                         Text(
-                          'Pending Order Found: ${_pendingOrder!.orderNo} (${DateFormat('dd-MM-yyyy').format(_pendingOrder!.date)})',
+                          _pendingOrdersList.length == 1
+                              ? 'Pending Order: ${_pendingOrdersList.first.orderNo}'
+                              : '${_pendingOrdersList.length} Pending Orders Found!',
                           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade900, fontSize: 13),
                         ),
                       ],
                     ),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800, foregroundColor: Colors.white, isDense: true),
-                      icon: const Icon(Icons.download, size: 16),
-                      label: const Text('Load Order'),
-                      onPressed: _loadPendingOrderIntoBill,
+                    Row(
+                      children: [
+                        if (_pendingOrdersList.length > 1) ...[
+                          OutlinedButton(
+                            style: OutlinedButton.styleFrom(foregroundColor: Colors.amber.shade900, side: BorderSide(color: Colors.amber.shade800), isDense: true),
+                            onPressed: _showSelectOrderDialog,
+                            child: const Text('View All'),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800, foregroundColor: Colors.white, isDense: true),
+                          icon: const Icon(Icons.download, size: 16),
+                          label: Text(_pendingOrdersList.length == 1 ? 'Load Order' : 'Load Latest'),
+                          onPressed: () => _loadSpecificOrderIntoBill(_pendingOrdersList.first),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -436,7 +495,6 @@ class _SalesScreenState extends State<SalesScreen> {
                                 IconButton(
                                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                                   onPressed: () {
-                                    // Item remove karne par order mein pending rehta hai
                                     setState(() => _cartItems.removeAt(index));
                                   },
                                 ),
