@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
-import '../models/user_request_model.dart';
+import '../models/user_request_model.dart'; // Ensure this model exists with firmName, ownerName, phone, email, businessMode, city, state, pincode, status
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -18,10 +18,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       request.status = 'Approved';
       await DatabaseHelper.isar.userRequests.put(request);
     });
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${request.firmName} ka account approve kar diya gaya hai!')),
     );
-    setState(() {});
   }
 
   // 🔴 Request Reject Karne ka Function
@@ -30,10 +30,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       request.status = 'Rejected';
       await DatabaseHelper.isar.userRequests.put(request);
     });
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${request.firmName} ki request reject kar di gayi hai.')),
     );
-    setState(() {});
   }
 
   @override
@@ -65,7 +65,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   .watch(fireImmediately: true),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  const Center(child: CircularProgressIndicator());
+                  return const Center(child: CircularProgressIndicator());
                 }
                 final requests = snapshot.data ?? [];
 
@@ -138,6 +138,9 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   .statusEqualTo('Approved')
                   .watch(fireImmediately: true),
               builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
                 final approvedList = snapshot.data ?? [];
 
                 if (approvedList.isEmpty) {
