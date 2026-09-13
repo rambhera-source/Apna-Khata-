@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'add_account_screen.dart';
 import 'product_inventory_screen.dart';
 import 'purchase_screen.dart';
 import 'sales_screen.dart';
+import 'purchase_return_screen.dart';
+import 'sales_return_screen.dart';
+import 'bulk_import_screen.dart';
+import 'backup_settings_screen.dart';
 import 'settings_screen.dart';
-import 'add_account_screen.dart'; // 👈 Add Account screen import kiya
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,8 +17,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool _isLoggedIn = true; // Aapke dashboard flow ke liye
-  String _selectedBusinessMode = 'Wholesale';
+  bool _isLoggedIn = true;
+  final String _selectedBusinessMode = 'Wholesale';
   final TextEditingController _firmNameController = TextEditingController(text: 'ORLIFE Mobile Accessories');
 
   @override
@@ -45,7 +49,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               decoration: const BoxDecoration(color: Colors.teal),
             ),
-            // 👥 Add Party / Accounts Option in Sidebar
             ListTile(
               leading: const Icon(Icons.group_add, color: Colors.indigo),
               title: const Text('Add Party & Accounts'),
@@ -56,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.inventory, color: Colors.teal),
-              title: const Text('Product & Inventory Management'),
+              title: const Text('Product & Inventory'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
@@ -71,11 +74,43 @@ class _LoginScreenState extends State<LoginScreen> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.keyboard_return, color: Colors.redAccent),
+              title: const Text('Purchase Return'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseReturnScreen()));
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.sell, color: Colors.orange),
               title: const Text('Sales Invoice Entry'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.assignment_return, color: Colors.deepOrange),
+              title: const Text('Sales Return'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReturnScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload_file, color: Colors.purple),
+              title: const Text('Bulk Data Import'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const BulkImportScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.backup, color: Colors.teal),
+              title: const Text('Backup & Restore Settings'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const BackupSettingsScreen()));
               },
             ),
             const Divider(),
@@ -100,16 +135,13 @@ class _LoginScreenState extends State<LoginScreen> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 20),
-            
-            // 🏠 Grid Cards on Dashboard Home Page
+            const SizedBox(height: 16),
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
                 children: [
-                  // 👥 1. Add Party / Accounts Card
                   _buildDashboardCard(
                     context,
                     title: 'Add Party / Accounts',
@@ -117,7 +149,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.indigo,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddAccountScreen())),
                   ),
-                  // 📦 2. Inventory Card
                   _buildDashboardCard(
                     context,
                     title: 'Inventory & Stock',
@@ -125,7 +156,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.teal,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen())),
                   ),
-                  // 🛒 3. Purchase Card
                   _buildDashboardCard(
                     context,
                     title: 'Purchase Bill',
@@ -133,13 +163,40 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.blue,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseScreen())),
                   ),
-                  // 🏷️ 4. Sales Card
+                  _buildDashboardCard(
+                    context,
+                    title: 'Purchase Return',
+                    icon: Icons.keyboard_return,
+                    color: Colors.redAccent,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseReturnScreen())),
+                  ),
                   _buildDashboardCard(
                     context,
                     title: 'Sales Invoice',
                     icon: Icons.sell,
                     color: Colors.orange,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesScreen())),
+                  ),
+                  _buildDashboardCard(
+                    context,
+                    title: 'Sales Return',
+                    icon: Icons.assignment_return,
+                    color: Colors.deepOrange,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReturnScreen())),
+                  ),
+                  _buildDashboardCard(
+                    context,
+                    title: 'Bulk Import',
+                    icon: Icons.upload_file,
+                    color: Colors.purple,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BulkImportScreen())),
+                  ),
+                  _buildDashboardCard(
+                    context,
+                    title: 'Backup & Restore',
+                    icon: Icons.backup,
+                    color: Colors.teal,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BackupSettingsScreen())),
                   ),
                 ],
               ),
@@ -152,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildDashboardCard(BuildContext context, {required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
     return Card(
-      elevation: 4,
+      elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: onTap,
@@ -161,14 +218,14 @@ class _LoginScreenState extends State<LoginScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircleAvatar(
-              radius: 30,
+              radius: 26,
               backgroundColor: color.withOpacity(0.2),
-              child: Icon(icon, size: 32, color: color),
+              child: Icon(icon, size: 28, color: color),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               title,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
           ],
