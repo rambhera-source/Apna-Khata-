@@ -79,7 +79,47 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     return total;
   }
 
-  // 💾 Save Purchase Bill & Add Stock to Database
+  Future<void> _showPurchaseHistoryPopup(InventoryItem product) async {
+    String partyName = _partyController.text.trim();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Purchase History: ${product.itemName}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(partyName.isNotEmpty ? 'Supplier: $partyName' : 'All Suppliers History', 
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+              const Divider(),
+              const SizedBox(height: 8),
+              ListTile(
+                title: const Text('Purchase Bill #PUR-501'),
+                subtitle: const Text('Date: 2026-09-02\nQty: 100 pcs | Rate: ₹110.0'),
+                trailing: const Icon(Icons.open_in_new, color: Colors.blue),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Opening Purchase Bill #PUR-501...')),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _savePurchaseBill() async {
     if (_partyController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -103,19 +143,14 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       return;
     }
 
-    // Perform database transaction to ADD stock (Purchase increases stock)
     await DatabaseHelper.isar.writeTxn(() async {
       for (var row in _rows) {
         if (row.selectedProduct != null) {
           double purchasedQty = double.tryParse(row.qtyController.text) ?? 0;
-          
           InventoryItem product = row.selectedProduct!;
-          product.stockQuantity += purchasedQty; // Purchase hone par stock plus karna
-
-          // Update latest purchase price if needed
+          product.stockQuantity += purchasedQty;
           double newRate = double.tryParse(row.rateController.text) ?? product.priceA;
           if (newRate > 0) product.priceA = newRate;
-
           await DatabaseHelper.isar.inventoryItems.put(product);
         }
       }
@@ -125,7 +160,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       const SnackBar(content: Text('Purchase Bill Successfully Saved & Stock Updated!')),
     );
 
-    Navigator.pop(context); // Go back to Dashboard
+    Navigator.pop(context);
   }
 
   @override
@@ -170,7 +205,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               color: Colors.blue.shade100,
               child: const Row(
                 children: [
-                  Expanded(flex: 3, child: Text('Item Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(flex: 3, child: Text('Item Name & History', style: TextStyle(fontWeight: FontWeight.bold))),
                   Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold))),
                   Expanded(flex: 1, child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
                   Expanded(flex: 1, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -184,72 +219,92 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 itemCount: _rows.length,
                 itemBuilder: (context, index) {
                   final row = _rows[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: SearchableField(
-                            label: 'Item ${index + 1}',
-                            items: _allProductNames,
-                            controller: row.searchController,
-                            onSelected: (selectedItemName) {
-                              final match = _allProducts.firstWhere(
-                                (p) => p.itemName.toLowerCase() == selectedItemName.toLowerCase(),
-                                orElse: () => InventoryItem(),
-                              );
-                              setState(() {
-                                row.selectedProduct = match.id != 0 ? match : null;
-                                if (row.selectedProduct != null) {
-                                  row.rateController.text = row.selectedProduct!.priceA.toString();
-                                }
-                              });
-                              if (index == _rows.length - 1) {
-                                _addNewRow();
-                              }
-                            },
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6.0),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: SearchableField(
+                                  label: 'Item ${index + 1}',
+                                  items: _allProductNames,
+                                  controller: row.searchController,
+                                  onSelected: (selectedItemName) {
+                                    final match = _allProducts.firstWhere(
+                                      (p) => p.itemName.toLowerCase() == selectedItemName.toLowerCase(),
+                                      orElse: () => InventoryItem(),
+                                    );
+                                    setState(() {
+                                      row.selectedProduct = match.id != 0 ? match : null;
+                                      if (row.selectedProduct != null) {
+                                        row.rateController.text = row.selectedProduct!.priceA.toString();
+                                      }
+                                    });
+                                    if (index == _rows.length - 1) {
+                                      _addNewRow();
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                flex: 1,
+                                child: TextField(
+                                  controller: row.qtyController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 12)),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                flex: 1,
+                                child: TextField(
+                                  controller: row.rateController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 12)),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                flex: 1,
+                                child: Center(
+                                  child: Text(
+                                    '₹${row.totalAmount.toStringAsFixed(2)}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                onPressed: () => _removeRow(index),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 4),
-
-                        Expanded(
-                          flex: 1,
-                          child: TextField(
-                            controller: row.qtyController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 12)),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-
-                        Expanded(
-                          flex: 1,
-                          child: TextField(
-                            controller: row.rateController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 12)),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-
-                        Expanded(
-                          flex: 1,
-                          child: Center(
-                            child: Text(
-                              '₹${row.totalAmount.toStringAsFixed(2)}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          if (row.selectedProduct != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton.icon(
+                                  style: TextButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: const Size(50, 25),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  icon: const Icon(Icons.history, size: 14, color: Colors.blue),
+                                  label: const Text('View Last Purchase Rate & Bill History', style: TextStyle(fontSize: 11, color: Colors.blue)),
+                                  onPressed: () => _showPurchaseHistoryPopup(row.selectedProduct!),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                          onPressed: () => _removeRow(index),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },
