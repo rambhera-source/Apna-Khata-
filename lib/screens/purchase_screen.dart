@@ -1,28 +1,18 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
+import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+
 import '../database/database_helper.dart';
-import '../models/inventory_model.dart';
 import '../models/account.dart';
+import '../models/product.dart';
+import '../models/transaction_model.dart';
 import 'searchable_field.dart';
-
-class PurchaseRowItem {
-  final TextEditingController searchController = TextEditingController();
-  final TextEditingController qtyController = TextEditingController(text: '1');
-  final TextEditingController rateController = TextEditingController(text: '0');
-  InventoryItem? selectedProduct;
-  
-  double get totalAmount {
-    double q = double.tryParse(qtyController.text) ?? 0;
-    double r = double.tryParse(rateController.text) ?? 0;
-    return q * r;
-  }
-
-  void dispose() {
-    searchController.dispose();
-    qtyController.dispose();
-    rateController.dispose();
-  }
-}
 
 class PurchaseScreen extends StatefulWidget {
   const PurchaseScreen({super.key});
@@ -32,306 +22,306 @@ class PurchaseScreen extends StatefulWidget {
 }
 
 class _PurchaseScreenState extends State<PurchaseScreen> {
-  final TextEditingController _partyController = TextEditingController();
+  final TextEditingController _supplierController = TextEditingController();
+  final TextEditingController _billNoController = TextEditingController(text: 'PUR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
-  final List<PurchaseRowItem> _rows = [];
-  List<String> _allProductNames = [];
-  List<InventoryItem> _allProducts = [];
-  List<String> _allParties = [];
+  List<String> _allAccounts = [];
+  List<Product> _allProducts = [];
+  
+  final List<Map<String, dynamic>> _cartItems = [];
+  String _paymentMode = 'Cash';
+  final List<String> _paymentModes = ['Cash', 'Bank / UPI', 'Credit'];
 
   @override
   void initState() {
     super.initState();
-    _loadData();
-    _addNewRow();
+    _loadDropdownData();
   }
 
-  Future<void> _loadData() async {
-    _allProducts = await DatabaseHelper.isar.inventoryItems.where().findAll();
-    _allProductNames = _allProducts.map((p) => p.itemName).toList();
-
-    final parties = await DatabaseHelper.isar.accounts.where().findAll();
-    _allParties = parties.map((a) => a.name).toList();
-    setState(() {});
-  }
-
-  void _addNewRow() {
+  Future<void> _loadDropdownData() async {
+    final accounts = await DatabaseHelper.isar.accounts.where().findAll();
+    final products = await DatabaseHelper.isar.products.where().findAll();
     setState(() {
-      _rows.add(PurchaseRowItem());
+      _allAccounts = accounts.map((a) => a.name).toList();
+      _allProducts = products;
     });
   }
 
-  void _removeRow(int index) {
-    setState(() {
-      _rows[index].dispose();
-      _rows.removeAt(index);
-      if (_rows.isEmpty) {
-        _addNewRow();
-      }
-    });
+  void _addItemToCart() {
+    if (_allProducts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pehle inventory mein products add karein!')));
+      return;
+    }
+
+    Product selectedProduct = _allProducts.first;
+    final TextEditingController qtyController = TextEditingController(text: '1');
+    final TextEditingController priceController = TextEditingController(text: selectedProduct.purchasePrice.toString());
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add Item to Purchase Bill'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<Product>(
+                value: selectedProduct,
+                items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
+                onChanged: (val) {
+                  selectedProduct = val!;
+                  priceController.text = selectedProduct.purchasePrice.toString();
+                },
+                decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder(), isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 12),
+              TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder(), isDense: true)),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                int q = int.tryParse(qtyController.text) ?? 1;
+                double p = double.tryParse(priceController.text) ?? selectedProduct.purchasePrice;
+                setState(() {
+                  _cartItems.add({'name': selectedProduct.name, 'qty': q, 'price': p});
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   double get _grandTotal {
-    double total = 0;
-    for (var row in _rows) {
-      total += row.totalAmount;
-    }
-    return total;
+    return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  Future<void> _showPurchaseHistoryPopup(InventoryItem product) async {
-    String partyName = _partyController.text.trim();
+  // 📄 Purchase Bill PDF & Print / Share Generator
+  Future<void> _generateAndPrintOrShareBill({required bool isWhatsApp}) async {
+    final supplierName = _supplierController.text.trim();
+    if (supplierName.isEmpty || _cartItems.isEmpty) return;
+
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Purchase Inward Record', style: const pw.TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('PURCHASE BILL', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
+                      pw.Text('Bill No: ${_billNoController.text}'),
+                      pw.Text('Date: ${DateFormat('dd-MM-yyyy').format(DateTime.now())}'),
+                    ],
+                  ),
+                ],
+              ),
+              pw.Divider(thickness: 1.5, color: PdfColors.blue),
+              pw.SizedBox(height: 10),
+              pw.Text('Supplier / Vendor:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+              pw.Text('Name: $supplierName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.Text('Payment Mode: $_paymentMode'),
+              pw.SizedBox(height: 15),
+              pw.Table.fromTextArray(
+                headers: ['S.No', 'Item Description', 'Qty', 'Unit Price (₹)', 'Total (₹)'],
+                data: List.generate(_cartItems.length, (index) {
+                  final item = _cartItems[index];
+                  double total = (item['qty'] as int) * (item['price'] as double);
+                  return ['${index + 1}', item['name'], '${item['qty']}', '${item['price']}', '${total.toStringAsFixed(2)}'];
+                }),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.blue),
+                cellAlignment: pw.Alignment.centerLeft,
+              ),
+              pw.SizedBox(height: 20),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.end,
+                children: [
+                  pw.Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.blue), borderRadius: pw.BorderRadius.circular(4)),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (isWhatsApp) {
+      final output = await getTemporaryDirectory();
+      final file = File('${output.path}/Purchase_${_billNoController.text}.pdf');
+      await file.writeAsBytes(await pdf.save());
+      await Share.shareXFiles([XFile(file.path)], text: 'Purchase Bill #${_billNoController.text} from ORLIFE. Total: ₹ $_grandTotal');
+    } else {
+      await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    }
+  }
+
+  Future<void> _savePurchaseTransaction() async {
+    if (_supplierController.text.isEmpty || _cartItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Supplier aur Items bharein!'), backgroundColor: Colors.red));
+      return;
+    }
+
+    final txn = AccountingTransaction()
+      ..date = DateTime.now()
+      ..voucherType = 'Purchase'
+      ..voucherNumber = _billNoController.text
+      ..partyName = _supplierController.text.trim()
+      ..cashOrBank = _paymentMode
+      ..amount = _grandTotal
+      ..notes = 'Purchase Bill recorded via ORLIFE ERP';
+
+    await DatabaseHelper.isar.writeTxn(() async {
+      await DatabaseHelper.isar.accountingTransactions.put(txn);
+    });
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Purchase History: ${product.itemName}'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(partyName.isNotEmpty ? 'Supplier: $partyName' : 'All Suppliers History', 
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-              const Divider(),
-              const SizedBox(height: 8),
-              ListTile(
-                title: const Text('Purchase Bill #PUR-501'),
-                subtitle: const Text('Date: 2026-09-02\nQty: 100 pcs | Rate: ₹110.0'),
-                trailing: const Icon(Icons.open_in_new, color: Colors.blue),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Opening Purchase Bill #PUR-501...')),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
+        title: const Text('Purchase Bill Saved!'),
+        content: const Text('Kya aap is purchase bill ka print lena chahte hain ya WhatsApp par share karna chahte hain?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white),
+            icon: const Icon(Icons.print, size: 16),
+            label: const Text('Print'),
+            onPressed: () {
+              Navigator.pop(context);
+              _generateAndPrintOrShareBill(isWhatsApp: false);
+            },
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            icon: const Icon(Icons.share, size: 16),
+            label: const Text('WhatsApp'),
+            onPressed: () {
+              Navigator.pop(context);
+              _generateAndPrintOrShareBill(isWhatsApp: true);
+            },
           ),
         ],
       ),
     );
   }
 
-  Future<void> _savePurchaseBill() async {
-    if (_partyController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya Supplier (Party Name) select karein!')),
-      );
-      return;
-    }
-
-    bool hasValidItem = false;
-    for (var row in _rows) {
-      if (row.selectedProduct != null && row.totalAmount > 0) {
-        hasValidItem = true;
-        break;
-      }
-    }
-
-    if (!hasValidItem) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kam se kam ek valid product select karein!')),
-      );
-      return;
-    }
-
-    await DatabaseHelper.isar.writeTxn(() async {
-      for (var row in _rows) {
-        if (row.selectedProduct != null) {
-          double purchasedQty = double.tryParse(row.qtyController.text) ?? 0;
-          InventoryItem product = row.selectedProduct!;
-          product.stockQuantity += purchasedQty;
-          double newRate = double.tryParse(row.rateController.text) ?? product.priceA;
-          if (newRate > 0) product.priceA = newRate;
-          await DatabaseHelper.isar.inventoryItems.put(product);
-        }
-      }
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Purchase Bill Successfully Saved & Stock Updated!')),
-    );
-
-    Navigator.pop(context);
-  }
-
-  @override
-  void dispose() {
-    _partyController.dispose();
-    for (var row in _rows) {
-      row.dispose();
-    }
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Purchase Bill Entry'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Purchase Bill Inward'), backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Card(
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: SearchableField(
-                  label: 'Select Supplier (Party Name) *',
-                  items: _allParties,
-                  controller: _partyController,
-                  onSelected: (selected) {
-                    setState(() {});
-                  },
+            Row(
+              children: [
+                Expanded(
+                  child: SearchableField(
+                    label: 'Supplier / Vendor Name *',
+                    items: _allAccounts,
+                    controller: _supplierController,
+                    onSelected: (val) {},
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 150,
+                  child: TextField(controller: _billNoController, decoration: const InputDecoration(labelText: 'Bill No', border: OutlineInputBorder(), isDense: true)),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              color: Colors.blue.shade100,
-              child: const Row(
-                children: [
-                  Expanded(flex: 3, child: Text('Item Name & History', style: TextStyle(fontWeight: FontWeight.bold))),
-                  Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold))),
-                  Expanded(flex: 1, child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
-                  Expanded(flex: 1, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
-                  SizedBox(width: 40),
-                ],
-              ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Purchased Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Item'),
+                  onPressed: _addItemToCart,
+                ),
+              ],
             ),
-
+            const SizedBox(height: 8),
             Expanded(
-              child: ListView.builder(
-                itemCount: _rows.length,
-                itemBuilder: (context, index) {
-                  final row = _rows[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    child: Padding(
-                      padding: const EdgeInsets.all(6.0),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: SearchableField(
-                                  label: 'Item ${index + 1}',
-                                  items: _allProductNames,
-                                  controller: row.searchController,
-                                  onSelected: (selectedItemName) {
-                                    final match = _allProducts.firstWhere(
-                                      (p) => p.itemName.toLowerCase() == selectedItemName.toLowerCase(),
-                                      orElse: () => InventoryItem(),
-                                    );
-                                    setState(() {
-                                      row.selectedProduct = match.id != 0 ? match : null;
-                                      if (row.selectedProduct != null) {
-                                        row.rateController.text = row.selectedProduct!.priceA.toString();
-                                      }
-                                    });
-                                    if (index == _rows.length - 1) {
-                                      _addNewRow();
-                                    }
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                flex: 1,
-                                child: TextField(
-                                  controller: row.qtyController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 12)),
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                flex: 1,
-                                child: TextField(
-                                  controller: row.rateController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 12)),
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                flex: 1,
-                                child: Center(
-                                  child: Text(
-                                    '₹${row.totalAmount.toStringAsFixed(2)}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                onPressed: () => _removeRow(index),
-                              ),
-                            ],
-                          ),
-                          if (row.selectedProduct != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: TextButton.icon(
-                                  style: TextButton.styleFrom(
-                                    padding: EdgeInsets.zero,
-                                    minimumSize: const Size(50, 25),
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  icon: const Icon(Icons.history, size: 14, color: Colors.blue),
-                                  label: const Text('View Last Purchase Rate & Bill History', style: TextStyle(fontSize: 11, color: Colors.blue)),
-                                  onPressed: () => _showPurchaseHistoryPopup(row.selectedProduct!),
-                                ),
-                              ),
+              child: _cartItems.isEmpty
+                  ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
+                  : ListView.builder(
+                      itemCount: _cartItems.length,
+                      itemBuilder: (context, index) {
+                        final item = _cartItems[index];
+                        double total = (item['qty'] as int) * (item['price'] as double);
+                        return Card(
+                          child: ListTile(
+                            title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text('Qty: ${item['qty']} | Price: ₹ ${item['price']}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('₹ ${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                                IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 20), onPressed: () => setState(() => _cartItems.removeAt(index))),
+                              ],
                             ),
-                        ],
-                      ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
-
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.shade200),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
+            const Divider(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                SizedBox(
+                  width: 200,
+                  child: DropdownButtonFormField<String>(
+                    value: _paymentMode,
+                    items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                    onChanged: (val) => setState(() => _paymentMode = val!),
+                    decoration: const InputDecoration(labelText: 'Payment Mode', border: OutlineInputBorder(), isDense: true),
                   ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                    onPressed: _savePurchaseBill,
-                    child: const Text('Save Purchase Bill', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
+                ),
+                Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+              onPressed: _savePurchaseTransaction,
+              child: const Text('Save & Generate Bill', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
