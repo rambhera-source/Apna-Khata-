@@ -5,6 +5,7 @@ import '../models/user_profile.dart';
 import '../models/bom_model.dart';
 import '../models/settings_model.dart';
 import '../models/inventory_model.dart';
+import '../models/user_model.dart'; // ✅ Naya UserAccount model import kiya gaya hai
 
 class DatabaseHelper {
   static late Isar isar;
@@ -20,7 +21,8 @@ class DatabaseHelper {
           UserProfileSchema, 
           BillOfMaterialsSchema, 
           CompanySettingsSchema,
-          InventoryStockSchema // <-- Yeh naya stock schema jud gaya hai
+          InventoryStockSchema,
+          UserAccountSchema // ✅ Yahan UserAccount schema jud gaya hai staff signup/login ke liye
         ],
         directory: dir.path,
       );
