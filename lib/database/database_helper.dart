@@ -5,7 +5,7 @@ import '../models/user_profile.dart';
 import '../models/bom_model.dart';
 import '../models/settings_model.dart';
 import '../models/inventory_model.dart';
-import '../models/user_model.dart'; // ✅ Naya UserAccount model import kiya gaya hai
+import '../models/user_model.dart'; // UserAccount model import
 
 class DatabaseHelper {
   static late Isar isar;
@@ -22,7 +22,7 @@ class DatabaseHelper {
           BillOfMaterialsSchema, 
           CompanySettingsSchema,
           InventoryStockSchema,
-          UserAccountSchema // ✅ Yahan UserAccount schema jud gaya hai staff signup/login ke liye
+          UserAccountSchema // Staff signup/login ke liye
         ],
         directory: dir.path,
       );
@@ -31,17 +31,44 @@ class DatabaseHelper {
     }
   }
 
-  // --- Party Functions ---
+  // --- Party Functions (Updated with new Party model fields) ---
   static Future<List<Party>> getParties() async {
     return await isar.parties.where().findAll();
   }
 
-  static Future<void> addParty(String name, String phone, String type, double openingBalance) async {
+  static Future<void> addParty({
+    required String name,
+    required String groupCategory,
+    String? phone,
+    String? email,
+    String? address,
+    String? gstin,
+    String priceCategory = 'A',
+    double creditLimitAmount = 0.0,
+    int creditDaysLimit = 0,
+    bool isCreditControlEnabled = false,
+    double openingBalance = 0.0,
+    String balanceType = 'Dr',
+    bool isPortalAccessEnabled = false,
+    String? loginUsername,
+    String? loginPassword,
+  }) async {
     final party = Party()
       ..name = name
+      ..groupCategory = groupCategory
       ..phone = phone
-      ..partyType = type
-      ..balance = openingBalance;
+      ..email = email
+      ..address = address
+      ..gstin = gstin
+      ..priceCategory = priceCategory
+      ..creditLimitAmount = creditLimitAmount
+      ..creditDaysLimit = creditDaysLimit
+      ..isCreditControlEnabled = isCreditControlEnabled
+      ..openingBalance = openingBalance
+      ..balanceType = balanceType
+      ..isPortalAccessEnabled = isPortalAccessEnabled
+      ..loginUsername = loginUsername
+      ..loginPassword = loginPassword;
 
     await isar.writeTxn(() async {
       await isar.parties.put(party);
