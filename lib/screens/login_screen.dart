@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dashboard_screen.dart'; // ✅ Login hone ke baad yeh Dashboard par le jayega
+import 'dashboard_screen.dart'; // ✅ Dashboard ka rasta yahan import kar diya gaya hai
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,18 +10,18 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _pinController = TextEditingController();
-  final String _correctPin = "1234"; // Aap apna default PIN ya password yahan set kar sakte hain
+  final String _correctPin = "1234"; // Aap apna default PIN ya password yahan change kar sakte hain
   final String _firmName = 'ORLIFE Mobile Accessories';
 
   void _handleLogin() {
     if (_pinController.text.trim() == _correctPin) {
-      // ✅ PIN sahi hai toh Dashboard screen par bhej do
+      // ✅ PIN sahi hone par yeh code user ko seedha Dashboard screen par le jayega
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const DashboardScreen()),
       );
     } else {
-      // ❌ Galat PIN par error message
+      // ❌ Galat PIN par error message dikhayega
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Galat PIN! Kripya sahi PIN darj karein.'),
@@ -52,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Logo or Icon
+                  // Logo / Icon
                   CircleAvatar(
                     radius: 35,
                     backgroundColor: Colors.teal.shade100,
@@ -60,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Title
+                  // Firm Title
                   Text(
                     _firmName,
                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal),
@@ -73,11 +73,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // PIN / Password Input Field
+                  // PIN Input Field
                   TextField(
                     controller: _pinController,
                     keyboardType: TextInputType.number,
-                    obscureText: true, // PIN ko hide karne ke liye
+                    obscureText: true, // PIN hide karne ke liye
                     maxLength: 6,
                     decoration: InputDecoration(
                       labelText: 'Enter Security PIN',
