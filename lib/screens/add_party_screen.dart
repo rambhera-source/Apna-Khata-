@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
-import 'package:http/http.dart' as http; // Sahi HTTP package import
+import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../database/database_helper.dart';
 import '../models/party.dart';
@@ -15,6 +15,7 @@ class AddPartyScreen extends StatefulWidget {
 class _AddPartyScreenState extends State<AddPartyScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _emailController = TextEditingController(); // 🔥 Email Controller
   
   final _houseNoController = TextEditingController();
   final _streetController = TextEditingController();
@@ -25,26 +26,34 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
 
   final _gstinController = TextEditingController();
   final _balanceController = TextEditingController();
+  
+  // 🔥 Credit Limit Controllers
+  final _creditLimitAmountController = TextEditingController();
+  final _creditDaysController = TextEditingController();
+  bool _isCreditControlEnabled = false; // On/Off Toggle
 
   String _partyType = 'Sundry Debtor'; 
   String _balanceType = 'Dr'; 
   
-  // A se lekar Z tak ki categories ki list automatically generate karna ('A', 'B', 'C', ..., 'Z')
   final List<String> _categoryList = List.generate(26, (index) => String.fromCharCode(65 + index));
-  String _priceCategory = 'A'; // Default Category 'A'
+  String _priceCategory = 'A'; 
 
   final FocusNode _phoneFocus = FocusNode();
+  final FocusNode _emailFocus = FocusNode();
   final FocusNode _houseNoFocus = FocusNode();
   final FocusNode _streetFocus = FocusNode();
   final FocusNode _landmarkFocus = FocusNode();
   final FocusNode _pincodeFocus = FocusNode();
   final FocusNode _gstinFocus = FocusNode();
   final FocusNode _balanceFocus = FocusNode();
+  final FocusNode _creditLimitFocus = FocusNode();
+  final FocusNode _creditDaysFocus = FocusNode();
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _emailController.dispose();
     _houseNoController.dispose();
     _streetController.dispose();
     _landmarkController.dispose();
@@ -53,14 +62,19 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
     _stateController.dispose();
     _gstinController.dispose();
     _balanceController.dispose();
+    _creditLimitAmountController.dispose();
+    _creditDaysController.dispose();
     
     _phoneFocus.dispose();
+    _emailFocus.dispose();
     _houseNoFocus.dispose();
     _streetFocus.dispose();
     _landmarkFocus.dispose();
     _pincodeFocus.dispose();
     _gstinFocus.dispose();
     _balanceFocus.dispose();
+    _creditLimitFocus.dispose();
+    _creditDaysFocus.dispose();
     super.dispose();
   }
 
@@ -86,9 +100,13 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
   Future<void> _saveParty() async {
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
+    final email = _emailController.text.trim();
     final address = '${_houseNoController.text.trim()}, ${_streetController.text.trim()}, Landmark: ${_landmarkController.text.trim()}, City: ${_cityController.text.trim()}, State: ${_stateController.text.trim()} - Pincode: ${_pincodeController.text.trim()}';
     final gstin = _gstinController.text.trim();
     double openingBal = double.tryParse(_balanceController.text) ?? 0.0;
+    
+    double creditLimitAmt = double.tryParse(_creditLimitAmountController.text) ?? 0.0;
+    int creditDays = int.tryParse(_creditDaysController.text) ?? 0;
 
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -112,23 +130,29 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
     final newParty = Party()
       ..name = name
       ..phone = phone
+      ..email = email.isEmpty ? null : email
       ..address = address
       ..partyType = _partyType 
       ..gstin = gstin.isEmpty ? null : gstin
       ..openingBalance = openingBal
       ..balanceType = _balanceType
-      ..priceCategory = _priceCategory;
+      ..priceCategory = _priceCategory
+      ..creditLimitAmount = creditLimitAmt
+      ..creditDaysLimit = creditDays
+      ..isCreditControlEnabled = _isCreditControlEnabled;
 
     await DatabaseHelper.isar.writeTxn(() async {
       await DatabaseHelper.isar.parties.put(newParty);
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Party "$name" (Category $_priceCategory) safaltapurvak save ho gayi!')),
+      SnackBar(content: Text('Party "$name" safaltapurvak save ho gayi!')),
     );
 
+    // Form Reset
     _nameController.clear();
     _phoneController.clear();
+    _emailController.clear();
     _houseNoController.clear();
     _streetController.clear();
     _landmarkController.clear();
@@ -137,10 +161,13 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
     _stateController.clear();
     _gstinController.clear();
     _balanceController.clear();
+    _creditLimitAmountController.clear();
+    _creditDaysController.clear();
     setState(() {
       _partyType = 'Sundry Debtor';
       _balanceType = 'Dr';
       _priceCategory = 'A';
+      _isCreditControlEnabled = false;
     });
   }
 
@@ -148,7 +175,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Party with A-Z Price Categories'),
+        title: const Text('Add Professional Party & Credit Control'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
@@ -158,6 +185,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Party Group & Price Category
               Row(
                 children: [
                   Expanded(
@@ -188,6 +216,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
               ),
               const SizedBox(height: 14),
 
+              // Party Name
               TextField(
                 controller: _nameController,
                 decoration: const InputDecoration(labelText: 'Party / Business Name *', border: OutlineInputBorder(), prefixIcon: Icon(Icons.business)),
@@ -195,15 +224,33 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
               ),
               const SizedBox(height: 12),
 
-              TextField(
-                controller: _phoneController,
-                focusNode: _phoneFocus,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone)),
-                onSubmitted: (_) => FocusScope.of(context).requestFocus(_houseNoFocus),
+              // Phone & Email Row
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _phoneController,
+                      focusNode: _phoneFocus,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone)),
+                      onSubmitted: (_) => FocusScope.of(context).requestFocus(_emailFocus),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _emailController,
+                      focusNode: _emailFocus,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(labelText: 'Email ID', border: OutlineInputBorder(), prefixIcon: Icon(Icons.email)),
+                      onSubmitted: (_) => FocusScope.of(context).requestFocus(_houseNoFocus),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
 
+              // Address Details
               const Text('Address Details:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
               const SizedBox(height: 6),
               Row(
@@ -269,6 +316,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
               ),
               const SizedBox(height: 12),
 
+              // GSTIN
               TextField(
                 controller: _gstinController,
                 focusNode: _gstinFocus,
@@ -277,6 +325,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
               ),
               const SizedBox(height: 12),
 
+              // Opening Balance & Type
               Row(
                 children: [
                   Expanded(
@@ -286,7 +335,7 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
                       focusNode: _balanceFocus,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(labelText: 'Opening Balance (₹)', border: OutlineInputBorder()),
-                      onSubmitted: (_) => _saveParty(),
+                      onSubmitted: (_) => FocusScope.of(context).requestFocus(_creditLimitFocus),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -304,14 +353,84 @@ class _AddPartyScreenState extends State<AddPartyScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+
+              // 🔥 CREDIT CONTROL & OVERDUE LIMIT SECTION
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  border: Border.all(color: Colors.teal.shade200),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Credit Control & Overdue Limit', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 15)),
+                        Switch(
+                          value: _isCreditControlEnabled,
+                          activeColor: Colors.teal,
+                          onChanged: (val) {
+                            setState(() {
+                              _isCreditControlEnabled = val;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const Text('Restrict new billing if credit limit or overdue days exceed.', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _creditLimitAmountController,
+                            focusNode: _creditLimitFocus,
+                            keyboardType: TextInputType.number,
+                            enabled: _isCreditControlEnabled, // Toggle on hone par hi active hoga
+                            decoration: const InputDecoration(
+                              labelText: 'Credit Limit (₹)',
+                              border: OutlineInputBorder(),
+                              fillColor: Colors.white,
+                              filled: true,
+                            ),
+                            onSubmitted: (_) => FocusScope.of(context).requestFocus(_creditDaysFocus),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _creditDaysController,
+                            focusNode: _creditDaysFocus,
+                            keyboardType: TextInputType.number,
+                            enabled: _isCreditControlEnabled, // Toggle on hone par hi active hoga
+                            decoration: const InputDecoration(
+                              labelText: 'Max Overdue Days',
+                              border: OutlineInputBorder(),
+                              hintText: 'e.g. 45 days',
+                              fillColor: Colors.white,
+                              filled: true,
+                            ),
+                            onSubmitted: (_) => _saveParty(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 24),
 
+              // Save Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
                   onPressed: _saveParty,
-                  child: const Text('Save Party with A-Z Price Tier', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: const Text('Save Party & Credit Rules', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
