@@ -11,6 +11,8 @@ class UserAccount {
 
   late String name;
   late String pin;
-  late String role; // 'Admin' ya 'Staff'
-  late bool isApproved; // false = Pending, true = Approved
+  
+  // ✅ Default values set kar di gayi hain taaki uninitialized error na aaye
+  String role = 'Staff'; // 'Admin' ya 'Staff'
+  bool isApproved = false; // false = Pending, true = Approved
 }
