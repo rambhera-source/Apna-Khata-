@@ -9,12 +9,16 @@ class InventoryItem {
   @Index(unique: true, replace: true)
   late String itemName; // e.g. "ORLIFE 85W Fast Charger"
 
-  late String category; // e.g. "Mobile Accessories", "Cables", "Power Banks"
+  // 🆔 Added SKU and Stock Type for inventory tracking & filtering
+  String? sku; 
+  String? stockType = 'Fresh'; // 'Fresh' ya 'Replacement'
+
+  late String category = 'Mobile Accessories'; // e.g. "Mobile Accessories", "Cables", "Power Banks"
   
   double stockQuantity = 0.0; // Current Stock
-  late String unit; // e.g. "Pcs", "Box", "Set"
+  late String unit = 'Pcs'; // e.g. "Pcs", "Box", "Set"
 
-  // 🖼️ 4 Product Images ke local file paths (Database ko heavy hone se bachane ke liye)
+  // 🖼️ 4 Product Images ke local file paths
   String? imagePath1;
   String? imagePath2;
   String? imagePath3;
