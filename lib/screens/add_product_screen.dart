@@ -145,7 +145,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
           border: Border.all(color: Colors.teal.shade300, width: 1.5),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: imgPath != null
+        child: imgPath != null && File(imgPath).existsSync()
             ? ClipRRect(
                 borderRadius: BorderRadius.circular(7),
                 child: Image.file(File(imgPath), fit: BoxFit.cover),
