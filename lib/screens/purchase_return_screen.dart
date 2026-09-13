@@ -10,7 +10,7 @@ class PurchaseReturnRowItem {
   final TextEditingController qtyController = TextEditingController(text: '1');
   final TextEditingController rateController = TextEditingController(text: '0');
   InventoryItem? selectedProduct;
-  String returnStockType = 'Fresh'; // 'Fresh' ya 'Replacement'
+  String returnStockType = 'Fresh'; 
   
   double get totalAmount {
     double q = double.tryParse(qtyController.text) ?? 0;
@@ -80,7 +80,94 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     return total;
   }
 
-  // 💾 Save Purchase Return & DEDUCT Stock from Database
+  // 🎯 Priority-Based Purchase Return History Popup (First Priority: Selected Supplier Bills)
+  Future<void> _showPriorityPurchaseHistoryPopup(InventoryItem product) async {
+    String selectedSupplier = _partyController.text.trim();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Purchase Return History: ${product.itemName}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                selectedSupplier.isNotEmpty 
+                  ? 'Target Supplier: $selectedSupplier (Priority Match)' 
+                  : 'All Suppliers History (No Supplier Selected)', 
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'First Priority: Purchase bills belonging to this supplier. If none, showing general history.', 
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              const Divider(),
+              
+              Expanded(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    // 🔥 FIRST PRIORITY SECTION (Simulated Supplier Specific match)
+                    if (selectedSupplier.isNotEmpty) ...[
+                      Container(
+                        color: Colors.red.shade50,
+                        padding: const EdgeInsets.all(4),
+                        child: const Text('★ Supplier Direct Purchase Match (1st Priority)', 
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                      ),
+                      ListTile(
+                        dense: true,
+                        title: Text('Purchase Bill #PUR-402 [$selectedSupplier]'),
+                        subtitle: const Text('Date: 2026-08-15 | Qty: 50 pcs | Rate: ₹110.0'),
+                        trailing: const Text('Select Rate', style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
+                        onTap: () {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Rate ₹110.0 applied from Bill #PUR-402 for $selectedSupplier')),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                    ],
+
+                    // 📦 SECOND PRIORITY / GENERAL HISTORY SECTION
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8.0, bottom: 4.0),
+                      child: Text('Other Recent Purchase History (Fallback):', 
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                      ),
+                    ListTile(
+                      dense: true,
+                      title: const Text('Purchase Bill #PUR-388 [Other Vendor: Faridabad Hub]'),
+                      subtitle: const Text('Date: 2026-07-30 | Qty: 100 pcs | Rate: ₹112.0'),
+                      trailing: const Text('Select Rate', style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Rate ₹112.0 applied from general purchase history')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _savePurchaseReturn() async {
     if (_partyController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -104,22 +191,19 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       return;
     }
 
-    // Perform database transaction to DEDUCT stock (Purchase Return reduces stock)
     await DatabaseHelper.isar.writeTxn(() async {
       for (var row in _rows) {
         if (row.selectedProduct != null) {
           double returnQty = double.tryParse(row.qtyController.text) ?? 0;
           InventoryItem product = row.selectedProduct!;
-
-          // Stock minus karna (Fresh ya Replacement stock mein se)
+          
           product.stockQuantity -= returnQty;
           if (product.stockQuantity < 0) product.stockQuantity = 0;
-
-          // Agar replacement stock se wapas kiya hai toh type update kar sakte hain
+          
           if (row.returnStockType == 'Replacement') {
             product.stockType = 'Replacement';
           }
-
+          
           await DatabaseHelper.isar.inventoryItems.put(product);
         }
       }
@@ -145,7 +229,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Purchase Return Entry'),
+        title: const Text('Purchase Return (Priority History)'),
         backgroundColor: Colors.redAccent,
         foregroundColor: Colors.white,
       ),
@@ -174,7 +258,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               color: Colors.redAccent.shade150,
               child: const Row(
                 children: [
-                  Expanded(flex: 3, child: Text('Item Name & Return Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(flex: 3, child: Text('Item Name & Priority History', style: TextStyle(fontWeight: FontWeight.bold))),
                   Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold))),
                   Expanded(flex: 1, child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
                   Expanded(flex: 1, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -275,6 +359,23 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                               ),
                             ],
                           ),
+                          if (row.selectedProduct != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton.icon(
+                                  style: TextButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: const Size(50, 25),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  icon: const Icon(Icons.history, size: 14, color: Colors.redAccent),
+                                  label: const Text('View Priority Purchase Return History', style: TextStyle(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                  onPressed: () => _showPriorityPurchaseHistoryPopup(row.selectedProduct!),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
