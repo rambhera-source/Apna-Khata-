@@ -31,7 +31,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
   final FocusNode _modeFocusNode = FocusNode();
   final FocusNode _notesFocusNode = FocusNode();
 
-  // Mode of Payment & Options (Aapke bataye hue saare options included)
+  // Mode of Payment & Options
   String _paymentMode = 'Cash';
   final List<String> _paymentModes = [
     'Cash', 
@@ -90,6 +90,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     }
   }
 
+  // 🔄 Save Voucher & Auto-Update Party Ledger Balance
   Future<void> _saveVoucher() async {
     final amount = double.tryParse(_amountController.text) ?? 0.0;
     final notes = _notesController.text.trim();
@@ -113,7 +114,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
         return;
       }
 
-      // Mode ke anusaar source decide hoga
       if (_paymentMode == 'Cash') {
         cashOrBankSource = 'Cash-in-Hand';
       } else if (_paymentMode.contains('Bank')) {
@@ -148,13 +148,34 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
       ..amount = amount
       ..notes = notes.isEmpty ? null : notes;
 
+    // 🛡️ Database Transaction: Save Voucher & Update Account Balances
     await DatabaseHelper.isar.writeTxn(() async {
+      // 1. Transaction save karein
       await DatabaseHelper.isar.accountingTransactions.put(txn);
+
+      // 2. Agar Payment ya Receipt hai, toh Party ka ledger balance update karein
+      if (_voucherType == 'Payment' || _voucherType == 'Receipt') {
+        final partyAccount = await DatabaseHelper.isar.accounts
+            .filter()
+            .nameEqualTo(partyOrAccounts)
+            .findFirst();
+
+        if (partyAccount != null) {
+          if (_voucherType == 'Payment') {
+            // Payment karne par hamari liability/balance kam hota hai (Debit effect)
+            partyAccount.balance -= amount;
+          } else {
+            // Receipt milne par party ka balance adjust hota hai (Credit effect)
+            partyAccount.balance -= amount;
+          }
+          await DatabaseHelper.isar.accounts.put(partyAccount);
+        }
+      }
     });
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$_voucherType Voucher ($_voucherNumber) safaltapurvak save ho gaya!'), backgroundColor: Colors.green),
+      SnackBar(content: Text('$_voucherType Voucher ($_voucherNumber) safaltapurvak save aur ledger update ho gaya!'), backgroundColor: Colors.green),
     );
 
     // Reset Form
@@ -189,7 +210,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Voucher Entry Entry ($_voucherType)'),
+        title: Text('Voucher Entry ($_voucherType)'),
         backgroundColor: themeColor,
         foregroundColor: Colors.white,
       ),
@@ -276,19 +297,16 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
 
               // 3. Conditional Fields
               if (_voucherType == 'Payment' || _voucherType == 'Receipt') ...[
-                // Party Name with Search capability
                 SearchableField(
                   label: (_voucherType == 'Payment') ? 'Party Name (Paid To) *' : 'Party Name (Received From) *',
                   items: _allAccounts,
                   controller: _partyController,
                   onSelected: (selectedName) {
-                    // Party select hone ke turant baad focus Amount field par chal jayega (Enter key flow)
                     FocusScope.of(context).requestFocus(_amountFocusNode);
                   },
                 ),
                 const SizedBox(height: 16),
 
-                // Amount Field
                 TextField(
                   controller: _amountController,
                   focusNode: _amountFocusNode,
@@ -301,13 +319,11 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                     filled: true,
                   ),
                   onSubmitted: (_) {
-                    // Amount me Enter dabate hi focus Mode of Payment par jayega
                     FocusScope.of(context).requestFocus(_modeFocusNode);
                   },
                 ),
                 const SizedBox(height: 16),
 
-                // Mode of Payment Dropdown
                 DropdownButtonFormField<String>(
                   value: _paymentMode,
                   focusNode: _modeFocusNode,
@@ -322,7 +338,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   ),
                 ),
 
-                // 4. Dynamic Sub-Dropdowns (Aapke bataye hue anusaar party/amount ke theek niche)
                 if (_paymentMode.contains('Bank') || _paymentMode == 'Cheque') ...[
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
@@ -368,7 +383,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                 ],
 
               ] else ...[
-                // Journal Entry Fields
                 SearchableField(
                   label: 'Debit Account (Dr) *',
                   items: _allAccounts,
@@ -397,7 +411,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
               ],
               const SizedBox(height: 16),
 
-              // 5. Remarks / Narration
               TextField(
                 controller: _notesController,
                 focusNode: _notesFocusNode,
@@ -411,7 +424,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Save Button
               SizedBox(
                 width: double.infinity,
                 height: 50,
