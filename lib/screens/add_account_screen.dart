@@ -208,6 +208,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       return;
     }
 
+    // 1️⃣ Check Existing Name
     final existingAccount = await DatabaseHelper.isar.accounts
         .filter()
         .nameEqualTo(name, caseSensitive: false)
@@ -219,6 +220,22 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         SnackBar(content: Text('Error: "$name" naam ka account pehle se bana hua hai!'), backgroundColor: Colors.red),
       );
       return;
+    }
+
+    // 2️⃣ 🔥 Check Existing Mobile Number (1 Mobile = 1 Account Check)
+    if (phone.isNotEmpty) {
+      final existingByPhone = await DatabaseHelper.isar.accounts
+          .filter()
+          .phoneEqualTo(phone)
+          .findFirst();
+
+      if (existingByPhone != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: Mobile number "$phone" pehle se "${existingByPhone.name}" ke paas registered hai!'), backgroundColor: Colors.red),
+        );
+        return;
+      }
     }
 
     final newAccount = Account()
@@ -335,7 +352,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                       controller: _phoneController,
                       focusNode: _phoneFocus,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone)),
+                      decoration: const InputDecoration(labelText: 'Phone Number *', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone)),
                       onSubmitted: (_) => FocusScope.of(context).requestFocus(_emailFocus),
                     ),
                   ),
