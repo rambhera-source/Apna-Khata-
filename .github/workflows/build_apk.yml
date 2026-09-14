@@ -35,6 +35,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Run Isar Code Generator
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
       - name: Build Release APK
         run: flutter build apk --release
 
@@ -49,4 +52,3 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 7
-
