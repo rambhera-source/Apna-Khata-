@@ -10,7 +10,7 @@ class Account {
   late String name; // Party or Account Name
 
   late String groupCategory; 
-  // e.g., 'Sundry Debtor', 'Sundry Creditor', 'Bank Account', 'Cash-in-Hand', 'Direct Expense', 'Indirect Expense'
+  // e.g., 'Sundry Debtor', 'Sundry Creditor', 'Bank Account', 'Cash-in-Hand'
 
   // 📞 Contact & Address Details
   String? phone;
@@ -18,7 +18,11 @@ class Account {
   String? address;
   String? gstin;
 
-  // 🏷️ Pricing & Credit Control (Sirf Debtors ke liye)
+  // 🚚 🔥 New: Route aur Salesman fields
+  String? route;
+  String? salesman;
+
+  // 🏷️ Pricing & Credit Control
   String priceCategory = 'A'; // A to Z Price Tier
   double creditLimitAmount = 0.0;
   int creditDaysLimit = 0;
@@ -28,7 +32,7 @@ class Account {
   double openingBalance = 0.0; 
   String balanceType = 'Dr'; // 'Dr' ya 'Cr'
 
-  // 🔐 🔥 Client Portal Login Credentials
+  // 🔐 Client Portal Login Credentials
   bool isPortalAccessEnabled = false; 
   String? loginUsername; 
   String? loginPassword; 
