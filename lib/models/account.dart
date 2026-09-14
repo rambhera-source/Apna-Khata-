@@ -1,9 +1,9 @@
 import 'package:isar/isar.dart';
 
-part 'party.g.dart';
+part 'account.g.dart';
 
 @collection
-class Party {
+class Account {
   Id id = Isar.autoIncrement;
 
   @Index(unique: true, replace: true)
