@@ -13,6 +13,7 @@ import '../models/account.dart';
 import '../models/product.dart';
 import '../models/transaction_model.dart';
 import 'searchable_field.dart';
+import 'product_inventory_screen.dart'; // Inventory view shortcut ke liye
 
 class PurchaseReturnScreen extends StatefulWidget {
   const PurchaseReturnScreen({super.key});
@@ -44,41 +45,81 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     });
   }
 
+  // 📦 Open ProductInventoryScreen (Sirf view/check karne ke liye)
+  void _navigateToInventoryScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
+    );
+    await _loadData();
+  }
+
+  // 🛒 Add Existing Item to Return List
   void _addItem() {
-    if (_allProducts.isEmpty) return;
+    if (_allProducts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inventory mein koi product uplabdh nahi hai!'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
     Product selectedProduct = _allProducts.first;
     final TextEditingController qtyController = TextEditingController(text: '1');
+    final TextEditingController priceController = TextEditingController(text: selectedProduct.sellingPrice.toString());
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Purchase Return Item'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<Product>(
-              value: selectedProduct,
-              items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
-              onChanged: (val) => selectedProduct = val!,
-              decoration: const InputDecoration(labelText: 'Product', border: OutlineInputBorder()),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add Purchase Return Item'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<Product>(
+                value: _allProducts.contains(selectedProduct) ? selectedProduct : _allProducts.first,
+                items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text('${p.name} (Stock: ${p.stock})'))).toList(),
+                onChanged: (val) {
+                  setDialogState(() {
+                    selectedProduct = val!;
+                    priceController.text = selectedProduct.sellingPrice.toString();
+                  });
+                },
+                decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: qtyController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Return Qty', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: priceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Return Rate (₹)', border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+              onPressed: () {
+                int q = int.tryParse(qtyController.text) ?? 1;
+                double p = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
+                setState(() {
+                  _returnItems.add({
+                    'name': selectedProduct.name,
+                    'qty': q,
+                    'price': p,
+                  });
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Add'),
             ),
-            const SizedBox(height: 12),
-            TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Return Qty', border: OutlineInputBorder())),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              int q = int.tryParse(qtyController.text) ?? 1;
-              setState(() {
-                _returnItems.add({'name': selectedProduct.name, 'qty': q, 'price': selectedProduct.sellingPrice});
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Add'),
-          ),
-        ],
       ),
     );
   }
@@ -120,7 +161,12 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
   }
 
   Future<void> _saveReturn() async {
-    if (_supplierController.text.isEmpty || _returnItems.isEmpty) return;
+    if (_supplierController.text.isEmpty || _returnItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kripya Supplier aur Return Items select karein!'), backgroundColor: Colors.red),
+      );
+      return;
+    }
 
     final txn = AccountingTransaction()
       ..date = DateTime.now()
@@ -140,6 +186,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Purchase Return Saved!'),
+        content: const Text('Kya aap is return note ka print lena chahte hain ya share karna chahte hain?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
           ElevatedButton.icon(
@@ -168,36 +215,75 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Purchase Return (Debit Note)'), backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: const Text('Purchase Return (Debit Note)'),
+        backgroundColor: Colors.redAccent,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.inventory_2),
+            onPressed: _navigateToInventoryScreen,
+            tooltip: 'View Inventory',
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            SearchableField(label: 'Supplier / Vendor Name *', items: _allAccounts, controller: _supplierController, onSelected: (v) {}),
+            // Supplier Selection (Existing Accounts Only)
+            SearchableField(
+              label: 'Supplier / Vendor Name *',
+              items: _allAccounts,
+              controller: _supplierController,
+              onSelected: (v) {},
+            ),
             const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Return Items:', style: TextStyle(fontWeight: FontWeight.bold)),
-                ElevatedButton.icon(onPressed: _addItem, icon: const Icon(Icons.add, size: 16), label: const Text('Add Return Item')),
+                const Text('Return Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                  onPressed: _addItem, 
+                  icon: const Icon(Icons.add, size: 16), 
+                  label: const Text('Add Return Item'),
+                ),
               ],
             ),
+            const SizedBox(height: 8),
             Expanded(
-              child: ListView.builder(
-                itemCount: _returnItems.length,
-                itemBuilder: (context, index) {
-                  final item = _returnItems[index];
-                  return Card(
-                    child: ListTile(
-                      title: Text(item['name']),
-                      subtitle: Text('Qty: ${item['qty']} | Price: ${item['price']}'),
-                      trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _returnItems.removeAt(index))),
+              child: _returnItems.isEmpty
+                  ? const Center(child: Text('Koi return item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
+                  : ListView.builder(
+                      itemCount: _returnItems.length,
+                      itemBuilder: (context, index) {
+                        final item = _returnItems[index];
+                        double total = (item['qty'] as int) * (item['price'] as double);
+                        return Card(
+                          child: ListTile(
+                            title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text('Qty: ${item['qty']} | Rate: ₹ ${item['price']}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('₹ ${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red, size: 20), 
+                                  onPressed: () => setState(() => _returnItems.removeAt(index)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
-            Text('Total Return: ₹ $_returnTotal', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+            const Divider(),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text('Total Return: ₹ $_returnTotal', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+            ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity, 
