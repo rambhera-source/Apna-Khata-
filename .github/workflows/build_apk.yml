@@ -24,7 +24,7 @@ jobs:
           cache: true
 
       - name: Create Web Platform Files
-        run: flutter create . --platforms=web
+        run: flutter create . --platforms=web --project-name apna_khata
 
       - name: Get Dependencies
         run: flutter pub get
