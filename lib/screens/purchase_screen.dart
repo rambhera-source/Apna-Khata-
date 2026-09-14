@@ -12,32 +12,32 @@ import '../database/database_helper.dart';
 import '../models/account.dart';
 import '../models/product.dart';
 import '../models/transaction_model.dart';
-import '../models/settings_model.dart'; // 🔥 Settings Model for GST Check
+import '../models/settings_model.dart';
 import 'searchable_field.dart';
 import 'add_account_screen.dart';
 import 'product_inventory_screen.dart';
 
-class PurchaseScreen extends StatefulWidget {
-  const PurchaseScreen({super.key});
+class SalesReturnScreen extends StatefulWidget {
+  const SalesReturnScreen({super.key});
 
   @override
-  State<PurchaseScreen> createState() => _PurchaseScreenState();
+  State<SalesReturnScreen> createState() => _SalesReturnScreenState();
 }
 
-class _PurchaseScreenState extends State<PurchaseScreen> {
+class _SalesReturnScreenState extends State<SalesReturnScreen> {
   final TextEditingController _partyController = TextEditingController();
-  final TextEditingController _billNoController = TextEditingController(text: 'PUR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
+  final TextEditingController _returnNoController = TextEditingController(text: 'SRN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
-  // 📅 Selected Bill Date Variable
+  // 📅 Selected Return Date Variable
   DateTime _selectedDate = DateTime.now();
 
   List<String> _allAccounts = [];
   List<Product> _allProducts = [];
   
-  // Cart items list: { 'name': String, 'qty': int, 'price': double }
+  // Return cart items list: { 'name': String, 'qty': int, 'price': double }
   final List<Map<String, dynamic>> _cartItems = [];
-  String _paymentMode = 'Cash';
-  final List<String> _paymentModes = ['Cash', 'Bank / UPI', 'Credit'];
+  String _refundMode = 'Cash';
+  final List<String> _refundModes = ['Cash', 'Bank / UPI', 'Adjust in Ledger'];
 
   // 🔥 GST Settings State Variables
   bool _isGstActive = false;
@@ -65,7 +65,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     });
   }
 
-  // 👤 Open Full AddAccountScreen for new Supplier
+  // 👤 Open AddAccountScreen for Party
   void _navigateToAddNewParty() async {
     final String? newPartyName = await Navigator.push(
       context,
@@ -81,7 +81,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     }
   }
 
-  // 📦 Open ProductInventoryScreen for Adding New Products / Items
+  // 📦 Open ProductInventoryScreen
   void _navigateToInventoryScreen() async {
     await Navigator.push(
       context,
@@ -90,8 +90,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     await _loadDropdownDataAndSettings();
   }
 
-  // 🛒 Add Item to Cart Manually (with Inventory Screen Shortcut)
-  void _addItemToCart() {
+  // 🛒 Add Item to Return Cart
+  void _addItemToReturnCart() {
     if (_allProducts.isEmpty) {
       _navigateToInventoryScreen();
       return;
@@ -99,7 +99,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
     Product selectedProduct = _allProducts.first;
     final TextEditingController qtyController = TextEditingController(text: '1');
-    final TextEditingController priceController = TextEditingController(text: selectedProduct.purchasePrice.toString());
+    final TextEditingController priceController = TextEditingController(text: selectedProduct.sellingPrice.toString());
 
     showDialog(
       context: context,
@@ -110,9 +110,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               title: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Add Purchase Item'),
+                  const Text('Add Return Item'),
                   TextButton.icon(
-                    style: TextButton.styleFrom(foregroundColor: Colors.blue.shade800),
+                    style: TextButton.styleFrom(foregroundColor: Colors.green.shade800),
                     icon: const Icon(Icons.add_circle, size: 18),
                     label: const Text('Manage Inventory'),
                     onPressed: () {
@@ -131,7 +131,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     onChanged: (val) {
                       setDialogState(() {
                         selectedProduct = val!;
-                        priceController.text = selectedProduct.purchasePrice.toString();
+                        priceController.text = selectedProduct.sellingPrice.toString();
                       });
                     },
                     decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder()),
@@ -140,23 +140,23 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   TextField(
                     controller: qtyController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(labelText: 'Return Quantity', border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: priceController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(labelText: 'Return Price (₹)', border: OutlineInputBorder()),
                   ),
                 ],
               ),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
                   onPressed: () {
                     int q = int.tryParse(qtyController.text) ?? 1;
-                    double pr = double.tryParse(priceController.text) ?? selectedProduct.purchasePrice;
+                    double pr = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
                     setState(() {
                       _cartItems.add({
                         'name': selectedProduct.name,
@@ -176,22 +176,22 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     );
   }
 
-  // 🧮 Calculations (Subtotal, Tax, Grand Total)
+  // 🧮 Calculations
   double get _subTotal {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    return _subTotal * 0.18; // 18% Tax Calculation
+    return _subTotal * 0.18;
   }
 
   double get _grandTotal {
     return _subTotal + _taxAmount;
   }
 
-  // 📄 Professional Purchase Bill PDF Generator
-  Future<void> _generateAndPrintOrShareBill({required bool isShare}) async {
+  // 📄 PDF Generator
+  Future<void> _generateAndPrintOrShareReturn({required bool isShare}) async {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) return;
 
@@ -210,7 +210,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Purchase Inward Record', style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text('Sales Return / Credit Note', style: const pw.TextStyle(fontSize: 10)),
                       if (_isGstActive && _companyGstin.isNotEmpty)
                         pw.Text('GSTIN: $_companyGstin', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ],
@@ -218,18 +218,18 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
-                      pw.Text(_isGstActive ? 'PURCHASE INVOICE (GST)' : 'PURCHASE BILL', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
-                      pw.Text('Bill No: ${_billNoController.text}'),
+                      pw.Text(_isGstActive ? 'CREDIT NOTE (GST)' : 'SALES RETURN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
+                      pw.Text('Return No: ${_returnNoController.text}'),
                       pw.Text('Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}'),
                     ],
                   ),
                 ],
               ),
-              pw.Divider(thickness: 1.5, color: PdfColors.blue),
+              pw.Divider(thickness: 1.5, color: PdfColors.green),
               pw.SizedBox(height: 10),
-              pw.Text('Supplier Details:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-              pw.Text('Supplier Name: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-              pw.Text('Payment Mode: $_paymentMode'),
+              pw.Text('Customer Details:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+              pw.Text('Party Name: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.Text('Refund Mode: $_refundMode'),
               pw.SizedBox(height: 15),
               pw.Table.fromTextArray(
                 headers: ['S.No', 'Item Description', 'Qty', 'Price (₹)', 'Total (₹)'],
@@ -245,7 +245,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   ];
                 }),
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.blue),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.green),
                 cellAlignment: pw.Alignment.centerLeft,
               ),
               pw.SizedBox(height: 20),
@@ -254,7 +254,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 children: [
                   pw.Container(
                     padding: const pw.EdgeInsets.all(10),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.blue), borderRadius: pw.BorderRadius.circular(4)),
+                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.green), borderRadius: pw.BorderRadius.circular(4)),
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
@@ -266,7 +266,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                         ],
                         pw.Divider(),
                         pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
+                        pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
                       ],
                     ),
                   ),
@@ -280,38 +280,35 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
     if (isShare) {
       final output = await getTemporaryDirectory();
-      final file = File('${output.path}/Purchase_${_billNoController.text}.pdf');
+      final file = File('${output.path}/SalesReturn_${_returnNoController.text}.pdf');
       await file.writeAsBytes(await pdf.save());
-      await Share.shareXFiles([XFile(file.path)], text: 'Purchase Bill #${_billNoController.text}. Total: ₹ $_grandTotal');
+      await Share.shareXFiles([XFile(file.path)], text: 'Sales Return / Credit Note #${_returnNoController.text}. Total: ₹ $_grandTotal');
     } else {
       await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     }
   }
 
-  // 💾 Save Purchase Transaction & Update Product Stock
-  Future<void> _savePurchaseTransaction() async {
+  // 💾 Save Transaction
+  Future<void> _saveSalesReturnTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Supplier aur Items bharein!'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
       return;
     }
 
     await DatabaseHelper.isar.writeTxn(() async {
-      // 1. Save Accounting Transaction
       final txn = AccountingTransaction()
         ..date = _selectedDate
-        ..voucherType = 'Purchase'
-        ..voucherNumber = _billNoController.text
+        ..voucherType = 'Sales Return'
+        ..voucherNumber = _returnNoController.text
         ..partyName = _partyController.text.trim()
-        ..cashOrBank = _paymentMode
+        ..cashOrBank = _refundMode
         ..amount = _grandTotal
-        ..notes = _isGstActive ? 'GST Purchase Entry generated via ORLIFE ERP' : 'Purchase Entry generated via ORLIFE ERP';
+        ..notes = _isGstActive ? 'GST Sales Return generated via ORLIFE ERP' : 'Sales Return generated via ORLIFE ERP';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
-      // 2. Automatically Update Product Stock (Increase Stock on Purchase)
       for (var cartItem in _cartItems) {
         String prodName = cartItem['name'];
-        int boughtQty = cartItem['qty'];
-        double newPurchasePrice = cartItem['price'];
+        int returnedQty = cartItem['qty'];
 
         final product = await DatabaseHelper.isar.products
             .filter()
@@ -319,30 +316,29 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             .findFirst();
 
         if (product != null) {
-          product.stock += boughtQty; // Stock बढ़ेगा
-          product.purchasePrice = newPurchasePrice; // लेटेस्ट परचेस प्राइस अपडेट करें
+          product.stock += returnedQty;
           await DatabaseHelper.isar.products.put(product);
         }
       }
     });
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Purchase Entry Successfully Saved & Stock Updated!'), backgroundColor: Colors.green));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sales Return Saved & Stock Restored!'), backgroundColor: Colors.green));
     
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Purchase Saved Successfully!'),
-        content: const Text('Kya aap is purchase bill का print lena chahte hain?'),
+        title: const Text('Sales Return Saved!'),
+        content: const Text('Kya aap is return का print / PDF लेना चाहते हैं?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
             icon: const Icon(Icons.print, size: 16),
             label: const Text('Print / PDF'),
             onPressed: () {
               Navigator.pop(context);
-              _generateAndPrintOrShareBill(isShare: false);
+              _generateAndPrintOrShareReturn(isShare: false);
             },
           ),
         ],
@@ -354,8 +350,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isGstActive ? 'Purchase Entry (GST Mode)' : 'Purchase Entry (Simple Mode)'),
-        backgroundColor: Colors.blue.shade800,
+        title: Text(_isGstActive ? 'Sales Return (GST Mode)' : 'Sales Return (Simple Mode)'),
+        backgroundColor: Colors.green.shade800,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -379,7 +375,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       side: BorderSide(color: Colors.grey.shade400),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                     ),
-                    icon: const Icon(Icons.calendar_today, size: 16, color: Colors.blue),
+                    icon: const Icon(Icons.calendar_today, size: 16, color: Colors.green),
                     label: Text(
                       'Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}',
                       style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
@@ -401,8 +397,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 SizedBox(
                   width: 150,
                   child: TextField(
-                    controller: _billNoController,
-                    decoration: const InputDecoration(labelText: 'Bill No', border: OutlineInputBorder()),
+                    controller: _returnNoController,
+                    decoration: const InputDecoration(labelText: 'Return No', border: OutlineInputBorder()),
                   ),
                 ),
               ],
@@ -413,7 +409,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               children: [
                 Expanded(
                   child: SearchableField(
-                    label: 'Supplier / Party Name *',
+                    label: 'Customer / Party Name *',
                     items: _allAccounts,
                     controller: _partyController,
                     onSelected: (val) {
@@ -424,7 +420,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade700,
+                    backgroundColor: Colors.green.shade700,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
                   ),
@@ -439,19 +435,19 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Items Purchased:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                const Text('Returned Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('Add Item'),
-                  onPressed: _addItemToCart,
+                  onPressed: _addItemToReturnCart,
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Expanded(
               child: _cartItems.isEmpty
-                  ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
+                  ? const Center(child: Text('Koi return item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
                   : ListView.builder(
                       itemCount: _cartItems.length,
                       itemBuilder: (context, index) {
@@ -464,7 +460,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text('₹ ${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                                Text('₹ ${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                                 IconButton(
                                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                                   onPressed: () {
@@ -480,10 +476,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             ),
             const Divider(),
             
-            // 💰 Totals & GST Summary Box
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
               child: Column(
                 children: [
                   Row(
@@ -510,13 +505,13 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       SizedBox(
                         width: 150,
                         child: DropdownButtonFormField<String>(
-                          value: _paymentMode,
-                          items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                          onChanged: (val) => setState(() => _paymentMode = val!),
-                          decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
+                          value: _refundMode,
+                          items: _refundModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                          onChanged: (val) => setState(() => _refundMode = val!),
+                          decoration: const InputDecoration(labelText: 'Refund Mode', border: OutlineInputBorder(), isDense: true),
                         ),
                       ),
-                      Text('Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+                      Text('Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
                     ],
                   ),
                 ],
@@ -527,9 +522,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               width: double.infinity,
               height: 48,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
-                onPressed: _savePurchaseTransaction,
-                child: const Text('Save Purchase & Update Stock', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
+                onPressed: _saveSalesReturnTransaction,
+                child: const Text('Save Return & Restore Stock', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
