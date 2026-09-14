@@ -6,8 +6,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import '../models/inventory_model.dart';
+import '../models/transaction_model.dart';
 
 class ProductInventoryScreen extends StatefulWidget {
   const ProductInventoryScreen({super.key});
@@ -21,6 +23,8 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
   List<InventoryItem> _allInventoryItems = [];
   List<InventoryItem> _filteredItems = [];
   String _selectedStockFilter = 'All'; // 'All', 'Fresh', 'Replacement'
+  String? _selectedCategoryFilter; // 🔥 Category Filter State
+  bool _isStockAscending = true; // 🔥 Stock Sorting State (Low to High / High to Low)
 
   // A to Z Price Tiers List
   final List<String> _priceCategories = List.generate(26, (index) => String.fromCharCode(65 + index));
@@ -49,16 +53,92 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
           matchesStockType = item.stockType == 'Replacement';
         }
 
-        return matchesQuery && matchesStockType;
+        // 🔥 Category filter check
+        bool matchesCategory = true;
+        if (_selectedCategoryFilter != null && _selectedCategoryFilter != 'All') {
+          matchesCategory = (item.category ?? 'General') == _selectedCategoryFilter;
+        }
+
+        return matchesQuery && matchesStockType && matchesCategory;
       }).toList();
+
+      // 🔥 Sort by Closing Stock
+      _filteredItems.sort((a, b) {
+        if (_isStockAscending) {
+          return a.stockQuantity.compareTo(b.stockQuantity); // Low to High (Low Stock first)
+        } else {
+          return b.stockQuantity.compareTo(a.stockQuantity); // High to Low (High Stock first)
+        }
+      });
     });
   }
 
-  // 📥 1. Enhanced Template CSV Generator (With Unique Constraints, Categories & A-Z Tiers)
+  // 🔄 Toggle Stock Sorting (Low Stock <-> High Stock)
+  void _toggleStockSorting() {
+    setState(() {
+      _isStockAscending = !_isStockAscending;
+      _filterItems(_searchController.text);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_isStockAscending ? 'Sorted: Low Stock to High Stock' : 'Sorted: High Stock to Low Stock'),
+        duration: const Duration(milliseconds: 600),
+      ),
+    );
+  }
+
+  // 📂 Category Selection Dialog Filter
+  void _showCategoryFilterDialog() {
+    Set<String> categories = _allInventoryItems
+        .map((item) => item.category ?? 'General')
+        .where((cat) => cat.trim().isNotEmpty)
+        .toSet();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Filter by Category'),
+        content: SizedBox(
+          width: 300,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              ListTile(
+                title: const Text('All Categories', style: TextStyle(fontWeight: FontWeight.bold)),
+                onTap: () {
+                  setState(() {
+                    _selectedCategoryFilter = null;
+                    _filterItems(_searchController.text);
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+              const Divider(),
+              ...categories.map((cat) => ListTile(
+                    title: Text(cat),
+                    trailing: _selectedCategoryFilter == cat ? const Icon(Icons.check, color: Colors.teal) : null,
+                    onTap: () {
+                      setState(() {
+                        _selectedCategoryFilter = cat;
+                        _filterItems(_searchController.text);
+                      });
+                      Navigator.pop(context);
+                    },
+                  )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  // 📥 Template CSV Generator
   Future<void> _downloadTemplateFile() async {
     try {
       List<List<dynamic>> rows = [];
-      
       Set<String> uniqueCategories = _allInventoryItems
           .map((item) => item.category ?? '')
           .where((cat) => cat.trim().isNotEmpty)
@@ -78,7 +158,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
       for (var tier in _priceCategories) {
         headers.add('Price Tier $tier (₹)');
       }
-      
       rows.add(headers);
 
       if (_allInventoryItems.isNotEmpty) {
@@ -106,24 +185,14 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
           sample1.add(tier == 'A' ? 150 : 0);
         }
         rows.add(sample1);
-
-        List<dynamic> sample2 = ['ORLIFE Power Bank', 'PB-10K', 'Power Bank', 650, 5, 20];
-        for (var tier in _priceCategories) {
-          sample2.add(tier == 'B' ? 899 : 0);
-        }
-        rows.add(sample2);
       }
 
       String csvData = const ListToCsvConverter().convert(rows);
-
       final output = await getTemporaryDirectory();
       final file = File('${output.path}/orlife_inventory_advanced_template.csv');
       await file.writeAsString(csvData);
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Advanced Inventory CSV Template with Unique SKU/Name validations & A-Z Tiers from ORLIFE ERP.',
-      );
+      await Share.shareXFiles([XFile(file.path)], text: 'Advanced Inventory CSV Template from ORLIFE ERP.');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Template generate karne me error: $e'), backgroundColor: Colors.red),
@@ -131,7 +200,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  // 📂 2. CSV File Import Function with Unique Validation
+  // 📂 CSV Import Function
   Future<void> _importCsvFile() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -142,17 +211,9 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
       if (result != null && result.files.single.path != null) {
         final filePath = result.files.single.path!;
         final input = File(filePath).openRead();
-        final fields = await input
-            .transform(utf8.decoder)
-            .transform(const CsvToListConverter())
-            .toList();
+        final fields = await input.transform(utf8.decoder).transform(const CsvToListConverter()).toList();
 
-        if (fields.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('File खाली है!'), backgroundColor: Colors.red),
-          );
-          return;
-        }
+        if (fields.isEmpty) return;
 
         int successCount = 0;
         int duplicateCount = 0;
@@ -213,14 +274,8 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
         if (!mounted) return;
         _loadInventory();
-        
-        String msg = 'सफलतापूर्वक $successCount प्रोडक्ट्स इम्पोर्ट हो गए!';
-        if (duplicateCount > 0) {
-          msg += ' ($duplicateCount डुप्लीकेट प्रोडक्ट्स छोड़ दिए गए)';
-        }
-
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: duplicateCount > 0 ? Colors.orange.shade800 : Colors.green),
+          SnackBar(content: Text('सफलतापूर्वक $successCount प्रोडक्ट्स इम्पोर्ट हो गए!'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
@@ -230,14 +285,104 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  // ➕ Add or Edit Product Dialog (Stock Type selector removed)
+  // 🔍 Product History & Details Popup
+  Future<void> _showProductHistoryDialog(InventoryItem item) async {
+    final transactions = await DatabaseHelper.isar.accountingTransactions
+        .filter()
+        .notesContains(item.itemName, caseSensitive: false)
+        .findAll();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(item.itemName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+            Text('SKU: ${item.sku ?? "-"} | Category: ${item.category ?? "General"}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Opening Stock: ${item.openingStock ?? 0}'),
+                          Text('Closing Stock: ${item.stockQuantity}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('Purchase ₹${item.purchasePrice.toStringAsFixed(0)}'),
+                          Text('Selling (Tier ${item.priceCategory ?? "A"}): ₹${item.priceA.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text('Transaction History (Sales, Purchase & Returns):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 6),
+                transactions.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Center(child: Text('Is product ki koi transaction history nahi hai.', style: TextStyle(color: Colors.grey))),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: transactions.length,
+                        itemBuilder: (context, index) {
+                          final txn = transactions[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            child: ListTile(
+                              dense: true,
+                              title: Text('${txn.voucherType} - ${txn.partyName}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('Bill No: ${txn.voucherNumber} | Date: ${DateFormat('dd-MM-yyyy').format(txn.date)}'),
+                              trailing: Text('₹${txn.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                              onTap: () {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Opening Voucher: ${txn.voucherNumber}')),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  // ➕ Add or Edit Product Dialog
   void _showAddEditProductDialog({InventoryItem? itemToEdit}) {
     final TextEditingController nameController = TextEditingController(text: itemToEdit?.itemName ?? '');
     final TextEditingController skuController = TextEditingController(text: itemToEdit?.sku ?? '');
     final TextEditingController openingStockController = TextEditingController(text: itemToEdit?.openingStock?.toString() ?? '0');
     final TextEditingController qtyController = TextEditingController(text: itemToEdit?.stockQuantity.toString() ?? '0');
     final TextEditingController purchasePriceController = TextEditingController(text: itemToEdit?.purchasePrice.toString() ?? '0');
-    
     final TextEditingController tierPriceController = TextEditingController(text: itemToEdit?.priceA.toString() ?? '0');
     
     Set<String> uniqueCategories = _allInventoryItems
@@ -359,7 +504,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
                 if (isDuplicate) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle से मौजूद है! Unique value bharein.'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है!'), backgroundColor: Colors.red),
                   );
                   return;
                 }
@@ -374,7 +519,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                   item.purchasePrice = double.tryParse(purchasePriceController.text) ?? 0.0;
                   item.priceA = double.tryParse(tierPriceController.text) ?? 0.0;
                   item.priceCategory = priceCategory;
-                  item.stockType = 'Fresh'; // Default stock type
+                  item.stockType = 'Fresh';
 
                   await DatabaseHelper.isar.inventoryItems.put(item);
                 });
@@ -470,15 +615,62 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               ],
             ),
             const SizedBox(height: 12),
+            // 🔥 Active Category Filter Indicator (if any)
+            if (_selectedCategoryFilter != null && _selectedCategoryFilter != 'All') ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.between,
+                  children: [
+                    Text('Filtered by Category: $_selectedCategoryFilter', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _selectedCategoryFilter = null;
+                          _filterItems(_searchController.text);
+                        });
+                      },
+                      child: const Icon(Icons.close, size: 16, color: Colors.red),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            // Header Row for Clean Mobile View (Category & Closing Stock are clickable!)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               color: Colors.teal.shade100,
-              child: const Row(
+              child: Row(
                 children: [
-                  Expanded(flex: 2, child: Text('Item / Category', style: TextStyle(fontWeight: FontWeight.bold))),
-                  Expanded(flex: 1, child: Text('Op / Cl Stock', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                  Expanded(flex: 1, child: Text('Pur / Sell Rate', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                  Expanded(flex: 1, child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                  const Expanded(flex: 3, child: Text('Product Name / SKU', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: _showCategoryFilterDialog, // 🔥 Clickable Category Header for Filter
+                      child: Row(
+                        children: const [
+                          Text('Category', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
+                          Icon(Icons.arrow_drop_down, size: 18, color: Colors.teal),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 1,
+                    child: InkWell(
+                      onTap: _toggleStockSorting, // 🔥 Clickable Closing Stock for Low/High Sorting
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text('Cl. Stock', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
+                          Icon(_isStockAscending ? Icons.arrow_upward : Icons.arrow_downward, size: 14, color: Colors.teal),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Expanded(flex: 1, child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.right)),
                 ],
               ),
             ),
@@ -492,67 +684,74 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 3),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                 flex: 2,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                      const SizedBox(height: 2),
-                                      Text('${item.category ?? "General"} | SKU: ${item.sku ?? "-"}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                    ],
+                          child: InkWell(
+                            onTap: () => _showProductHistoryDialog(item), // Click on card opens History Popup
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              child: Row(
+                                children: [
+                                  // Product Name & SKU ID
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
+                                        const SizedBox(height: 2),
+                                        Text('SKU: ${item.sku ?? "-"}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                Expanded(
-                                  flex: 1,
-                                  child: Column(
-                                    children: [
-                                      Text('Cl: ${item.stockQuantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
-                                      Text('Op: ${item.openingStock ?? 0}', style: const TextStyle(fontSize: 10, color: Colors.blueGrey)),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                                  flex: 1,
-                                  child: Column(
-                                    children: [
-                                      Text('P: ₹${item.purchasePrice.toStringAsFixed(0)} | S: ₹${item.priceA.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11)),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                        decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(3)),
-                                        child: Text('Tier: ${item.priceCategory ?? "A"}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.brown)),
+                                  // Clickable Category text
+                                  Expanded(
+                                    flex: 2,
+                                    child: InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedCategoryFilter = item.category ?? 'General';
+                                          _filterItems(_searchController.text);
+                                        });
+                                      },
+                                      child: Text(
+                                        item.category ?? "General",
+                                        style: const TextStyle(fontSize: 12, color: Colors.blueGrey, decoration: TextDecoration.underline),
                                       ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                                Expanded(
-                                  flex: 1,
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
-                                        onPressed: () => _showAddEditProductDialog(itemToEdit: item),
-                                        tooltip: 'Edit Item',
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                                        onPressed: () async {
-                                          await DatabaseHelper.isar.writeTxn(() async {
-                                            await DatabaseHelper.isar.inventoryItems.delete(item.id);
-                                          });
-                                          _loadInventory();
-                                        },
-                                        tooltip: 'Delete Item',
-                                      ),
-                                    ],
+                                  // Closing Stock
+                                  Expanded(
+                                    flex: 1,
+                                    child: Text(
+                                      '${item.stockQuantity}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueGrey),
+                                      textAlign: TextAlign.center,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  // Edit & Delete Action Buttons
+                                  Expanded(
+                                    flex: 1,
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        InkWell(
+                                          onPressed: () => _showAddEditProductDialog(itemToEdit: item),
+                                          child: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        InkWell(
+                                          onPressed: () async {
+                                            await DatabaseHelper.isar.writeTxn(() async {
+                                              await DatabaseHelper.isar.inventoryItems.delete(item.id);
+                                            });
+                                            _loadInventory();
+                                          },
+                                          child: const Icon(Icons.delete, size: 18, color: Colors.red),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         );
