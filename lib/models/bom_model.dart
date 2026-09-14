@@ -1,47 +1,15 @@
-Future<void> _saveBom() async {
-  final product = _productController.text.trim();
-  final material = _materialController.text.trim();
-  final qty = double.tryParse(_qtyController.text) ?? 0.0;
-  final unit = _unitController.text.trim();
+import 'package:isar/isar.dart';
 
-  if (product.isEmpty || material.isEmpty || qty <= 0) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Kripya sabhi fields sahi se bharein!')),
-    );
-    return;
-  }
+part 'bom_model.g.dart';
 
-  // CHECK: Kya yeh product aur raw material ka combination pehle se hai?
-  final existingBom = await DatabaseHelper.isar.billOfMaterials
-      .filter()
-      .finishedProductNameEqualTo(product)
-      .and()
-      .rawMaterialNameEqualTo(material)
-      .findFirst();
+@collection
+class BillOfMaterials {
+  Id id = Isar.autoIncrement;
 
-  await DatabaseHelper.isar.writeTxn(() async {
-    if (existingBom != null) {
-      // Agar pehle se hai, toh sirf quantity update kar do (duplicate nahi banega)
-      existingBom.quantityRequired += qty;
-      await DatabaseHelper.isar.billOfMaterials.put(existingBom);
-    } else {
-      // Agar naya hai, toh nayi entry banao
-      final bom = BillOfMaterials()
-        ..finishedProductName = product
-        ..rawMaterialName = material
-        ..quantityRequired = qty
-        ..unit = unit;
-      await DatabaseHelper.isar.billOfMaterials.put(bom);
-    }
-  });
+  @Index(unique: true, replace: true)
+  late String productName;
 
-  _productController.clear();
-  _materialController.clear();
-  _qtyController.clear();
-  
-  _loadBomData();
-
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('BOM Recipe Safaltapurvak Update / Save Ho Gayi!')),
-  );
+  late String materialName;
+  double quantity = 0.0;
+  late String unit = 'Pcs';
 }
