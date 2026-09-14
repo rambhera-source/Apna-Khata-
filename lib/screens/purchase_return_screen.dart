@@ -72,7 +72,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             onPressed: () {
               int q = int.tryParse(qtyController.text) ?? 1;
               setState(() {
-                _returnItems.add({'name': selectedProduct.name, 'qty': q, 'price': selectedProduct.priceA});
+                _returnItems.add({'name': selectedProduct.name, 'qty': q, 'price': selectedProduct.sellingPrice});
               });
               Navigator.pop(context);
             },
