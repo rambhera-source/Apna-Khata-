@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
-import '../models/user_model.dart'; // ✅ UserAccount model import kiya gaya hai
+import '../models/user_model.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -11,27 +11,345 @@ class SuperAdminDashboardScreen extends StatefulWidget {
 }
 
 class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
-  
+  // 📋 Dynamic list including 'Demo Plan' as default
+  final List<String> _availablePlans = ['Demo Plan', 'Basic Plan', 'Standard Plan', 'Premium ERP'];
+
+  // ➕ Function to Add a New Custom Plan
+  void _showCreatePlanDialog() {
+    TextEditingController planNameController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Create New Subscription Plan'),
+          content: TextField(
+            controller: planNameController,
+            decoration: const InputDecoration(
+              labelText: 'Plan Name (e.g., Gold ERP, Trial Pro)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+              onPressed: () {
+                final newPlan = planNameController.text.trim();
+                if (newPlan.isNotEmpty && !_availablePlans.contains(newPlan)) {
+                  setState(() {
+                    _availablePlans.add(newPlan);
+                  });
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Plan "$newPlan" successfully create ho gaya hai!')),
+                  );
+                }
+              },
+              child: const Text('Add Plan'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ➕ Function for Super Admin to Create a New User Directly
+  void _showCreateUserDialog() {
+    TextEditingController nameController = TextEditingController();
+    TextEditingController usernameController = TextEditingController();
+    TextEditingController pinController = TextEditingController();
+    String selectedPlan = _availablePlans.first;
+    TextEditingController validityController = TextEditingController(text: '2027-12-31');
+
+    bool canManageOrders = true;
+    bool canManageParties = true;
+    bool canManageInventory = true;
+    bool canViewReports = true;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Create New User (Direct Admin)'),
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Full Name *', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: usernameController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(labelText: 'Mobile Number / Username *', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: pinController,
+                      keyboardType: TextInputType.number,
+                      obscureText: true,
+                      maxLength: 6,
+                      decoration: const InputDecoration(labelText: 'Security PIN (Min 4 digits) *', border: OutlineInputBorder(), counterText: ''),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text('📦 Assign Plan', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                    DropdownButton<String>(
+                      value: selectedPlan,
+                      isExpanded: true,
+                      items: _availablePlans.map((plan) {
+                        return DropdownMenuItem(value: plan, child: Text(plan));
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => selectedPlan = val);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: validityController,
+                      decoration: const InputDecoration(labelText: 'Plan Validity Date (YYYY-MM-DD)', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 15),
+                    const Divider(),
+                    const Text('🔒 Module-wise Permissions', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                    CheckboxListTile(
+                      title: const Text('Orders & Sales Access'),
+                      value: canManageOrders,
+                      onChanged: (val) => setDialogState(() => canManageOrders = val ?? true),
+                    ),
+                    CheckboxListTile(
+                      title: const Text('Parties / Customers Access'),
+                      value: canManageParties,
+                      onChanged: (val) => setDialogState(() => canManageParties = val ?? true),
+                    ),
+                    CheckboxListTile(
+                      title: const Text('Inventory / Products Access'),
+                      value: canManageInventory,
+                      onChanged: (val) => setDialogState(() => canManageInventory = val ?? true),
+                    ),
+                    CheckboxListTile(
+                      title: const Text('Reports & Analytics Access'),
+                      value: canViewReports,
+                      onChanged: (val) => setDialogState(() => canViewReports = val ?? true),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final username = usernameController.text.trim();
+                    final pin = pinController.text.trim();
+
+                    if (name.isEmpty || username.isEmpty || pin.length < 4) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Kripya sabhi mandatory fields sahi bharein!'), backgroundColor: Colors.red),
+                      );
+                      return;
+                    }
+
+                    // Check if username already exists
+                    final existingUser = await DatabaseHelper.isar.userAccounts
+                        .filter()
+                        .usernameEqualTo(username)
+                        .findFirst();
+
+                    if (existingUser != null) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Yeh Username/Mobile pehle se registered hai!'), backgroundColor: Colors.red),
+                      );
+                      return;
+                    }
+
+                    // Save directly as approved user
+                    await DatabaseHelper.isar.writeTxn(() async {
+                      final newUser = UserAccount()
+                        ..name = name
+                        ..username = username
+                        ..pin = pin
+                        ..role = 'Staff'
+                        ..isApproved = true // Direct approved
+                        ..subscriptionPlan = selectedPlan
+                        ..validityDate = validityController.text.trim()
+                        ..canManageOrders = canManageOrders
+                        ..canManageParties = canManageParties
+                        ..canManageInventory = canManageInventory
+                        ..canViewReports = canViewReports;
+
+                      await DatabaseHelper.isar.userAccounts.put(newUser);
+                    });
+
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Naya user safaltapurvak create kar diya gaya hai!'), backgroundColor: Colors.green),
+                    );
+                  },
+                  child: const Text('Create User'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   // 🟢 Request Approve Karne ka Function
   Future<void> _approveRequest(UserAccount user) async {
     await DatabaseHelper.isar.writeTxn(() async {
-      user.isApproved = true; // ✅ Approved flag true kar diya
+      user.isApproved = true;
+      user.subscriptionPlan = user.subscriptionPlan.isEmpty ? 'Demo Plan' : user.subscriptionPlan;
+      user.validityDate = user.validityDate.isEmpty ? '2027-12-31' : user.validityDate;
       await DatabaseHelper.isar.userAccounts.put(user);
     });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${user.name} ka account approve kar diya gaya hai!')),
+      SnackBar(content: Text('${user.name} ka account approve aur Demo Plan set kar diya gaya hai!')),
     );
   }
 
-  // 🔴 Request Reject Karne ka Function (Delete/Remove request)
+  // 🔴 Request Reject / Delete Function
   Future<void> _rejectRequest(UserAccount user) async {
     await DatabaseHelper.isar.writeTxn(() async {
       await DatabaseHelper.isar.userAccounts.delete(user.id);
     });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${user.name} ki request reject karke hata di gayi hai.')),
+      SnackBar(content: Text('${user.name} ki request reject kar di gayi hai.')),
+    );
+  }
+
+  // ⚙️ Edit User Subscription & Permissions Dialog
+  void _showUserDetailsAndSettings(UserAccount user) {
+    String selectedPlan = _availablePlans.contains(user.subscriptionPlan) 
+        ? user.subscriptionPlan 
+        : _availablePlans.first;
+        
+    TextEditingController validityController = TextEditingController(
+      text: user.validityDate.isEmpty ? '2027-12-31' : user.validityDate,
+    );
+    
+    bool canManageOrders = user.canManageOrders;
+    bool canManageParties = user.canManageParties;
+    bool canManageInventory = user.canManageInventory;
+    bool canViewReports = user.canViewReports;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('User Details: ${user.name}'),
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Username / Mobile: ${user.username}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('📦 Assign Plan', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _showCreatePlanDialog();
+                          },
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('New Plan'),
+                        ),
+                      ],
+                    ),
+                    DropdownButton<String>(
+                      value: selectedPlan,
+                      isExpanded: true,
+                      items: _availablePlans.map((plan) {
+                        return DropdownMenuItem(value: plan, child: Text(plan));
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => selectedPlan = val);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: validityController,
+                      decoration: const InputDecoration(labelText: 'Plan Validity Date (YYYY-MM-DD)', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 15),
+                    const Divider(),
+                    const Text('🔒 Module-wise Permissions', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                    CheckboxListTile(
+                      title: const Text('Orders & Sales Access'),
+                      value: canManageOrders,
+                      onChanged: (val) => setDialogState(() => canManageOrders = val ?? true),
+                    ),
+                    CheckboxListTile(
+                      title: const Text('Parties / Customers Access'),
+                      value: canManageParties,
+                      onChanged: (val) => setDialogState(() => canManageParties = val ?? true),
+                    ),
+                    CheckboxListTile(
+                      title: const Text('Inventory / Products Access'),
+                      value: canManageInventory,
+                      onChanged: (val) => setDialogState(() => canManageInventory = val ?? true),
+                    ),
+                    CheckboxListTile(
+                      title: const Text('Reports & Analytics Access'),
+                      value: canViewReports,
+                      onChanged: (val) => setDialogState(() => canViewReports = val ?? true),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                  onPressed: () async {
+                    await DatabaseHelper.isar.writeTxn(() async {
+                      user.subscriptionPlan = selectedPlan;
+                      user.validityDate = validityController.text.trim();
+                      user.canManageOrders = canManageOrders;
+                      user.canManageParties = canManageParties;
+                      user.canManageInventory = canManageInventory;
+                      user.canViewReports = canViewReports;
+                      await DatabaseHelper.isar.userAccounts.put(user);
+                    });
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('User settings aur permissions update ho gayi hain!')),
+                    );
+                  },
+                  child: const Text('Save Changes'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -44,13 +362,25 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           title: const Text('Super Admin Master Control'),
           backgroundColor: Colors.indigo,
           foregroundColor: Colors.white,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.person_add),
+              tooltip: 'Create New User',
+              onPressed: _showCreateUserDialog,
+            ),
+            IconButton(
+              icon: const Icon(Icons.playlist_add),
+              tooltip: 'Create New Plan',
+              onPressed: _showCreatePlanDialog,
+            ),
+          ],
           bottom: const TabBar(
             indicatorColor: Colors.white,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             tabs: [
               Tab(icon: Icon(Icons.pending_actions), text: 'Pending Requests'),
-              Tab(icon: Icon(Icons.verified_user), text: 'Active Staff'),
+              Tab(icon: Icon(Icons.verified_user), text: 'Active Staff & Plans'),
             ],
           ),
         ),
@@ -60,7 +390,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
             StreamBuilder<List<UserAccount>>(
               stream: DatabaseHelper.isar.userAccounts
                   .filter()
-                  .isApprovedEqualTo(false) // ✅ Jo approved nahi hain
+                  .isApprovedEqualTo(false)
                   .watch(fireImmediately: true),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -115,7 +445,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                 ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                                   icon: const Icon(Icons.check, size: 16),
-                                  label: const Text('Approve & Grant Access'),
+                                  label: const Text('Approve'),
                                   onPressed: () => _approveRequest(req),
                                 ),
                               ],
@@ -129,11 +459,11 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               },
             ),
 
-            // ================= TAB 2: ACTIVE & APPROVED STAFF =================
+            // ================= TAB 2: ACTIVE STAFF, PLANS & PERMISSIONS =================
             StreamBuilder<List<UserAccount>>(
               stream: DatabaseHelper.isar.userAccounts
                   .filter()
-                  .isApprovedEqualTo(true) // ✅ Jo approved hain
+                  .isApprovedEqualTo(true)
                   .watch(fireImmediately: true),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -157,19 +487,16 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                       margin: const EdgeInsets.symmetric(vertical: 6),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.green.shade100,
-                          child: Icon(Icons.person, color: Colors.green.shade800),
+                          backgroundColor: Colors.indigo.shade100,
+                          child: Icon(Icons.person, color: Colors.indigo.shade800),
                         ),
                         title: Text(staff.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Mobile/Username: ${staff.username} | Role: ${staff.role}'),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.green),
-                          ),
-                          child: const Text('Active', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
+                        subtitle: Text('Mobile: ${staff.username}\nPlan: ${staff.subscriptionPlan.isEmpty ? "Demo Plan" : staff.subscriptionPlan} | Valid: ${staff.validityDate.isEmpty ? "N/A" : staff.validityDate}'),
+                        isThreeLine: true,
+                        trailing: IconButton(
+                          icon: const Icon(Icons.settings, color: Colors.indigo),
+                          tooltip: 'Manage Plan & Permissions',
+                          onPressed: () => _showUserDetailsAndSettings(staff),
                         ),
                       ),
                     );
