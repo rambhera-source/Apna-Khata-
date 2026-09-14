@@ -32,6 +32,14 @@ jobs:
           cp -r temp_proj/android android
           rm -rf temp_proj
 
+      - name: Fix Kotlin Version Mismatch
+        run: |
+          # Automatically update kotlin version to 1.8.10 in android/build.gradle if it exists
+          if [ -f "android/build.gradle" ]; then
+            sed -i 's/1.7.10/1.8.10/g' android/build.gradle
+            sed -i 's/kotlin_version = .*/kotlin_version = "1.8.10"/g' android/build.gradle
+          fi
+
       - name: Install dependencies
         run: flutter pub get
 
