@@ -10,10 +10,9 @@ import 'package:share_plus/share_plus.dart';
 
 import '../database/database_helper.dart';
 import '../models/account.dart';
-import '../models/product.dart';
 import '../models/transaction_model.dart';
 import '../models/settings_model.dart'; 
-import '../models/inventory_model.dart'; // 🔥 Inventory Model
+import '../models/inventory_model.dart'; 
 import 'searchable_field.dart';
 import 'add_account_screen.dart';
 
@@ -28,18 +27,23 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _billNoController = TextEditingController(text: 'PUR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
+  // 🔥 Freight & Discount Controllers
+  final TextEditingController _freightController = TextEditingController(text: '0');
+  final TextEditingController _discountValueController = TextEditingController(text: '0');
+  String _discountType = '₹'; // '₹' or '%'
+
   // 📅 Selected Bill Date Variable
   DateTime _selectedDate = DateTime.now();
 
   List<String> _allAccounts = [];
-  List<InventoryItem> _allInventoryItems = []; // 🔥 Using InventoryItem model directly
+  List<InventoryItem> _allInventoryItems = [];
   
-  // Cart items list: { 'name': String, 'qty': int, 'price': double, 'stockType': String }
+  // Cart items list: { 'name': String, 'sku': String, 'qty': int, 'price': double, 'stockType': String }
   final List<Map<String, dynamic>> _cartItems = [];
   String _paymentMode = 'Cash';
   final List<String> _paymentModes = ['Cash', 'Bank / UPI', 'Credit'];
 
-  // 🔥 Default Global Stock Type for Purchase ('Fresh' default)
+  // 🔥 Default Stock Type ('Fresh' default)
   String _globalStockType = 'Fresh';
 
   // 🔥 GST Settings State Variables
@@ -54,7 +58,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     _loadDropdownDataAndSettings();
   }
 
-  // 📂 Load Accounts, Inventory and Company GST Settings
   Future<void> _loadDropdownDataAndSettings() async {
     final accounts = await DatabaseHelper.isar.accounts.where().findAll();
     final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
@@ -70,7 +73,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     });
   }
 
-  // 👤 Open Full AddAccountScreen for new Supplier
   void _navigateToAddNewParty() async {
     final String? newPartyName = await Navigator.push(
       context,
@@ -86,7 +88,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     }
   }
 
-  // 🔥 ➕ Add Item to Purchase Cart / Advanced Add New Inventory Item Popup
+  // 🛒 Add Purchase Item Popup
   void _addItemToCart() {
     if (_allInventoryItems.isEmpty) {
       _showAddEditProductDialogForPurchase();
@@ -123,7 +125,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 children: [
                   DropdownButtonFormField<InventoryItem>(
                     value: selectedItem,
-                    items: _allInventoryItems.map((p) => DropdownMenuItem(value: p, child: Text('${p.itemName} (Stock: ${p.stockQuantity})'))).toList(),
+                    items: _allInventoryItems.map((p) => DropdownMenuItem(value: p, child: Text('${p.itemName} (SKU: ${p.sku ?? "-"})'))).toList(),
                     onChanged: (val) {
                       setDialogState(() {
                         selectedItem = val!;
@@ -156,6 +158,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     setState(() {
                       _cartItems.add({
                         'name': selectedItem.itemName,
+                        'sku': selectedItem.sku ?? '-',
                         'qty': q,
                         'price': pr,
                         'stockType': _globalStockType,
@@ -173,7 +176,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     );
   }
 
-  // ➕ Advanced Add New Product Popup directly inside Purchase Screen
   void _showAddEditProductDialogForPurchase() {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController skuController = TextEditingController();
@@ -328,21 +330,35 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     );
   }
 
-  // 🧮 Calculations (Subtotal, Tax, Grand Total)
+  // 🧮 Calculations
   double get _subTotal {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
+  double get _freightAmount {
+    return double.tryParse(_freightController.text) ?? 0.0;
+  }
+
+  double get _discountAmount {
+    double val = double.tryParse(_discountValueController.text) ?? 0.0;
+    if (_discountType == '%') {
+      return (_subTotal * val) / 100;
+    }
+    return val;
+  }
+
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    return _subTotal * 0.18; // 18% Tax Calculation
+    double taxableValue = _subTotal - _discountAmount + _freightAmount;
+    if (taxableValue < 0) taxableValue = 0;
+    return taxableValue * 0.18;
   }
 
   double get _grandTotal {
-    return _subTotal + _taxAmount;
+    double total = _subTotal - _discountAmount + _freightAmount + _taxAmount;
+    return total < 0 ? 0 : total;
   }
 
-  // 📄 Professional Purchase Bill PDF Generator
   Future<void> _generateAndPrintOrShareBill({required bool isShare}) async {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) return;
@@ -385,13 +401,13 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               pw.Text('Payment Mode: $_paymentMode'),
               pw.SizedBox(height: 15),
               pw.Table.fromTextArray(
-                headers: ['S.No', 'Item Description', 'Qty', 'Price (₹)', 'Total (₹)'],
+                headers: ['S.No', 'Item Description (SKU)', 'Qty', 'Price (₹)', 'Total (₹)'],
                 data: List.generate(_cartItems.length, (index) {
                   final item = _cartItems[index];
                   double total = (item['qty'] as int) * (item['price'] as double);
                   return [
                     '${index + 1}',
-                    '${item['name']} (${item['stockType']})',
+                    '${item['name']} [${item['sku']}] (${item['stockType']})',
                     '${item['qty']}',
                     '${item['price']}',
                     '${total.toStringAsFixed(2)}',
@@ -412,6 +428,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
+                        if (_discountAmount > 0) pw.Text('Discount: - ₹ ${_discountAmount.toStringAsFixed(2)}'),
+                        if (_freightAmount > 0) pw.Text('Freight: + ₹ ${_freightAmount.toStringAsFixed(2)}'),
                         if (_isGstActive) ...[
                           pw.SizedBox(height: 4),
                           pw.Text('CGST (9%): ₹ ${(_taxAmount / 2).toStringAsFixed(2)}'),
@@ -441,7 +459,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     }
   }
 
-  // 💾 Save Purchase Transaction & Update Inventory Items Stock
   Future<void> _savePurchaseTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Supplier aur Items bharein!'), backgroundColor: Colors.red));
@@ -449,7 +466,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     }
 
     await DatabaseHelper.isar.writeTxn(() async {
-      // 1. Save Accounting Transaction
       final txn = AccountingTransaction()
         ..date = _selectedDate
         ..voucherType = 'Purchase'
@@ -460,7 +476,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         ..notes = _isGstActive ? 'GST Purchase Entry ([$_globalStockType Stock])' : 'Purchase Entry ([$_globalStockType Stock])';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
-      // 2. Automatically Update Inventory Item Stock (Increase Stock on Purchase)
       for (var cartItem in _cartItems) {
         String prodName = cartItem['name'];
         double boughtQty = (cartItem['qty'] as int).toDouble();
@@ -472,8 +487,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             .findFirst();
 
         if (invItem != null) {
-          invItem.stockQuantity += boughtQty; // Stock बढ़ेगा
-          invItem.purchasePrice = newPurchasePrice; // लेटेस्ट परचेस प्राइस अपडेट करें
+          invItem.stockQuantity += boughtQty;
+          invItem.purchasePrice = newPurchasePrice;
           await DatabaseHelper.isar.inventoryItems.put(invItem);
         }
       }
@@ -510,7 +525,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         title: Text(_isGstActive ? 'Purchase Entry (GST Mode)' : 'Purchase Entry (Simple Mode)'),
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
-        // 🔥 Inventory icon removed from AppBar
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -553,7 +567,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 🔥 Stock Type Quick Toggle Button for Purchase
                 InkWell(
                   onTap: () {
                     setState(() {
@@ -637,11 +650,27 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('Add Item'),
-                  onPressed: _addItemToCart, // 👈 Opens Advanced Product Add / Select Popup
+                  onPressed: _addItemToCart,
                 ),
               ],
             ),
             const SizedBox(height: 8),
+
+            // 🔥 Professional Table List View for Purchase Items
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              color: Colors.blue.shade100,
+              child: const Row(
+                children: [
+                  Expanded(flex: 1, child: Text('No.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  Expanded(flex: 4, child: Text('Product Name / SKU', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+                  Expanded(flex: 2, child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+                  Expanded(flex: 2, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.right)),
+                  SizedBox(width: 30),
+                ],
+              ),
+            ),
             Expanded(
               child: _cartItems.isEmpty
                   ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
@@ -650,43 +679,43 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       itemBuilder: (context, index) {
                         final item = _cartItems[index];
                         double total = (item['qty'] as int) * (item['price'] as double);
-                        bool isFresh = item['stockType'] == 'Fresh';
-                        return Card(
-                          child: ListTile(
-                            title: Row(
-                              children: [
-                                Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isFresh ? Colors.blue.shade100 : Colors.orange.shade100,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    item['stockType'],
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: isFresh ? Colors.blue.shade900 : Colors.orange.shade900,
-                                    ),
-                                  ),
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(flex: 1, child: Text('${index + 1}', style: const TextStyle(fontSize: 12))),
+                              Expanded(
+                                flex: 4,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    Text('SKU: ${item['sku']} (${item['stockType']})', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            subtitle: Text('Qty: ${item['qty']} | Price: ₹ ${item['price']}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('₹ ${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                  onPressed: () {
-                                    setState(() => _cartItems.removeAt(index));
-                                  },
-                                ),
-                              ],
-                            ),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: Text('${item['qty']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text('₹${item['price']}', style: const TextStyle(fontSize: 12), textAlign: TextAlign.center),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue), textAlign: TextAlign.right),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                                onPressed: () {
+                                  setState(() => _cartItems.removeAt(index));
+                                },
+                              ),
+                            ],
                           ),
                         );
                       },
@@ -694,7 +723,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             ),
             const Divider(),
             
-            // 💰 Totals & GST Summary Box
+            // 🔥 Calculations Box with Freight & Discount
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
@@ -707,8 +736,57 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                     ],
                   ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Discount:', style: TextStyle(fontSize: 13)),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 80,
+                            child: TextField(
+                              controller: _discountValueController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            width: 60,
+                            child: DropdownButtonFormField<String>(
+                              value: _discountType,
+                              items: const [
+                                DropdownMenuItem(value: '₹', child: Text('₹')),
+                                DropdownMenuItem(value: '%', child: Text('%')),
+                              ],
+                              onChanged: (val) => setState(() => _discountType = val!),
+                              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Freight / Shipping:', style: TextStyle(fontSize: 13)),
+                      SizedBox(
+                        width: 100,
+                        child: TextField(
+                          controller: _freightController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    ],
+                  ),
                   if (_isGstActive) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -722,7 +800,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       SizedBox(
-                        width: 150,
+                        width: 140,
                         child: DropdownButtonFormField<String>(
                           value: _paymentMode,
                           items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
@@ -730,7 +808,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
                         ),
                       ),
-                      Text('Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+                      Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
                     ],
                   ),
                 ],
