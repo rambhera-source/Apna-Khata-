@@ -23,7 +23,6 @@ class PurchaseScreen extends StatefulWidget {
 
 class _PurchaseScreenState extends State<PurchaseScreen> {
   final TextEditingController _supplierController = TextEditingController();
-  // 🔥 Bill No. अब खाली रखा गया है ताकि यूजर खुद टाइप कर सके
   final TextEditingController _billNoController = TextEditingController(text: '');
   
   DateTime _selectedDate = DateTime.now();
@@ -50,7 +49,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     });
   }
 
-  // ➕ Direct New Supplier/Account Create Dialog
   void _showAddNewSupplierDialog() {
     final TextEditingController newSupplierController = TextEditingController(text: _supplierController.text);
     final TextEditingController phoneController = TextEditingController();
@@ -92,8 +90,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 final newAccount = Account()
                   ..name = name
                   ..phone = phoneController.text.trim()
-                  ..address = addressController.text.trim()
-                  ..type = 'Supplier';
+                  ..address = addressController.text.trim();
                 await DatabaseHelper.isar.accounts.put(newAccount);
               });
 
@@ -114,7 +111,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     );
   }
 
-  // ➕ Direct New Product Create Dialog
   void _showAddNewProductDialog(BuildContext parentContext, Function(Product) onProductCreated) {
     final TextEditingController prodNameController = TextEditingController();
     final TextEditingController priceController = TextEditingController();
@@ -164,7 +160,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               final newProduct = Product()
                 ..name = name
                 ..sellingPrice = price * 1.2 
-                ..stock = stock;
+                ..stock = stock.toDouble(); // ✅ Fixed: Converted int to double properly
 
               await DatabaseHelper.isar.writeTxn(() async {
                 await DatabaseHelper.isar.products.put(newProduct);
@@ -185,7 +181,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     );
   }
 
-  // 🛒 Add Item Dialog (Fixed to handle empty products list properly)
   void _addItemToCart() {
     if (_allProducts.isEmpty) {
       _showAddNewProductDialog(context, (newProd) {
@@ -213,13 +208,13 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     icon: const Icon(Icons.add_circle, size: 18),
                     label: const Text('New Product'),
                     onPressed: () {
-                      Navigator.pop(context); // Close current dialog
+                      Navigator.pop(context);
                       _showAddNewProductDialog(context, (createdProduct) {
                         setState(() {
                           selectedProduct = createdProduct;
                           priceController.text = createdProduct.sellingPrice.toString();
                         });
-                        _addItemToCart(); // Re-open add item dialog with new product
+                        _addItemToCart();
                       });
                     },
                   ),
