@@ -29,7 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final String _masterPin = "2029";
   final String _firmName = 'Orlife ERP';
 
-  // 🟢 Login Logic
+  // 🟢 Login Logic with Role-Based Redirection
   Future<void> _handleLogin() async {
     final enteredId = _loginIdController.text.trim();
     final enteredPin = _loginPinController.text.trim();
@@ -47,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const SuperAdminDashboardScreen()), // ✅ Navigates to Super Admin Master Control
+        MaterialPageRoute(builder: (context) => const SuperAdminDashboardScreen()), // ✅ Opens Super Admin Master Control
       );
       return;
     }
@@ -62,10 +62,19 @@ class _LoginScreenState extends State<LoginScreen> {
     if (staffUser != null) {
       if (!mounted) return;
       if (staffUser.isApproved) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const DashboardScreen()),
-        );
+        // ✅ Role-based routing for staff/other users
+        if (staffUser.role == 'Admin') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const SuperAdminDashboardScreen()),
+          );
+        } else {
+          // Standard Staff / Accounting View
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -128,7 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ..name = name
         ..username = username
         ..pin = pin
-        ..role = 'Staff'
+        ..role = 'Staff' // Default role for signups
         ..isApproved = false;
 
       await DatabaseHelper.isar.userAccounts.put(newUser);
@@ -294,7 +303,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextButton(
                       onPressed: () {
                         setState(() {
-                          _isLoginMode = !_isLoginMode; // Mode switch karega
+                          _isLoginMode = !_isLoginMode;
                         });
                       },
                       child: Text(
