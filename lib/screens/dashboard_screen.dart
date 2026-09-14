@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // ✅ For saving visible modules preference
 import '../database/database_helper.dart';
 import '../models/account.dart';
 import '../models/product.dart';
@@ -38,7 +37,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _businessType = 'Wholesaler / Retailer';
   String _userName = 'ORLIFE ERP User';
 
-  // 📌 Customizable Module Keys Map (Default sabhi true rahenge)
+  // 📌 Module Visibility Map
   final Map<String, bool> _visibleModules = {
     'sale_billing': true,
     'sales_return': true,
@@ -63,7 +62,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _businessType = widget.currentUser!.businessType;
       _userName = widget.currentUser!.name.isNotEmpty ? widget.currentUser!.name : 'ORLIFE ERP';
     }
-    _loadUserPreferences();
     _loadDashboardData();
   }
 
@@ -71,24 +69,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _focusNode.dispose();
     super.dispose();
-  }
-
-  // 💾 Load saved user module visibility preferences
-  Future<void> _loadUserPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      for (String key in _visibleModules.keys) {
-        _visibleModules[key] = prefs.getBool('mod_$key') ?? true;
-      }
-    });
-  }
-
-  // 💾 Save user module visibility preferences
-  Future<void> _saveUserPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    for (String key in _visibleModules.keys) {
-      await prefs.setBool('mod_$key', _visibleModules[key]!);
-    }
   }
 
   Future<void> _loadDashboardData() async {
@@ -112,7 +92,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // 🛠️ Open Customization Dialog to select Home Screen Icons
+  // 🛠️ Open Customization Dialog
   void _showCustomizeDialog() {
     showDialog(
       context: context,
@@ -136,7 +116,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           _visibleModules[key] = value ?? true;
                         });
                         setState(() {});
-                        _saveUserPreferences();
                       },
                     );
                   }).toList(),
@@ -452,7 +431,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       );
                     } else {
-                      // ================= MOBILE LAYOUT (With List/Grid & Customization) =================
+                      // ================= MOBILE LAYOUT =================
                       return Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Column(
@@ -581,7 +560,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       tiles.add(_buildActionTile(icon: Icons.settings, iconColor: Colors.blueGrey, title: 'Settings & Backup', subtitle: 'Configure software & data backup', onTap: _openSettings));
     }
 
-    // Add spacing between tiles dynamically
     List<Widget> spacedTiles = [];
     for (int i = 0; i < tiles.length; i++) {
       spacedTiles.add(tiles[i]);
@@ -607,7 +585,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       {'key': 'settings', 'icon': Icons.settings, 'color': Colors.blueGrey, 'title': 'Settings', 'onTap': _openSettings},
     ];
 
-    // Filter items based on user selection
     final List<Map<String, dynamic>> filteredItems = allItems.where((item) {
       if (item['key'] == 'manufacturing' && !isManufacturing) return false;
       return _visibleModules[item['key']] ?? true;
@@ -624,7 +601,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       itemBuilder: (context, index) {
         final item = filteredItems[index];
         return InkWell(
-          onPressed: item['onTap'],
+          onTap: item['onTap'],
           borderRadius: BorderRadius.circular(12),
           child: Container(
             decoration: BoxDecoration(
