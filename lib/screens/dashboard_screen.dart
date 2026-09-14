@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/account.dart';
-import '../models/inventory_model.dart';
+import '../models/product.dart';
 import '../models/order_model.dart';
 import 'orders_management_screen.dart';
 
@@ -30,7 +30,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     try {
       final parties = await DatabaseHelper.isar.accounts.where().findAll();
-      final products = await DatabaseHelper.isar.inventoryStocks.where().findAll();
+      final products = await DatabaseHelper.isar.products.where().findAll(); // 🔥 Yahan inventoryStocks se products kar diya hai
       final orders = await DatabaseHelper.isar.salesOrders.where().findAll();
 
       int pendingCount = orders.where((o) => o.status == 'Pending' || o.status.contains('Pending')).length;
