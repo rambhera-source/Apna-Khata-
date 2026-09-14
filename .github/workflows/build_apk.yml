@@ -1,4 +1,4 @@
-name: Build Flutter APK
+Name: Build Flutter APK
 
 on:
   push:
@@ -38,6 +38,17 @@ jobs:
         run: |
           rm -rf android
           flutter create . --platforms=android --project-name accounting_app --org in.khatahisab
+
+      - name: Fix Kotlin Version Conflict
+        run: |
+          echo "
+          configurations.all {
+              resolutionStrategy.eachDependency { details ->
+                  if (details.requested.group == 'org.jetbrains.kotlin') {
+                      details.useVersion '1.8.10'
+                  }
+              }
+          }" >> android/app/build.gradle
 
       - name: Build Release APK
         run: flutter build apk --release
