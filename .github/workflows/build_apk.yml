@@ -34,6 +34,11 @@ jobs:
           flutter pub run build_runner clean
           flutter pub run build_runner build --delete-conflicting-outputs
 
+      - name: Regenerate Compatible Android Folder
+        run: |
+          rm -rf android
+          flutter create . --platforms=android --project-name accounting_app --org in.khatahisab
+
       - name: Build Release APK
         run: flutter build apk --release
 
