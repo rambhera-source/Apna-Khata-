@@ -10,9 +10,5 @@ class CompanySettings {
   String? gstin;
   
   // ✅ GST On/Off ke liye (User apni marzi se set karega)
-  bool isGstEnabled = false; 
-
-  // ✅ Neutral default prefix (User baad mein apni company ke hisaab se badal lega)
-  String invoicePrefix = 'INV/'; 
-  int nextInvoiceNumber = 1;     
+  bool isGstEnabled = false;
 }
