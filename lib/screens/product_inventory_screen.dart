@@ -230,7 +230,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  // ➕ Add or Edit Product Dialog (Updated with All Advanced Fields including Category Dropdown & A-Z Tiers)
+  // ➕ Add or Edit Product Dialog (Stock Type selector removed)
   void _showAddEditProductDialog({InventoryItem? itemToEdit}) {
     final TextEditingController nameController = TextEditingController(text: itemToEdit?.itemName ?? '');
     final TextEditingController skuController = TextEditingController(text: itemToEdit?.sku ?? '');
@@ -238,10 +238,8 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     final TextEditingController qtyController = TextEditingController(text: itemToEdit?.stockQuantity.toString() ?? '0');
     final TextEditingController purchasePriceController = TextEditingController(text: itemToEdit?.purchasePrice.toString() ?? '0');
     
-    // Dynamic price controller for the selected tier
     final TextEditingController tierPriceController = TextEditingController(text: itemToEdit?.priceA.toString() ?? '0');
     
-    // Get unique categories for dropdown suggestion
     Set<String> uniqueCategories = _allInventoryItems
         .map((item) => item.category ?? '')
         .where((cat) => cat.trim().isNotEmpty)
@@ -253,7 +251,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
       uniqueCategories.add(selectedCategory);
     }
 
-    String stockType = itemToEdit?.stockType ?? 'Fresh';
     String priceCategory = itemToEdit?.priceCategory ?? 'A';
 
     showDialog(
@@ -277,7 +274,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                     decoration: const InputDecoration(labelText: 'SKU ID (Mandatory & Unique) *', border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
-                  // 🔥 Category Dropdown with saved categories
                   DropdownButtonFormField<String>(
                     value: selectedCategory,
                     items: uniqueCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
@@ -333,26 +329,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Text('Stock Type: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 10),
-                      ChoiceChip(
-                        label: const Text('Fresh'),
-                        selected: stockType == 'Fresh',
-                        selectedColor: Colors.green.shade100,
-                        onSelected: (val) => setDialogState(() => stockType = 'Fresh'),
-                      ),
-                      const SizedBox(width: 8),
-                      ChoiceChip(
-                        label: const Text('Replacement'),
-                        selected: stockType == 'Replacement',
-                        selectedColor: Colors.orange.shade100,
-                        onSelected: (val) => setDialogState(() => stockType = 'Replacement'),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
@@ -375,7 +351,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                   return;
                 }
 
-                // Check uniqueness on manual save (if adding new or changing name/sku)
                 bool isDuplicate = _allInventoryItems.any((item) => 
                   (itemToEdit == null || item.id != itemToEdit.id) && 
                   (item.itemName.toLowerCase() == name.toLowerCase() || 
@@ -384,7 +359,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
                 if (isDuplicate) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है! Unique value bharein.'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle से मौजूद है! Unique value bharein.'), backgroundColor: Colors.red),
                   );
                   return;
                 }
@@ -399,7 +374,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                   item.purchasePrice = double.tryParse(purchasePriceController.text) ?? 0.0;
                   item.priceA = double.tryParse(tierPriceController.text) ?? 0.0;
                   item.priceCategory = priceCategory;
-                  item.stockType = stockType;
+                  item.stockType = 'Fresh'; // Default stock type
 
                   await DatabaseHelper.isar.inventoryItems.put(item);
                 });
