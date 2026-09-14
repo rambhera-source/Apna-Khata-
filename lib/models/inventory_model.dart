@@ -9,15 +9,17 @@ class InventoryItem {
   @Index(unique: true, replace: true)
   late String itemName; // e.g. "ORLIFE 85W Fast Charger"
 
-  // 🆔 Added SKU and Stock Type for inventory tracking & filtering
+  // 🆔 SKU and Stock Type
   String? sku; 
   String? stockType = 'Fresh'; // 'Fresh' ya 'Replacement'
 
-  late String category = 'Mobile Accessories'; // e.g. "Mobile Accessories", "Cables", "Power Banks"
+  late String category = 'Mobile Accessories'; // e.g. "Mobile Accessories", "Cables"
   
   double stockQuantity = 0.0; // Current Stock (Closing Stock)
-  double? openingStock = 0.0; // 🔥 Opening Stock for tracking
-  String? priceCategory = 'A'; // 🔥 Selected Price Tier ('A' to 'Z')
+  double? openingStock = 0.0; // Opening Stock
+  
+  double purchasePrice = 0.0; // 🔥 नया: Purchase Price (खरीद मूल्य)
+  String? priceCategory = 'A'; // Selected Price Tier ('A' to 'Z')
   
   late String unit = 'Pcs'; // e.g. "Pcs", "Box", "Set"
 
@@ -27,7 +29,7 @@ class InventoryItem {
   String? imagePath3;
   String? imagePath4;
 
-  // 🏷️ A to Z Price Tiers (Category A se Z tak ke rates)
+  // 🏷️ A to Z Price Tiers (Category A se Z tak ke selling rates)
   double priceA = 0.0;
   double priceB = 0.0;
   double priceC = 0.0;
