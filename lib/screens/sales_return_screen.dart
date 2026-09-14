@@ -60,10 +60,10 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               value: selectedProduct,
               items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
               onChanged: (val) => selectedProduct = val!,
-              decoration: const InputDecoration(labelText: 'Product', border: OutlineInputBorder(), isDense: true),
+              decoration: const InputDecoration(labelText: 'Product', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
-            TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Return Qty', border: OutlineInputBorder(), isDense: true)),
+            TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Return Qty', border: OutlineInputBorder())),
           ],
         ),
         actions: [
@@ -135,6 +135,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
       await DatabaseHelper.isar.accountingTransactions.put(txn);
     });
 
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -198,7 +199,15 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             ),
             Text('Total Return: ₹ $_returnTotal', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
             const SizedBox(height: 16),
-            SizedBox(width: double.infinity, height: 48, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white), onPressed: _saveReturn, child: const Text('Save Return Note', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)))),
+            SizedBox(
+              width: double.infinity, 
+              height: 48, 
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white), 
+                onPressed: _saveReturn, 
+                child: const Text('Save Return Note', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
           ],
         ),
       ),
