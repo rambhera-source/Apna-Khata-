@@ -22,6 +22,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
   List<InventoryItem> _filteredItems = [];
   String _selectedStockFilter = 'All'; // 'All', 'Fresh', 'Replacement'
 
+  // A to Z Price Tiers List
   final List<String> _priceCategories = List.generate(26, (index) => String.fromCharCode(65 + index));
 
   @override
@@ -53,41 +54,75 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     });
   }
 
-  // 📥 1. Template CSV Generator (With Purchase Price, Opening/Closing Stock & A-Z Tier)
+  // 📥 1. Enhanced Template CSV Generator (With Unique Constraints, Categories & A-Z Tiers)
   Future<void> _downloadTemplateFile() async {
     try {
       List<List<dynamic>> rows = [];
       
-      // CSV Headers (Purchase Price added)
-      rows.add(['Name', 'Category', 'Opening Stock', 'Closing Stock', 'Purchase Price', 'Selling Price', 'Price Tier (A-Z)', 'SKU']);
+      Set<String> uniqueCategories = _allInventoryItems
+          .map((item) => item.category ?? '')
+          .where((cat) => cat.trim().isNotEmpty)
+          .toSet();
+      
+      String availableCategoriesStr = uniqueCategories.isNotEmpty ? uniqueCategories.join(', ') : 'General, Charger, Power Bank';
+
+      List<dynamic> headers = [
+        'Product Name (Mandatory & Unique)',
+        'SKU ID (Mandatory & Unique)',
+        'Category [Available: $availableCategoriesStr]',
+        'Purchase Price (₹)',
+        'Opening Stock',
+        'Closing Stock'
+      ];
+      
+      for (var tier in _priceCategories) {
+        headers.add('Price Tier $tier (₹)');
+      }
+      
+      rows.add(headers);
 
       if (_allInventoryItems.isNotEmpty) {
         for (var item in _allInventoryItems) {
-          rows.add([
+          List<dynamic> rowData = [
             item.itemName,
-            item.category ?? '',
+            item.sku ?? '',
+            item.category ?? 'General',
+            item.purchasePrice,
             item.openingStock ?? 0,
             item.stockQuantity,
-            item.purchasePrice,
-            item.priceA,
-            item.priceCategory ?? 'A',
-            item.sku ?? ''
-          ]);
+          ];
+          for (var tier in _priceCategories) {
+            if (tier == (item.priceCategory ?? 'A')) {
+              rowData.add(item.priceA);
+            } else {
+              rowData.add(0.0);
+            }
+          }
+          rows.add(rowData);
         }
       } else {
-        rows.add(['ORLIFE 85W Cable', 'Charger', 10, 50, 100, 150, 'A', 'CAB-85W']);
-        rows.add(['ORLIFE Power Bank', 'Power Bank', 5, 20, 650, 899, 'B', 'PB-10K']);
+        List<dynamic> sample1 = ['ORLIFE 85W Cable', 'CAB-85W', 'Charger', 100, 10, 50];
+        for (var tier in _priceCategories) {
+          sample1.add(tier == 'A' ? 150 : 0);
+        }
+        rows.add(sample1);
+
+        List<dynamic> sample2 = ['ORLIFE Power Bank', 'PB-10K', 'Power Bank', 650, 5, 20];
+        for (var tier in _priceCategories) {
+          sample2.add(tier == 'B' ? 899 : 0);
+        }
+        rows.add(sample2);
       }
 
       String csvData = const ListToCsvConverter().convert(rows);
 
       final output = await getTemporaryDirectory();
-      final file = File('${output.path}/inventory_template_with_purchase.csv');
+      final file = File('${output.path}/orlife_inventory_advanced_template.csv');
       await file.writeAsString(csvData);
 
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'Inventory CSV Template with Purchase Price & Tiers from ORLIFE ERP.',
+        text: 'Advanced Inventory CSV Template with Unique SKU/Name validations & A-Z Tiers from ORLIFE ERP.',
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -96,7 +131,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  // 📂 2. CSV File Import Function
+  // 📂 2. CSV File Import Function with Unique Validation
   Future<void> _importCsvFile() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -120,33 +155,54 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         }
 
         int successCount = 0;
+        int duplicateCount = 0;
+
         await DatabaseHelper.isar.writeTxn(() async {
-          // Headers: [Name, Category, Opening Stock, Closing Stock, Purchase Price, Selling Price, Price Tier (A-Z), SKU]
           for (int i = 1; i < fields.length; i++) {
             var row = fields[i];
             if (row.isNotEmpty && row[0].toString().trim().isNotEmpty) {
               String name = row[0].toString().trim();
-              String category = row.length > 1 ? row[1].toString().trim() : '';
-              double openingStock = row.length > 2 ? double.tryParse(row[2].toString()) ?? 0.0 : 0.0;
-              double closingStock = row.length > 3 ? double.tryParse(row[3].toString()) ?? 0.0 : 0.0;
-              double purchasePrice = row.length > 4 ? double.tryParse(row[4].toString()) ?? 0.0 : 0.0;
-              double price = row.length > 5 ? double.tryParse(row[5].toString()) ?? 0.0 : 0.0;
-              String priceCategory = row.length > 6 ? row[6].toString().trim().toUpperCase() : 'A';
-              String sku = row.length > 7 ? row[7].toString().trim() : '';
+              String sku = row.length > 1 ? row[1].toString().trim() : '';
 
-              if (!_priceCategories.contains(priceCategory)) {
-                priceCategory = 'A';
+              bool exists = _allInventoryItems.any((item) => 
+                item.itemName.toLowerCase() == name.toLowerCase() || 
+                (sku.isNotEmpty && item.sku != null && item.sku!.toLowerCase() == sku.toLowerCase())
+              );
+
+              if (exists) {
+                duplicateCount++;
+                continue;
+              }
+
+              String category = row.length > 2 ? row[2].toString().trim() : 'General';
+              double purchasePrice = row.length > 3 ? double.tryParse(row[3].toString()) ?? 0.0 : 0.0;
+              double openingStock = row.length > 4 ? double.tryParse(row[4].toString()) ?? 0.0 : 0.0;
+              double closingStock = row.length > 5 ? double.tryParse(row[5].toString()) ?? 0.0 : 0.0;
+
+              double priceA = row.length > 6 ? double.tryParse(row[6].toString()) ?? 0.0 : 0.0;
+              String selectedTier = 'A';
+
+              for (int t = 0; t < _priceCategories.length; t++) {
+                int colIdx = 6 + t;
+                if (row.length > colIdx) {
+                  double tierVal = double.tryParse(row[colIdx].toString()) ?? 0.0;
+                  if (tierVal > 0) {
+                    priceA = tierVal;
+                    selectedTier = _priceCategories[t];
+                    break;
+                  }
+                }
               }
 
               InventoryItem item = InventoryItem()
                 ..itemName = name
-                ..category = category
+                ..sku = sku
+                ..category = category.isEmpty ? 'General' : category
+                ..purchasePrice = purchasePrice
                 ..openingStock = openingStock
                 ..stockQuantity = closingStock
-                ..purchasePrice = purchasePrice
-                ..priceA = price
-                ..priceCategory = priceCategory
-                ..sku = sku
+                ..priceA = priceA
+                ..priceCategory = selectedTier
                 ..stockType = 'Fresh';
 
               await DatabaseHelper.isar.inventoryItems.put(item);
@@ -157,8 +213,14 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
         if (!mounted) return;
         _loadInventory();
+        
+        String msg = 'सफलतापूर्वक $successCount प्रोडक्ट्स इम्पोर्ट हो गए!';
+        if (duplicateCount > 0) {
+          msg += ' ($duplicateCount डुप्लीकेट प्रोडक्ट्स छोड़ दिए गए)';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('सफलतापूर्वक $successCount प्रोडक्ट्स इम्पोर्ट हो गए!'), backgroundColor: Colors.green),
+          SnackBar(content: Text(msg), backgroundColor: duplicateCount > 0 ? Colors.orange.shade800 : Colors.green),
         );
       }
     } catch (e) {
@@ -168,16 +230,29 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  // ➕ Add or Edit Product Dialog
+  // ➕ Add or Edit Product Dialog (Updated with All Advanced Fields including Category Dropdown & A-Z Tiers)
   void _showAddEditProductDialog({InventoryItem? itemToEdit}) {
     final TextEditingController nameController = TextEditingController(text: itemToEdit?.itemName ?? '');
     final TextEditingController skuController = TextEditingController(text: itemToEdit?.sku ?? '');
-    final TextEditingController categoryController = TextEditingController(text: itemToEdit?.category ?? '');
     final TextEditingController openingStockController = TextEditingController(text: itemToEdit?.openingStock?.toString() ?? '0');
     final TextEditingController qtyController = TextEditingController(text: itemToEdit?.stockQuantity.toString() ?? '0');
     final TextEditingController purchasePriceController = TextEditingController(text: itemToEdit?.purchasePrice.toString() ?? '0');
-    final TextEditingController priceController = TextEditingController(text: itemToEdit?.priceA.toString() ?? '0');
     
+    // Dynamic price controller for the selected tier
+    final TextEditingController tierPriceController = TextEditingController(text: itemToEdit?.priceA.toString() ?? '0');
+    
+    // Get unique categories for dropdown suggestion
+    Set<String> uniqueCategories = _allInventoryItems
+        .map((item) => item.category ?? '')
+        .where((cat) => cat.trim().isNotEmpty)
+        .toSet();
+    if (uniqueCategories.isEmpty) uniqueCategories = {'General', 'Charger', 'Power Bank'};
+
+    String selectedCategory = itemToEdit?.category ?? uniqueCategories.first;
+    if (!uniqueCategories.contains(selectedCategory)) {
+      uniqueCategories.add(selectedCategory);
+    }
+
     String stockType = itemToEdit?.stockType ?? 'Fresh';
     String priceCategory = itemToEdit?.priceCategory ?? 'A';
 
@@ -186,92 +261,100 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text(itemToEdit == null ? 'Add New Inventory Item' : 'Edit Item Details'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Item Name *', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: skuController,
-                  decoration: const InputDecoration(labelText: 'SKU / Model Code', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: categoryController,
-                  decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: openingStockController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Opening Stock', border: OutlineInputBorder()),
+          content: SizedBox(
+            width: 400,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'Product Name (Mandatory & Unique) *', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: skuController,
+                    decoration: const InputDecoration(labelText: 'SKU ID (Mandatory & Unique) *', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  // 🔥 Category Dropdown with saved categories
+                  DropdownButtonFormField<String>(
+                    value: selectedCategory,
+                    items: uniqueCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                    onChanged: (val) => setDialogState(() => selectedCategory = val ?? 'General'),
+                    decoration: const InputDecoration(labelText: 'Product Category', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: openingStockController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Opening Stock', border: OutlineInputBorder()),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: qtyController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Closing Qty *', border: OutlineInputBorder()),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: qtyController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Closing Qty *', border: OutlineInputBorder()),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: purchasePriceController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder()),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: purchasePriceController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<String>(
+                          value: _priceCategories.contains(priceCategory) ? priceCategory : 'A',
+                          items: _priceCategories.map((cat) => DropdownMenuItem(value: cat, child: Text('Tier $cat'))).toList(),
+                          onChanged: (val) => setDialogState(() => priceCategory = val ?? 'A'),
+                          decoration: const InputDecoration(labelText: 'Price Tier', border: OutlineInputBorder()),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: priceController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Selling Price (₹) *', border: OutlineInputBorder()),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: tierPriceController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(labelText: 'Tier $priceCategory Price (₹) *', border: const OutlineInputBorder()),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: _priceCategories.contains(priceCategory) ? priceCategory : 'A',
-                  items: _priceCategories.map((cat) => DropdownMenuItem(value: cat, child: Text('Tier $cat'))).toList(),
-                  onChanged: (val) => setDialogState(() => priceCategory = val!),
-                  decoration: const InputDecoration(labelText: 'Price Tier (A-Z)', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Text('Stock Type: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 10),
-                    ChoiceChip(
-                      label: const Text('Fresh'),
-                      selected: stockType == 'Fresh',
-                      selectedColor: Colors.green.shade100,
-                      onSelected: (val) => setDialogState(() => stockType = 'Fresh'),
-                    ),
-                    const SizedBox(width: 8),
-                    ChoiceChip(
-                      label: const Text('Replacement'),
-                      selected: stockType == 'Replacement',
-                      selectedColor: Colors.orange.shade100,
-                      onSelected: (val) => setDialogState(() => stockType = 'Replacement'),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Text('Stock Type: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 10),
+                      ChoiceChip(
+                        label: const Text('Fresh'),
+                        selected: stockType == 'Fresh',
+                        selectedColor: Colors.green.shade100,
+                        onSelected: (val) => setDialogState(() => stockType = 'Fresh'),
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('Replacement'),
+                        selected: stockType == 'Replacement',
+                        selectedColor: Colors.orange.shade100,
+                        onSelected: (val) => setDialogState(() => stockType = 'Replacement'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -283,9 +366,25 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
               onPressed: () async {
                 String name = nameController.text.trim();
-                if (name.isEmpty) {
+                String sku = skuController.text.trim();
+
+                if (name.isEmpty || sku.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Kripya Item ka Naam bharein!'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('Product Name aur SKU ID dono mandatory hain!'), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+
+                // Check uniqueness on manual save (if adding new or changing name/sku)
+                bool isDuplicate = _allInventoryItems.any((item) => 
+                  (itemToEdit == null || item.id != itemToEdit.id) && 
+                  (item.itemName.toLowerCase() == name.toLowerCase() || 
+                   (sku.isNotEmpty && item.sku != null && item.sku!.toLowerCase() == sku.toLowerCase()))
+                );
+
+                if (isDuplicate) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है! Unique value bharein.'), backgroundColor: Colors.red),
                   );
                   return;
                 }
@@ -293,14 +392,14 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 await DatabaseHelper.isar.writeTxn(() async {
                   InventoryItem item = itemToEdit ?? InventoryItem();
                   item.itemName = name;
-                  item.sku = skuController.text.trim();
-                  item.category = categoryController.text.trim();
+                  item.sku = sku;
+                  item.category = selectedCategory;
                   item.openingStock = double.tryParse(openingStockController.text) ?? 0.0;
                   item.stockQuantity = double.tryParse(qtyController.text) ?? 0.0;
                   item.purchasePrice = double.tryParse(purchasePriceController.text) ?? 0.0;
-                  item.priceA = double.tryParse(priceController.text) ?? 0.0;
-                  item.stockType = stockType;
+                  item.priceA = double.tryParse(tierPriceController.text) ?? 0.0;
                   item.priceCategory = priceCategory;
+                  item.stockType = stockType;
 
                   await DatabaseHelper.isar.inventoryItems.put(item);
                 });
@@ -313,140 +412,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 );
               },
               child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // 📦 Bulk Entry Dialog Feature
-  void _showBulkEntryDialog() {
-    final List<Map<String, dynamic>> bulkRows = [
-      {'name': TextEditingController(), 'category': TextEditingController(), 'qty': TextEditingController(text: '1'), 'purPrice': TextEditingController(text: '0'), 'price': TextEditingController(text: '0')}
-    ];
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Bulk Product Entry'),
-          content: SizedBox(
-            width: 600,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Ek sath kai products add karein:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  const SizedBox(height: 10),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: bulkRows.length,
-                    itemBuilder: (context, index) {
-                      final row = bulkRows[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: TextField(
-                                controller: row['name'],
-                                decoration: InputDecoration(labelText: 'Item ${index + 1} Name', border: const OutlineInputBorder(), isDense: true),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              flex: 1,
-                              child: TextField(
-                                controller: row['qty'],
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              flex: 1,
-                              child: TextField(
-                                controller: row['purPrice'],
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'Pur. ₹', border: OutlineInputBorder(), isDense: true),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              flex: 1,
-                              child: TextField(
-                                controller: row['price'],
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'Sell ₹', border: OutlineInputBorder(), isDense: true),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                              onPressed: () {
-                                setDialogState(() {
-                                  bulkRows.removeAt(index);
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.teal),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Another Row'),
-                    onPressed: () {
-                      setDialogState(() {
-                        bulkRows.add({
-                          'name': TextEditingController(),
-                          'category': TextEditingController(),
-                          'qty': TextEditingController(text: '1'),
-                          'purPrice': TextEditingController(text: '0'),
-                          'price': TextEditingController(text: '0'),
-                        });
-                      });
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-              onPressed: () async {
-                await DatabaseHelper.isar.writeTxn(() async {
-                  for (var row in bulkRows) {
-                    String name = (row['name'] as TextEditingController).text.trim();
-                    if (name.isNotEmpty) {
-                      InventoryItem item = InventoryItem()
-                        ..itemName = name
-                        ..category = (row['category'] as TextEditingController).text.trim()
-                        ..stockQuantity = double.tryParse((row['qty'] as TextEditingController).text) ?? 0.0
-                        ..purchasePrice = double.tryParse((row['purPrice'] as TextEditingController).text) ?? 0.0
-                        ..priceA = double.tryParse((row['price'] as TextEditingController).text) ?? 0.0
-                        ..stockType = 'Fresh'
-                        ..priceCategory = 'A';
-                      await DatabaseHelper.isar.inventoryItems.put(item);
-                    }
-                  }
-                });
-
-                if (!mounted) return;
-                Navigator.pop(context);
-                _loadInventory();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Bulk Inventory Successfully Saved!'), backgroundColor: Colors.green),
-                );
-              },
-              child: const Text('Save All'),
             ),
           ],
         ),
@@ -468,21 +433,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: _downloadTemplateFile,
-            tooltip: 'Download CSV Template',
-          ),
-          IconButton(
-            icon: const Icon(Icons.file_upload),
-            onPressed: _importCsvFile,
-            tooltip: 'Upload CSV File (Bulk Update)',
-          ),
-          IconButton(
-            icon: const Icon(Icons.playlist_add),
-            onPressed: _showBulkEntryDialog,
-            tooltip: 'Bulk Manual Entry',
-          ),
           IconButton(
             icon: const Icon(Icons.add_box),
             onPressed: () => _showAddEditProductDialog(),
@@ -531,6 +481,17 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                     },
                   ),
                 ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.download, color: Colors.teal),
+                  onPressed: _downloadTemplateFile,
+                  tooltip: 'Download Advanced CSV Template',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.file_upload, color: Colors.teal),
+                  onPressed: _importCsvFile,
+                  tooltip: 'Upload CSV File (Bulk Update)',
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -553,7 +514,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                       itemCount: _filteredItems.length,
                       itemBuilder: (context, index) {
                         final item = _filteredItems[index];
-                        bool isReplacement = item.stockType == 'Replacement';
 
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 3),
