@@ -1,4 +1,4 @@
-import 'isar.dart';
+import 'package:isar/isar.dart';
 
 part 'order_model.g.dart';
 
