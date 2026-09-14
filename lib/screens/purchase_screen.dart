@@ -23,8 +23,11 @@ class PurchaseScreen extends StatefulWidget {
 
 class _PurchaseScreenState extends State<PurchaseScreen> {
   final TextEditingController _supplierController = TextEditingController();
-  final TextEditingController _billNoController = TextEditingController(text: 'PUR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
+  // 🔥 Bill No. अब खाली रखा गया है ताकि यूजर खुद टाइप कर सके
+  final TextEditingController _billNoController = TextEditingController(text: '');
   
+  DateTime _selectedDate = DateTime.now();
+
   List<String> _allAccounts = [];
   List<Product> _allProducts = [];
   
@@ -47,9 +50,147 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     });
   }
 
+  // ➕ Direct New Supplier/Account Create Dialog
+  void _showAddNewSupplierDialog() {
+    final TextEditingController newSupplierController = TextEditingController(text: _supplierController.text);
+    final TextEditingController phoneController = TextEditingController();
+    final TextEditingController addressController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Supplier / Vendor'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: newSupplierController,
+              decoration: const InputDecoration(labelText: 'Supplier Name *', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: addressController,
+              decoration: const InputDecoration(labelText: 'Address', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+            onPressed: () async {
+              String name = newSupplierController.text.trim();
+              if (name.isEmpty) return;
+
+              await DatabaseHelper.isar.writeTxn(() async {
+                final newAccount = Account()
+                  ..name = name
+                  ..phone = phoneController.text.trim()
+                  ..address = addressController.text.trim()
+                  ..type = 'Supplier';
+                await DatabaseHelper.isar.accounts.put(newAccount);
+              });
+
+              await _loadDropdownData();
+              setState(() {
+                _supplierController.text = name;
+              });
+
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Supplier "$name" successfully added!'), backgroundColor: Colors.green),
+              );
+            },
+            child: const Text('Save & Select'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ➕ Direct New Product Create Dialog
+  void _showAddNewProductDialog(BuildContext parentContext, Function(Product) onProductCreated) {
+    final TextEditingController prodNameController = TextEditingController();
+    final TextEditingController priceController = TextEditingController();
+    final TextEditingController stockController = TextEditingController(text: '10');
+
+    showDialog(
+      context: parentContext,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Product'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: prodNameController,
+              decoration: const InputDecoration(labelText: 'Product Name *', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: priceController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Purchase Price (₹) *', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: stockController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Initial Stock', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+            onPressed: () async {
+              String name = prodNameController.text.trim();
+              double price = double.tryParse(priceController.text) ?? 0.0;
+              int stock = int.tryParse(stockController.text) ?? 0;
+
+              if (name.isEmpty || price <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Kripya naam aur sahi price bharein!'), backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              final newProduct = Product()
+                ..name = name
+                ..sellingPrice = price * 1.2 
+                ..stock = stock;
+
+              await DatabaseHelper.isar.writeTxn(() async {
+                await DatabaseHelper.isar.products.put(newProduct);
+              });
+
+              await _loadDropdownData();
+              Navigator.pop(context);
+              onProductCreated(newProduct);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Product "$name" added successfully!'), backgroundColor: Colors.green),
+              );
+            },
+            child: const Text('Save & Select'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🛒 Add Item Dialog (Fixed to handle empty products list properly)
   void _addItemToCart() {
     if (_allProducts.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pehle inventory mein products add karein!')));
+      _showAddNewProductDialog(context, (newProd) {
+        _addItemToCart();
+      });
       return;
     }
 
@@ -60,40 +201,66 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Add Item to Purchase Bill'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<Product>(
-                value: selectedProduct,
-                items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
-                onChanged: (val) {
-                  selectedProduct = val!;
-                  priceController.text = selectedProduct.sellingPrice.toString();
-                },
-                decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder()),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Add Item to Purchase'),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(foregroundColor: Colors.blue.shade800),
+                    icon: const Icon(Icons.add_circle, size: 18),
+                    label: const Text('New Product'),
+                    onPressed: () {
+                      Navigator.pop(context); // Close current dialog
+                      _showAddNewProductDialog(context, (createdProduct) {
+                        setState(() {
+                          selectedProduct = createdProduct;
+                          priceController.text = createdProduct.sellingPrice.toString();
+                        });
+                        _addItemToCart(); // Re-open add item dialog with new product
+                      });
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder())),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () {
-                int q = int.tryParse(qtyController.text) ?? 1;
-                double p = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
-                setState(() {
-                  _cartItems.add({'name': selectedProduct.name, 'qty': q, 'price': p});
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('Add'),
-            ),
-          ],
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<Product>(
+                    value: _allProducts.contains(selectedProduct) ? selectedProduct : _allProducts.first,
+                    items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
+                    onChanged: (val) {
+                      setDialogState(() {
+                        selectedProduct = val!;
+                        priceController.text = selectedProduct.sellingPrice.toString();
+                      });
+                    },
+                    decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder())),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: () {
+                    int q = int.tryParse(qtyController.text) ?? 1;
+                    double p = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
+                    setState(() {
+                      _cartItems.add({'name': selectedProduct.name, 'qty': q, 'price': p});
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -103,10 +270,11 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  // 📄 Purchase Bill PDF & Print / Share Generator
   Future<void> _generateAndPrintOrShareBill({required bool isWhatsApp}) async {
     final supplierName = _supplierController.text.trim();
     if (supplierName.isEmpty || _cartItems.isEmpty) return;
+
+    final billNo = _billNoController.text.trim().isEmpty ? 'PUR-GEN' : _billNoController.text.trim();
 
     final pdf = pw.Document();
     pdf.addPage(
@@ -130,8 +298,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
                       pw.Text('PURCHASE BILL', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
-                      pw.Text('Bill No: ${_billNoController.text}'),
-                      pw.Text('Date: ${DateFormat('dd-MM-yyyy').format(DateTime.now())}'),
+                      pw.Text('Bill No: $billNo'),
+                      pw.Text('Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}'),
                     ],
                   ),
                 ],
@@ -178,9 +346,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
     if (isWhatsApp) {
       final output = await getTemporaryDirectory();
-      final file = File('${output.path}/Purchase_${_billNoController.text}.pdf');
+      final file = File('${output.path}/Purchase_$billNo.pdf');
       await file.writeAsBytes(await pdf.save());
-      await Share.shareXFiles([XFile(file.path)], text: 'Purchase Bill #${_billNoController.text} from ORLIFE. Total: ₹ $_grandTotal');
+      await Share.shareXFiles([XFile(file.path)], text: 'Purchase Bill #$billNo from ORLIFE. Total: ₹ $_grandTotal');
     } else {
       await Printing.layoutPdf(onLayout: (format) async => pdf.save());
     }
@@ -192,10 +360,12 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       return;
     }
 
+    final billNo = _billNoController.text.trim().isEmpty ? 'PUR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}' : _billNoController.text.trim();
+
     final txn = AccountingTransaction()
-      ..date = DateTime.now()
+      ..date = _selectedDate
       ..voucherType = 'Purchase'
-      ..voucherNumber = _billNoController.text
+      ..voucherNumber = billNo
       ..partyName = _supplierController.text.trim()
       ..cashOrBank = _paymentMode
       ..amount = _grandTotal
@@ -248,6 +418,41 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             Row(
               children: [
                 Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(color: Colors.grey.shade400),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    ),
+                    icon: const Icon(Icons.calendar_today, size: 16, color: Colors.blue),
+                    label: Text(
+                      'Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}',
+                      style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035),
+                      );
+                      if (picked != null && picked != _selectedDate) {
+                        setState(() => _selectedDate = picked);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 150,
+                  child: TextField(controller: _billNoController, decoration: const InputDecoration(labelText: 'Bill No (Optional)', border: OutlineInputBorder())),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
                   child: SearchableField(
                     label: 'Supplier / Vendor Name *',
                     items: _allAccounts,
@@ -255,10 +460,16 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     onSelected: (val) {},
                   ),
                 ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 150,
-                  child: TextField(controller: _billNoController, decoration: const InputDecoration(labelText: 'Bill No', border: OutlineInputBorder())),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                  ),
+                  icon: const Icon(Icons.person_add, size: 18),
+                  label: const Text('New'),
+                  onPressed: _showAddNewSupplierDialog,
                 ),
               ],
             ),
