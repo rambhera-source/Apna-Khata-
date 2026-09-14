@@ -14,14 +14,15 @@ dependencies:
   path_provider: ^2.1.2
   intl: ^0.18.1
   provider: ^6.1.1
-  excel: ^4.0.3        # 🔥 Excel read/write aur template generate karne ke liye
-  file_picker: ^8.0.0  # 🔥 File select aur save dialog ke liye
+  excel: ^4.0.3        # Excel read/write aur template generate karne ke liye
+  file_picker: ^8.0.0  # File select aur save dialog ke liye
+  csv: ^6.0.0          # 🔥 Inventory CSV template generate aur import karne ke liye add kiya gaya hai
   
-  # 🔥 PDF generation aur WhatsApp sharing ke liye
+  # PDF generation aur WhatsApp sharing ke liye
   pdf: ^3.10.4             
   printing: ^5.11.1        
   share_plus: ^7.2.1       
-  shared_preferences: ^2.2.3  # ✅ Home screen preferences aur module visibility save karne ke liye add kiya gaya hai
+  shared_preferences: ^2.2.3  # Home screen preferences aur module visibility save karne ke liye
 
 dev_dependencies:
   flutter_test:
