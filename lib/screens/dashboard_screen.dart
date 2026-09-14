@@ -68,146 +68,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GridView.count(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics,
-                    childAspectRatio: 1.5,
-                    children: [
-                      // Card 1: Total Parties
-                      InkWell(
-                        onTap: null,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.1),
-                            border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Icon(Icons.people, color: Colors.blue, size: 28),
-                                  Text('$_totalParties', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue)),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text('Total Parties', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      // Card 2: Products
-                      InkWell(
-                        onTap: null,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.1),
-                            border: Border.all(color: Colors.green.withOpacity(0.3)),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Icon(Icons.inventory, color: Colors.green, size: 28),
-                                  Text('$_totalProducts', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text('Products / Stock', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      // Card 3: Pending Orders
-                      InkWell(
-                        onTap: null,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.1),
-                            border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Icon(Icons.shopping_cart_checkout, color: Colors.orange, size: 28),
-                                  Text('$_pendingOrdersCount', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text('Pending Orders', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      // Card 4: Quick Billing
-                      InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const OrdersManagementScreen()),
-                          ).then((_) => _loadDashboardData());
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.purple.withOpacity(0.1),
-                            border: Border.all(color: Colors.purple.withOpacity(0.3)),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Icon(Icons.receipt_long, color: Colors.purple, size: 28),
-                                  const Text('New', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.purple)),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text('Quick Billing', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
                   Expanded(
                     child: ListView(
                       children: [
+                        const SizedBox(height: 10),
+                        // Quick Stats & Billing Card
+                        Card(
+                          elevation: 3,
+                          color: Colors.amber.shade50,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Overview Summary', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.brown)),
+                                const SizedBox(height: 10),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                  children: [
+                                    _buildInfoItem('Parties', '$_totalParties', Colors.blue),
+                                    _buildInfoItem('Products', '$_totalProducts', Colors.green),
+                                    _buildInfoItem('Pending', '$_pendingOrdersCount', Colors.orange),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 10),
                         ListTile(
-                          leading: const Icon(Icons.shopping_cart, color: Colors.amber),
-                          title: const Text('Orders & Sales Management', style: TextStyle(fontWeight: FontWeight.w600)),
+                          leading: const Icon(Icons.shopping_cart, color: Colors.amber, size: 28),
+                          title: const Text('Orders & Sales Management', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
                           subtitle: const Text('Book new orders, view history, or manage items'),
                           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                           tileColor: Colors.grey.shade100,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           onTap: () {
                             Navigator.push(
                               context,
@@ -221,6 +119,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildInfoItem(String title, String count, Color color) {
+    return Column(
+      children: [
+        Text(count, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+        const SizedBox(height: 4),
+        Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+      ],
     );
   }
 }
