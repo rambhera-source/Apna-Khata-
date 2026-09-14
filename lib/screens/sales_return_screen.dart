@@ -34,10 +34,13 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   List<String> _allAccounts = [];
   List<Product> _allProducts = [];
   
-  // Return cart items list: { 'name': String, 'qty': int, 'price': double }
+  // Return cart items list: { 'name': String, 'qty': int, 'price': double, 'stockType': String }
   final List<Map<String, dynamic>> _cartItems = [];
   String _refundMode = 'Cash';
   final List<String> _refundModes = ['Cash', 'Bank / UPI', 'Adjust in Ledger'];
+
+  // 🔥 Default Global Stock Type for Sales Return ('Replacement' default as requested)
+  String _globalStockType = 'Replacement';
 
   // 🔥 GST Settings State Variables
   bool _isGstActive = false;
@@ -162,6 +165,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                         'name': selectedProduct.name,
                         'qty': q,
                         'price': pr,
+                        'stockType': _globalStockType, // 👈 Attached current return stock type
                       });
                     });
                     Navigator.pop(context);
@@ -221,6 +225,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                       pw.Text(_isGstActive ? 'CREDIT NOTE (GST)' : 'SALES RETURN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
                       pw.Text('Return No: ${_returnNoController.text}'),
                       pw.Text('Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}'),
+                      pw.Text('Stock Type: $_globalStockType', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ],
                   ),
                 ],
@@ -238,7 +243,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                   double total = (item['qty'] as int) * (item['price'] as double);
                   return [
                     '${index + 1}',
-                    item['name'],
+                    '${item['name']} (${item['stockType']})',
                     '${item['qty']}',
                     '${item['price']}',
                     '${total.toStringAsFixed(2)}',
@@ -288,7 +293,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     }
   }
 
-  // 💾 Save Transaction
+  // 💾 Save Transaction & Restore Stock
   Future<void> _saveSalesReturnTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
@@ -303,12 +308,13 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
         ..partyName = _partyController.text.trim()
         ..cashOrBank = _refundMode
         ..amount = _grandTotal
-        ..notes = _isGstActive ? 'GST Sales Return generated via ORLIFE ERP' : 'Sales Return generated via ORLIFE ERP';
+        ..notes = _isGstActive ? 'GST Sales Return ([$_globalStockType Stock])' : 'Sales Return ([$_globalStockType Stock])';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
       for (var cartItem in _cartItems) {
         String prodName = cartItem['name'];
         int returnedQty = cartItem['qty'];
+        String itemStockType = cartItem['stockType'] ?? 'Replacement';
 
         final product = await DatabaseHelper.isar.products
             .filter()
@@ -393,12 +399,58 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                     },
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 SizedBox(
-                  width: 150,
+                  width: 130,
                   child: TextField(
                     controller: _returnNoController,
                     decoration: const InputDecoration(labelText: 'Return No', border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 🔥 Stock Type Quick Toggle Button for Sales Return (Replacement Default)
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _globalStockType = _globalStockType == 'Replacement' ? 'Fresh' : 'Replacement';
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Return Stock Type switched to: $_globalStockType'),
+                        duration: const Duration(milliseconds: 800),
+                        backgroundColor: _globalStockType == 'Fresh' ? Colors.green.shade700 : Colors.orange.shade800,
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _globalStockType == 'Replacement' ? Colors.orange.shade50 : Colors.green.shade50,
+                      border: Border.all(
+                        color: _globalStockType == 'Replacement' ? Colors.orange : Colors.green,
+                        width: 1.5,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _globalStockType == 'Replacement' ? Icons.swap_horiz : Icons.check_circle,
+                          size: 18,
+                          color: _globalStockType == 'Replacement' ? Colors.orange.shade900 : Colors.green.shade800,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _globalStockType,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: _globalStockType == 'Replacement' ? Colors.orange.shade900 : Colors.green.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -453,9 +505,30 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                       itemBuilder: (context, index) {
                         final item = _cartItems[index];
                         double total = (item['qty'] as int) * (item['price'] as double);
+                        bool isFresh = item['stockType'] == 'Fresh';
                         return Card(
                           child: ListTile(
-                            title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                            title: Row(
+                              children: [
+                                Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isFresh ? Colors.green.shade100 : Colors.orange.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    item['stockType'],
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isFresh ? Colors.green.shade800 : Colors.orange.shade900,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                             subtitle: Text('Qty: ${item['qty']} | Price: ₹ ${item['price']}'),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
