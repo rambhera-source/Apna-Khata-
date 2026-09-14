@@ -92,7 +92,7 @@ class _ProductionTabState extends State<ProductionTab> {
     setState(() { _isLoadingBOM = true; });
     _currentBOMList = await DatabaseHelper.isar.billOfMaterials
         .filter()
-        .finishedProductNameEqualTo(productName)
+        .finishedProductEqualTo(productName)
         .findAll();
     setState(() { _isLoadingBOM = false; });
   }
@@ -102,10 +102,10 @@ class _ProductionTabState extends State<ProductionTab> {
     double materialCostSum = 0;
     for (var bom in _currentBOMList) {
       InventoryItem? rawMaterial = _allProducts.firstWhere(
-        (p) => p.itemName.toLowerCase() == bom.rawMaterialName.toLowerCase(),
+        (p) => p.itemName.toLowerCase() == bom.rawMaterial.toLowerCase(),
         orElse: () => InventoryItem()..priceA = 0.0,
       );
-      materialCostSum += (bom.quantityRequired * productionQty) * rawMaterial.priceA;
+      materialCostSum += (bom.quantity * productionQty) * rawMaterial.priceA;
     }
     return materialCostSum;
   }
@@ -143,16 +143,16 @@ class _ProductionTabState extends State<ProductionTab> {
 
     // Stock sufficiency check
     for (var bomItem in _currentBOMList) {
-      double requiredTotalQty = bomItem.quantityRequired * productionQty;
+      double requiredTotalQty = bomItem.quantity * productionQty;
       InventoryItem? rawMaterial = _allProducts.firstWhere(
-        (p) => p.itemName.toLowerCase() == bomItem.rawMaterialName.toLowerCase(),
+        (p) => p.itemName.toLowerCase() == bomItem.rawMaterial.toLowerCase(),
         orElse: () => InventoryItem()..stockQuantity = -1,
       );
 
       if (rawMaterial.stockQuantity == -1 || rawMaterial.stockQuantity < requiredTotalQty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Stock Kam Hai! "${bomItem.rawMaterialName}" ka stock insufficient hai.'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Stock Kam Hai! "${bomItem.rawMaterial}" ka stock insufficient hai.'), backgroundColor: Colors.red),
         );
         return;
       }
@@ -162,9 +162,9 @@ class _ProductionTabState extends State<ProductionTab> {
 
     await DatabaseHelper.isar.writeTxn(() async {
       for (var bomItem in _currentBOMList) {
-        double requiredTotalQty = bomItem.quantityRequired * productionQty;
+        double requiredTotalQty = bomItem.quantity * productionQty;
         InventoryItem rawMaterial = _allProducts.firstWhere(
-          (p) => p.itemName.toLowerCase() == bomItem.rawMaterialName.toLowerCase(),
+          (p) => p.itemName.toLowerCase() == bomItem.rawMaterial.toLowerCase(),
         );
         rawMaterial.stockQuantity -= requiredTotalQty;
         if (rawMaterial.stockQuantity < 0) rawMaterial.stockQuantity = 0;
@@ -277,10 +277,10 @@ class _ProductionTabState extends State<ProductionTab> {
                         itemBuilder: (context, index) {
                           final bom = _currentBOMList[index];
                           double productionQty = double.tryParse(_qtyController.text) ?? 1.0;
-                          double totalNeeded = bom.quantityRequired * productionQty;
+                          double totalNeeded = bom.quantity * productionQty;
                           
                           InventoryItem? rawMaterial = _allProducts.firstWhere(
-                            (p) => p.itemName.toLowerCase() == bom.rawMaterialName.toLowerCase(),
+                            (p) => p.itemName.toLowerCase() == bom.rawMaterial.toLowerCase(),
                             orElse: () => InventoryItem()..priceA = 0.0,
                           );
                           double lineCost = totalNeeded * rawMaterial.priceA;
@@ -289,7 +289,7 @@ class _ProductionTabState extends State<ProductionTab> {
                             margin: const EdgeInsets.symmetric(vertical: 2),
                             child: ListTile(
                               dense: true,
-                              title: Text(bom.rawMaterialName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              title: Text(bom.rawMaterial, style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('Req: $totalNeeded ${bom.unit} | Rate: ₹${rawMaterial.priceA}'),
                               trailing: Text('₹${lineCost.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 13)),
                             ),
@@ -383,7 +383,7 @@ class _BomTabState extends State<BomTab> {
     if (productName.trim().isEmpty) return;
     _currentProductBomList = await DatabaseHelper.isar.billOfMaterials
         .filter()
-        .finishedProductNameEqualTo(productName.trim())
+        .finishedProductEqualTo(productName.trim())
         .findAll();
     setState(() {});
   }
@@ -404,21 +404,21 @@ class _BomTabState extends State<BomTab> {
 
     final existingBom = await DatabaseHelper.isar.billOfMaterials
         .filter()
-        .finishedProductNameEqualTo(product)
+        .finishedProductEqualTo(product)
         .and()
-        .rawMaterialNameEqualTo(material)
+        .rawMaterialEqualTo(material)
         .findFirst();
 
     await DatabaseHelper.isar.writeTxn(() async {
       if (existingBom != null) {
-        existingBom.quantityRequired += qty;
-        existingBom.unit = unit; // Unit update agar change hui ho
+        existingBom.quantity += qty;
+        existingBom.unit = unit;
         await DatabaseHelper.isar.billOfMaterials.put(existingBom);
       } else {
         final bom = BillOfMaterials()
-          ..finishedProductName = product
-          ..rawMaterialName = material
-          ..quantityRequired = qty
+          ..finishedProduct = product
+          ..rawMaterial = material
+          ..quantity = qty
           ..unit = unit;
         await DatabaseHelper.isar.billOfMaterials.put(bom);
       }
@@ -426,7 +426,7 @@ class _BomTabState extends State<BomTab> {
 
     _materialController.clear();
     _qtyController.text = '1';
-    _unitController.clear(); // Unit controller bhi clear ho jayega
+    _unitController.clear();
     await _loadBomForSelectedProduct(product);
 
     if (!mounted) return;
@@ -450,10 +450,10 @@ class _BomTabState extends State<BomTab> {
     double totalCost = 0;
     for (var bom in _currentProductBomList) {
       InventoryItem? rawItem = _allProducts.firstWhere(
-        (p) => p.itemName.toLowerCase() == bom.rawMaterialName.toLowerCase(),
+        (p) => p.itemName.toLowerCase() == bom.rawMaterial.toLowerCase(),
         orElse: () => InventoryItem()..priceA = 0.0,
       );
-      totalCost += bom.quantityRequired * rawItem.priceA;
+      totalCost += bom.quantity * rawItem.priceA;
     }
     return totalCost;
   }
@@ -566,24 +566,24 @@ class _BomTabState extends State<BomTab> {
                     itemBuilder: (context, index) {
                       final bom = _currentProductBomList[index];
                       InventoryItem? rawItem = _allProducts.firstWhere(
-                        (p) => p.itemName.toLowerCase() == bom.rawMaterialName.toLowerCase(),
+                        (p) => p.itemName.toLowerCase() == bom.rawMaterial.toLowerCase(),
                         orElse: () => InventoryItem()..priceA = 0.0,
                       );
-                      double lineCost = bom.quantityRequired * rawItem.priceA;
+                      double lineCost = bom.quantity * rawItem.priceA;
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 3),
                         child: ListTile(
                           dense: true,
-                          title: Text(bom.rawMaterialName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('Required: ${bom.quantityRequired} ${bom.unit} | Unit Rate: ₹${rawItem.priceA}'),
+                          title: Text(bom.rawMaterial, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('Required: ${bom.quantity} ${bom.unit} | Unit Rate: ₹${rawItem.priceA}'),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text('₹${lineCost.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 13)),
                               IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                                onPressed: () => _deleteBomItem(bom.id, bom.finishedProductName),
+                                onPressed: () => _deleteBomItem(bom.id, bom.finishedProduct),
                               ),
                             ],
                           ),
