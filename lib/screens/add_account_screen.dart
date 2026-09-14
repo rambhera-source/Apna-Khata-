@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../database/database_helper.dart';
-import '../models/party.dart'; // ✅ Party model import kiya gaya hai
+import '../models/account.dart'; // ✅ Correct Account Model
 
 class AddAccountScreen extends StatefulWidget {
   const AddAccountScreen({super.key});
@@ -139,12 +139,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       return;
     }
 
-    final existingParty = await DatabaseHelper.isar.parties
+    final existingAccount = await DatabaseHelper.isar.accounts
         .filter()
         .nameEqualTo(name, caseSensitive: false)
         .findFirst();
 
-    if (existingParty != null) {
+    if (existingAccount != null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: "$name" naam ka account pehle se bana hua hai!'), backgroundColor: Colors.red),
@@ -152,7 +152,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       return;
     }
 
-    final newParty = Party()
+    final newAccount = Account()
       ..name = name
       ..groupCategory = _groupCategory
       ..phone = phone.isEmpty ? null : phone
@@ -170,7 +170,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       ..loginPassword = password.isEmpty ? null : password;
 
     await DatabaseHelper.isar.writeTxn(() async {
-      await DatabaseHelper.isar.parties.put(newParty);
+      await DatabaseHelper.isar.accounts.put(newAccount);
     });
 
     if (!mounted) return;
@@ -277,7 +277,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               ),
               const SizedBox(height: 14),
 
-              // 4. Address & Price Tier (Sirf Parties ke liye)
+              // 4. Address & Price Tier
               if (isParty) ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -399,7 +399,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 6. Credit Control (Sirf Debtors ke liye)
+              // 6. Credit Control
               if (_groupCategory == 'Sundry Debtor') ...[
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -459,7 +459,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 const SizedBox(height: 16),
               ],
 
-              // 7. 🔥 CLIENT PORTAL LOGIN SETUP SECTION (For Parties)
+              // 7. 🔥 CLIENT PORTAL LOGIN SETUP SECTION
               if (isParty) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
