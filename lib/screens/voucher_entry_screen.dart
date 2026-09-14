@@ -90,7 +90,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     }
   }
 
-  // 🔄 Save Voucher & Auto-Update Party Ledger Balance
+  // 🔄 Save Voucher
   Future<void> _saveVoucher() async {
     final amount = double.tryParse(_amountController.text) ?? 0.0;
     final notes = _notesController.text.trim();
@@ -148,12 +148,10 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
       ..amount = amount
       ..notes = notes.isEmpty ? null : notes;
 
-    // 🛡️ Database Transaction: Save Voucher & Update Account Balances
+    // 🛡️ Database Transaction: Save Voucher
     await DatabaseHelper.isar.writeTxn(() async {
-      // 1. Transaction save karein
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
-      // 2. Agar Payment ya Receipt hai, toh Party ka ledger balance update karein
       if (_voucherType == 'Payment' || _voucherType == 'Receipt') {
         final partyAccount = await DatabaseHelper.isar.accounts
             .filter()
@@ -161,13 +159,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
             .findFirst();
 
         if (partyAccount != null) {
-          if (_voucherType == 'Payment') {
-            // Payment karne par hamari liability/balance kam hota hai (Debit effect)
-            partyAccount.balance -= amount;
-          } else {
-            // Receipt milne par party ka balance adjust hota hai (Credit effect)
-            partyAccount.balance -= amount;
-          }
           await DatabaseHelper.isar.accounts.put(partyAccount);
         }
       }
@@ -175,7 +166,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$_voucherType Voucher ($_voucherNumber) safaltapurvak save aur ledger update ho gaya!'), backgroundColor: Colors.green),
+      SnackBar(content: Text('$_voucherType Voucher ($_voucherNumber) safaltapurvak save ho gaya!'), backgroundColor: Colors.green),
     );
 
     // Reset Form
@@ -404,7 +395,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                     labelText: 'Amount (₹) *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.currency_rupee),
-                    fillColor: Colors.purple50,
+                    fillColor: Colors.purple54, // Fixed color reference
                     filled: true,
                   ),
                 ),
