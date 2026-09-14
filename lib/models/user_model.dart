@@ -12,7 +12,20 @@ class UserAccount {
   late String name;
   late String pin;
   
-  // ✅ Default values set kar di gayi hain taaki uninitialized error na aaye
+  // ✅ Role & Status
   String role = 'Staff'; // 'Admin' ya 'Staff'
-  bool isApproved = false; // false = Pending, true = Approved
+  bool isApproved = false; // Admin approval status
+
+  // 🏭 Business Type (Manufacturing vs Wholesaler / Retailer)
+  String businessType = 'Wholesaler / Retailer'; 
+
+  // 📦 Subscription & Validity Details
+  String subscriptionPlan = 'Demo Plan';
+  String validityDate = '2027-12-31';
+
+  // 🔒 Module-wise Feature Permissions
+  bool canManageOrders = true;
+  bool canManageParties = true;
+  bool canManageInventory = true;
+  bool canViewReports = true;
 }
