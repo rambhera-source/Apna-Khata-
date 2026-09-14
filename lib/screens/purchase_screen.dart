@@ -55,7 +55,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
     Product selectedProduct = _allProducts.first;
     final TextEditingController qtyController = TextEditingController(text: '1');
-    final TextEditingController priceController = TextEditingController(text: selectedProduct.purchasePrice.toString());
+    final TextEditingController priceController = TextEditingController(text: selectedProduct.priceA.toString());
 
     showDialog(
       context: context,
@@ -70,14 +70,14 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
                 onChanged: (val) {
                   selectedProduct = val!;
-                  priceController.text = selectedProduct.purchasePrice.toString();
+                  priceController.text = selectedProduct.priceA.toString();
                 },
-                decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder(), isDense: true),
+                decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 12),
-              TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder(), isDense: true)),
+              TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder())),
               const SizedBox(height: 12),
-              TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder(), isDense: true)),
+              TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder())),
             ],
           ),
           actions: [
@@ -85,7 +85,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             ElevatedButton(
               onPressed: () {
                 int q = int.tryParse(qtyController.text) ?? 1;
-                double p = double.tryParse(priceController.text) ?? selectedProduct.purchasePrice;
+                double p = double.tryParse(priceController.text) ?? selectedProduct.priceA;
                 setState(() {
                   _cartItems.add({'name': selectedProduct.name, 'qty': q, 'price': p});
                 });
@@ -158,7 +158,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 mainAxisAlignment: pw.MainAxisAlignment.end,
                 children: [
                   pw.Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const pw.EdgeInsets.all(10),
                     decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.blue), borderRadius: pw.BorderRadius.circular(4)),
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
@@ -205,6 +205,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       await DatabaseHelper.isar.accountingTransactions.put(txn);
     });
 
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -257,7 +258,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 const SizedBox(width: 12),
                 SizedBox(
                   width: 150,
-                  child: TextField(controller: _billNoController, decoration: const InputDecoration(labelText: 'Bill No', border: OutlineInputBorder(), isDense: true)),
+                  child: TextField(controller: _billNoController, decoration: const InputDecoration(labelText: 'Bill No', border: OutlineInputBorder())),
                 ),
               ],
             ),
@@ -309,7 +310,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     value: _paymentMode,
                     items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
                     onChanged: (val) => setState(() => _paymentMode = val!),
-                    decoration: const InputDecoration(labelText: 'Payment Mode', border: OutlineInputBorder(), isDense: true),
+                    decoration: const InputDecoration(labelText: 'Payment Mode', border: OutlineInputBorder()),
                   ),
                 ),
                 Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
@@ -319,9 +320,11 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             SizedBox(
               width: double.infinity,
               height: 48,
-              child: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
-              onPressed: _savePurchaseTransaction,
-              child: const Text('Save & Generate Bill', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+                onPressed: _savePurchaseTransaction,
+                child: const Text('Save & Generate Bill', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
             ),
           ],
         ),
