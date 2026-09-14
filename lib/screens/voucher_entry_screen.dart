@@ -14,13 +14,10 @@ class VoucherEntryScreen extends StatefulWidget {
 }
 
 class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
-  // Voucher Type: 'Payment', 'Receipt', 'Journal'
   String _voucherType = 'Payment';
-
   DateTime _selectedDate = DateTime.now();
   String _voucherNumber = '';
 
-  // Controllers & FocusNodes for Enter Key Flow
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _debitController = TextEditingController();
   final TextEditingController _creditController = TextEditingController();
@@ -31,7 +28,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
   final FocusNode _modeFocusNode = FocusNode();
   final FocusNode _notesFocusNode = FocusNode();
 
-  // Mode of Payment & Options
   String _paymentMode = 'Cash';
   final List<String> _paymentModes = [
     'Cash', 
@@ -41,7 +37,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     'Third Party Gateway'
   ];
 
-  // Sub-Selections
   String _selectedBank = 'HDFC Bank A/c';
   final List<String> _bankList = ['HDFC Bank A/c', 'IDFC First Bank A/c', 'Kotak Bank A/c', 'SBI Current A/c'];
 
@@ -90,7 +85,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     }
   }
 
-  // 🔄 Save Voucher
   Future<void> _saveVoucher() async {
     final amount = double.tryParse(_amountController.text) ?? 0.0;
     final notes = _notesController.text.trim();
@@ -148,7 +142,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
       ..amount = amount
       ..notes = notes.isEmpty ? null : notes;
 
-    // 🛡️ Database Transaction: Save Voucher
     await DatabaseHelper.isar.writeTxn(() async {
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
@@ -169,7 +162,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
       SnackBar(content: Text('$_voucherType Voucher ($_voucherNumber) safaltapurvak save ho gaya!'), backgroundColor: Colors.green),
     );
 
-    // Reset Form
     _partyController.clear();
     _debitController.clear();
     _creditController.clear();
@@ -211,7 +203,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Voucher Type Selector
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
@@ -248,7 +239,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 2. Date & Voucher Number Row
               Row(
                 children: [
                   Expanded(
@@ -286,7 +276,6 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 3. Conditional Fields
               if (_voucherType == 'Payment' || _voucherType == 'Receipt') ...[
                 SearchableField(
                   label: (_voucherType == 'Payment') ? 'Party Name (Paid To) *' : 'Party Name (Received From) *',
@@ -391,11 +380,11 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                 TextField(
                   controller: _amountController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Amount (₹) *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.currency_rupee),
-                    fillColor: Colors.purple.shade50, // Fixed color reference
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.currency_rupee),
+                    fillColor: Colors.purple.shade50,
                     filled: true,
                   ),
                 ),
