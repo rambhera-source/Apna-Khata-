@@ -663,7 +663,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.between,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Filtered by Category: $_selectedCategoryFilter', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
                     InkWell(
@@ -769,7 +769,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
-                                        // 🔥 Fixed InkWell to IconButton to resolve compilation error
                                         IconButton(
                                           icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
                                           onPressed: () => _showAddEditProductDialog(itemToEdit: item),
