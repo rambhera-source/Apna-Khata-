@@ -4,13 +4,15 @@ import '../database/database_helper.dart';
 import '../models/account.dart';
 import '../models/product.dart';
 import '../models/order_model.dart';
+import '../models/user_model.dart'; // ✅ UserAccount model imported
 import 'orders_management_screen.dart';
 // Agar aapne Parties ya Products ki alag screens banayi hain, toh unhe yahan import kar sakte hain:
 // import 'parties_screen.dart';
 // import 'products_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final UserAccount? currentUser; // ✅ Current logged-in user data pass karne ke liye
+  const DashboardScreen({super.key, this.currentUser});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -21,10 +23,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _totalProducts = 0;
   int _pendingOrdersCount = 0;
   bool _isLoading = true;
+  String _businessType = 'Wholesaler / Retailer';
 
   @override
   void initState() {
     super.initState();
+    if (widget.currentUser != null) {
+      _businessType = widget.currentUser!.businessType;
+    }
     _loadDashboardData();
   }
 
@@ -51,9 +57,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    bool isManufacturing = _businessType.toLowerCase().contains('manufactur');
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ORLIFE / Accounting Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          isManufacturing ? 'ORLIFE / Factory Dashboard' : 'ORLIFE / Accounting Dashboard', 
+          style: const TextStyle(fontWeight: FontWeight.bold)
+        ),
         backgroundColor: Colors.amber.shade900,
         foregroundColor: Colors.white,
         actions: [
@@ -85,7 +96,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Overview Summary', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.brown)),
+                                Text(
+                                  isManufacturing ? 'Overview Summary (Factory Mode)' : 'Overview Summary', 
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.brown)
+                                ),
                                 const SizedBox(height: 10),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -125,7 +139,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           title: 'Parties & Customers',
                           subtitle: 'Manage dealers, customers & ledger balances',
                           onTap: () {
-                            // Yahan apni Parties screen ka route lagayein agar hai
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Parties Screen par navigate karne ke liye route jodein!')),
                             );
@@ -140,15 +153,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           title: 'Inventory & Products',
                           subtitle: 'Manage chargers, batteries, accessories stock',
                           onTap: () {
-                            // Yahan apni Products screen ka route lagayein
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Products Inventory Screen jodein!')),
                             );
                           },
                         ),
+
+                        // 🏭 4. BOM & MANUFACTURING MODULE (Visible ONLY if Business Type is Manufacturing)
+                        if (isManufacturing) ...[
+                          const SizedBox(height: 10),
+                          _buildActionTile(
+                            icon: Icons.precision_manufacturing,
+                            iconColor: Colors.deepPurple,
+                            title: 'BOM & Production / Manufacturing',
+                            subtitle: 'Manage raw materials, bill of materials & production batches',
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('BOM & Manufacturing Module Open ho gaya hai!')),
+                              );
+                            },
+                          ),
+                        ],
                         const SizedBox(height: 10),
 
-                        // 4. Reports & Daybook
+                        // 5. Reports & Daybook
                         _buildActionTile(
                           icon: Icons.bar_chart,
                           iconColor: Colors.purple,
