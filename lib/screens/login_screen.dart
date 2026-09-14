@@ -3,6 +3,7 @@ import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/user_model.dart';
 import 'dashboard_screen.dart';
+import 'super_admin_dashboard_screen.dart'; // ✅ Super Admin screen imported
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -46,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        MaterialPageRoute(builder: (context) => const SuperAdminDashboardScreen()), // ✅ Navigates to Super Admin Master Control
       );
       return;
     }
