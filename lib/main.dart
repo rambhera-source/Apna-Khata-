@@ -61,7 +61,6 @@ class AccountingApp extends StatelessWidget {
             borderSide: const BorderSide(color: Color(0xFF1B365D), width: 1.5),
           ),
           labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
-          prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
         ),
 
         // 3. Elevated Buttons Theme
@@ -75,8 +74,8 @@ class AccountingApp extends StatelessWidget {
           ),
         ),
 
-        // 4. Card Theme
-        cardTheme: CardThemeData(
+        // 4. Card Theme (Fixed from CardThemeData to CardTheme)
+        cardTheme: CardTheme(
           color: Colors.white,
           elevation: 1,
           shape: RoundedRectangleBorder(
