@@ -1,6 +1,6 @@
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
-import '../models/party.dart';
+import '../models/account.dart';
 import '../models/user_profile.dart';
 import '../models/bom_model.dart';
 import '../models/settings_model.dart';
