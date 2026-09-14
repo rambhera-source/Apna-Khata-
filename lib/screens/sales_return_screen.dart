@@ -10,12 +10,10 @@ import 'package:share_plus/share_plus.dart';
 
 import '../database/database_helper.dart';
 import '../models/account.dart';
-import '../models/product.dart';
 import '../models/transaction_model.dart';
 import '../models/settings_model.dart';
+import '../models/inventory_model.dart';
 import 'searchable_field.dart';
-import 'add_account_screen.dart';
-import 'product_inventory_screen.dart';
 
 class SalesReturnScreen extends StatefulWidget {
   const SalesReturnScreen({super.key});
@@ -32,14 +30,14 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   DateTime _selectedDate = DateTime.now();
 
   List<String> _allAccounts = [];
-  List<Product> _allProducts = [];
+  List<InventoryItem> _allInventoryItems = [];
   
   // Return cart items list: { 'name': String, 'qty': int, 'price': double, 'stockType': String }
   final List<Map<String, dynamic>> _cartItems = [];
   String _refundMode = 'Cash';
   final List<String> _refundModes = ['Cash', 'Bank / UPI', 'Adjust in Ledger'];
 
-  // 🔥 Default Global Stock Type for Sales Return ('Replacement' default as requested)
+  // 🔥 Default Global Stock Type for Sales Return ('Replacement' default)
   String _globalStockType = 'Replacement';
 
   // 🔥 GST Settings State Variables
@@ -52,132 +50,20 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     _loadDropdownDataAndSettings();
   }
 
-  // 📂 Load Accounts, Products and Company GST Settings
+  // 📂 Load Accounts, Inventory and Company GST Settings
   Future<void> _loadDropdownDataAndSettings() async {
     final accounts = await DatabaseHelper.isar.accounts.where().findAll();
-    final products = await DatabaseHelper.isar.products.where().findAll();
+    final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
 
     setState(() {
       _allAccounts = accounts.map((a) => a.name).toList();
-      _allProducts = products;
+      _allInventoryItems = inventoryItems;
       if (settings != null) {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
       }
     });
-  }
-
-  // 👤 Open AddAccountScreen for Party
-  void _navigateToAddNewParty() async {
-    final String? newPartyName = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const AddAccountScreen()),
-    );
-
-    await _loadDropdownDataAndSettings();
-
-    if (newPartyName != null && newPartyName.isNotEmpty) {
-      setState(() {
-        _partyController.text = newPartyName;
-      });
-    }
-  }
-
-  // 📦 Open ProductInventoryScreen
-  void _navigateToInventoryScreen() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
-    );
-    await _loadDropdownDataAndSettings();
-  }
-
-  // 🛒 Add Item to Return Cart
-  void _addItemToReturnCart() {
-    if (_allProducts.isEmpty) {
-      _navigateToInventoryScreen();
-      return;
-    }
-
-    Product selectedProduct = _allProducts.first;
-    final TextEditingController qtyController = TextEditingController(text: '1');
-    final TextEditingController priceController = TextEditingController(text: selectedProduct.sellingPrice.toString());
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Add Return Item'),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(foregroundColor: Colors.green.shade800),
-                    icon: const Icon(Icons.add_circle, size: 18),
-                    label: const Text('Manage Inventory'),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _navigateToInventoryScreen();
-                    },
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<Product>(
-                    value: selectedProduct,
-                    items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text('${p.name} (Stock: ${p.stock})'))).toList(),
-                    onChanged: (val) {
-                      setDialogState(() {
-                        selectedProduct = val!;
-                        priceController.text = selectedProduct.sellingPrice.toString();
-                      });
-                    },
-                    decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: qtyController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Return Quantity', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: priceController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Return Price (₹)', border: OutlineInputBorder()),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
-                  onPressed: () {
-                    int q = int.tryParse(qtyController.text) ?? 1;
-                    double pr = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
-                    setState(() {
-                      _cartItems.add({
-                        'name': selectedProduct.name,
-                        'qty': q,
-                        'price': pr,
-                        'stockType': _globalStockType, // 👈 Attached current return stock type
-                      });
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 
   // 🧮 Calculations
@@ -293,7 +179,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     }
   }
 
-  // 💾 Save Transaction & Restore Stock
+  // 💾 Save Transaction & Update Inventory Items Stock
   Future<void> _saveSalesReturnTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
@@ -313,17 +199,16 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
 
       for (var cartItem in _cartItems) {
         String prodName = cartItem['name'];
-        int returnedQty = cartItem['qty'];
-        String itemStockType = cartItem['stockType'] ?? 'Replacement';
+        double returnedQty = (cartItem['qty'] as int).toDouble();
 
-        final product = await DatabaseHelper.isar.products
+        final invItem = await DatabaseHelper.isar.inventoryItems
             .filter()
-            .nameEqualTo(prodName, caseSensitive: false)
+            .itemNameEqualTo(prodName, caseSensitive: false)
             .findFirst();
 
-        if (product != null) {
-          product.stock += returnedQty;
-          await DatabaseHelper.isar.products.put(product);
+        if (invItem != null) {
+          invItem.stockQuantity += returnedQty;
+          await DatabaseHelper.isar.inventoryItems.put(invItem);
         }
       }
     });
@@ -359,13 +244,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
         title: Text(_isGstActive ? 'Sales Return (GST Mode)' : 'Sales Return (Simple Mode)'),
         backgroundColor: Colors.green.shade800,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.inventory_2),
-            onPressed: _navigateToInventoryScreen,
-            tooltip: 'Manage Inventory / Products',
-          ),
-        ],
+        // 🔥 Marked Icon 1 Removed from AppBar
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -408,7 +287,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 🔥 Stock Type Quick Toggle Button for Sales Return (Replacement Default)
+                // Stock Type Quick Toggle Button
                 InkWell(
                   onTap: () {
                     setState(() {
@@ -457,45 +336,19 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             ),
             const SizedBox(height: 12),
 
-            Row(
-              children: [
-                Expanded(
-                  child: SearchableField(
-                    label: 'Customer / Party Name *',
-                    items: _allAccounts,
-                    controller: _partyController,
-                    onSelected: (val) {
-                      _partyController.text = val;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                  ),
-                  icon: const Icon(Icons.person_add, size: 18),
-                  label: const Text('New'),
-                  onPressed: _navigateToAddNewParty,
-                ),
-              ],
+            // 🔥 Marked Icon 2 ('+ New' Party Button) Removed
+            SearchableField(
+              label: 'Customer / Party Name *',
+              items: _allAccounts,
+              controller: _partyController,
+              onSelected: (val) {
+                _partyController.text = val;
+              },
             ),
             const SizedBox(height: 14),
 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Returned Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add Item'),
-                  onPressed: _addItemToReturnCart,
-                ),
-              ],
-            ),
+            // 🔥 Marked Icon 3 ('+ Add Item' Button) Removed
+            const Text('Returned Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 8),
             Expanded(
               child: _cartItems.isEmpty
