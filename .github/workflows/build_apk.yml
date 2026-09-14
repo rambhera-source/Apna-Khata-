@@ -1,60 +1,14 @@
-name: Build Flutter APK
+- name: Build Release APK
+  run: flutter build apk --release
 
-on:
-  push:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+- name: Check APK File
+  run: |
+    ls -lah build/app/outputs/flutter-apk/
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.19.x'
-          channel: 'stable'
-          cache: true
-
-      - name: Get Dependencies
-        run: flutter pub get
-
-      - name: Clean Build Runner Cache & Generate Files
-        run: |
-          flutter pub run build_runner clean
-          flutter pub run build_runner build --delete-conflicting-outputs
-
-      - name: Regenerate Compatible Android Folder
-        run: |
-          rm -rf android
-          flutter create . --platforms=android --project-name accounting_app --org in.khatahisab
-
-      - name: Fix Kotlin Version Conflict
-        run: |
-          echo "
-          configurations.all {
-              resolutionStrategy.eachDependency { details ->
-                  if (details.requested.group == 'org.jetbrains.kotlin') {
-                      details.useVersion '1.8.10'
-                  }
-              }
-          }" >> android/app/build.gradle
-
-      - name: Build Release APK
-        run: flutter build apk --release
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+- name: Upload APK Artifact
+  uses: actions/upload-artifact@v4
+  with:
+    name: app-release-apk
+    path: build/app/outputs/flutter-apk/app-release.apk
+    if-no-files-found: error
+    retention-days: 7
