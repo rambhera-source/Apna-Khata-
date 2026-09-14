@@ -11,4 +11,8 @@ class CompanySettings {
   
   // ✅ GST On/Off ke liye (User apni marzi se set karega)
   bool isGstEnabled = false;
+
+  // 🔥 Routes aur Salesmen ki lists jo yahan jod di gayi hain
+  List<String> routes = [];    // e.g. ["Ameerpet Route", "Koti Market"]
+  List<String> salesmen = [];  // e.g. ["Rahul Sharma", "Amit Kumar"]
 }
