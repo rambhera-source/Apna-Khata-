@@ -1,0 +1,114 @@
+import 'package:flutter/material.dart';
+import 'package:isar/isar.dart';
+import '../database/database_helper.dart';
+import '../models/account.dart';
+import 'add_account_screen.dart'; // आपका डिटेल्ड फॉर्म
+
+class PartiesMasterScreen extends StatefulWidget {
+  const PartiesMasterScreen({super.key});
+
+  @override
+  State<PartiesMasterScreen> createState() => _PartiesMasterScreenState();
+}
+
+class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
+  List<Account> _partiesList = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadParties();
+  }
+
+  // डेटाबेस से सभी अकाउंट्स/पार्टियों को लोड करना
+  Future<void> _loadParties() async {
+    setState(() => _isLoading = true);
+    final accounts = await DatabaseHelper.isar.accounts.where().findAll();
+    setState(() {
+      _partiesList = accounts;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Parties & Accounts Master'),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+      ),
+      body: Column(
+        children: [
+          // 🔍 ऊपर एक स्टेटस या हेडर बार
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.teal.shade50,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Total Parties: ${_partiesList.length}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add New Party'),
+                  onPressed: () async {
+                    // जैसे ही इस पर क्लिक करेंगे, आपका डिटेल्ड AddAccountScreen खुल जाएगा
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AddAccountScreen()),
+                    );
+                    // वापस आने पर लिस्ट ऑटोमैटिक अपडेट हो जाएगी
+                    _loadParties();
+                  },
+                ),
+              ],
+            ),
+          ),
+          
+          // 📋 नीचे सभी पार्टियों की लाइव लिस्ट
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _partiesList.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Abhi tak koi party add nahi ki gayi hai.\nUpar "Add New Party" par click karein.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey, fontSize: 14),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _partiesList.length,
+                        itemBuilder: (context, index) {
+                          final party = _partiesList[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.teal.shade100,
+                                child: Text(
+                                  party.name.isNotEmpty ? party.name[0].toUpperCase() : 'A',
+                                  style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              title: Text(party.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('Group: ${party.groupCategory} | Phone: ${party.phone ?? 'N/A'}'),
+                              trailing: Text(
+                                '₹ ${party.openingBalance} ${party.balanceType}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: party.balanceType == 'Dr' ? Colors.red : Colors.green,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
