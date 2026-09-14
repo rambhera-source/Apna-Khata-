@@ -5,6 +5,9 @@ import '../models/account.dart';
 import '../models/product.dart';
 import '../models/order_model.dart';
 import 'orders_management_screen.dart';
+// Agar aapne Parties ya Products ki alag screens banayi hain, toh unhe yahan import kar sakte hain:
+// import 'parties_screen.dart';
+// import 'products_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -30,7 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     try {
       final parties = await DatabaseHelper.isar.accounts.where().findAll();
-      final products = await DatabaseHelper.isar.products.where().findAll(); // 🔥 Yahan inventoryStocks se products kar diya hai
+      final products = await DatabaseHelper.isar.products.where().findAll();
       final orders = await DatabaseHelper.isar.salesOrders.where().findAll();
 
       int pendingCount = orders.where((o) => o.status == 'Pending' || o.status.contains('Pending')).length;
@@ -72,7 +75,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: ListView(
                       children: [
                         const SizedBox(height: 10),
-                        // Quick Stats & Billing Card
+                        // Quick Stats Summary Card
                         Card(
                           elevation: 3,
                           color: Colors.amber.shade50,
@@ -99,18 +102,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(height: 20),
                         const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 10),
-                        ListTile(
-                          leading: const Icon(Icons.shopping_cart, color: Colors.amber, size: 28),
-                          title: const Text('Orders & Sales Management', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                          subtitle: const Text('Book new orders, view history, or manage items'),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                          tileColor: Colors.grey.shade100,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+
+                        // 1. Orders & Sales Management
+                        _buildActionTile(
+                          icon: Icons.shopping_cart,
+                          iconColor: Colors.amber,
+                          title: 'Orders & Sales Management',
+                          subtitle: 'Book new orders, view history, or manage items',
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(builder: (context) => const OrdersManagementScreen()),
                             ).then((_) => _loadDashboardData());
+                          },
+                        ),
+                        const SizedBox(height: 10),
+
+                        // 2. Parties / Customers Khata
+                        _buildActionTile(
+                          icon: Icons.people,
+                          iconColor: Colors.blue,
+                          title: 'Parties & Customers',
+                          subtitle: 'Manage dealers, customers & ledger balances',
+                          onTap: () {
+                            // Yahan apni Parties screen ka route lagayein agar hai
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Parties Screen par navigate karne ke liye route jodein!')),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 10),
+
+                        // 3. Inventory / Products Catalog
+                        _buildActionTile(
+                          icon: Icons.inventory_2,
+                          iconColor: Colors.green,
+                          title: 'Inventory & Products',
+                          subtitle: 'Manage chargers, batteries, accessories stock',
+                          onTap: () {
+                            // Yahan apni Products screen ka route lagayein
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Products Inventory Screen jodein!')),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 10),
+
+                        // 4. Reports & Daybook
+                        _buildActionTile(
+                          icon: Icons.bar_chart,
+                          iconColor: Colors.purple,
+                          title: 'Business Reports & Daybook',
+                          subtitle: 'View sales analytics, PDF/Excel reports',
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Reports module jodein!')),
+                            );
                           },
                         ),
                       ],
@@ -129,6 +176,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 4),
         Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
       ],
+    );
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: iconColor, size: 28),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+      tileColor: Colors.grey.shade100,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      onTap: onTap,
     );
   }
 }
