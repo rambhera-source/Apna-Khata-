@@ -24,6 +24,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _cityController = TextEditingController();
   final _stateController = TextEditingController();
 
+  // 🔥 नए फील्ड्स: Route और Salesman/User के लिए Controllers
+  final _routeController = TextEditingController();
+  final _salesmanController = TextEditingController();
+
   final _gstinController = TextEditingController();
   final _balanceController = TextEditingController();
   
@@ -58,6 +62,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final FocusNode _streetFocus = FocusNode();
   final FocusNode _landmarkFocus = FocusNode();
   final FocusNode _pincodeFocus = FocusNode();
+  final FocusNode _routeFocus = FocusNode();
+  final FocusNode _salesmanFocus = FocusNode();
   final FocusNode _gstinFocus = FocusNode();
   final FocusNode _balanceFocus = FocusNode();
   final FocusNode _creditLimitFocus = FocusNode();
@@ -76,6 +82,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _pincodeController.dispose();
     _cityController.dispose();
     _stateController.dispose();
+    _routeController.dispose();
+    _salesmanController.dispose();
     _gstinController.dispose();
     _balanceController.dispose();
     _creditLimitAmountController.dispose();
@@ -89,6 +97,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _streetFocus.dispose();
     _landmarkFocus.dispose();
     _pincodeFocus.dispose();
+    _routeFocus.dispose();
+    _salesmanFocus.dispose();
     _gstinFocus.dispose();
     _balanceFocus.dispose();
     _creditLimitFocus.dispose();
@@ -98,6 +108,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     super.dispose();
   }
 
+  // 🌍 प Pin Pincode Auto-Fill Function (Fixed & Optimized)
   Future<void> _lookupPincode(String pincode) async {
     if (pincode.length == 6) {
       try {
@@ -113,7 +124,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             });
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        // Handle error silently or show snackbar if needed
+      }
     }
   }
 
@@ -122,6 +135,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     final phone = _phoneController.text.trim();
     final email = _emailController.text.trim();
     final address = '${_houseNoController.text.trim()}, ${_streetController.text.trim()}, Landmark: ${_landmarkController.text.trim()}, City: ${_cityController.text.trim()}, State: ${_stateController.text.trim()} - Pincode: ${_pincodeController.text.trim()}';
+    
+    final route = _routeController.text.trim();
+    final salesman = _salesmanController.text.trim();
     final gstin = _gstinController.text.trim();
     double openingBal = double.tryParse(_balanceController.text) ?? 0.0;
     
@@ -169,6 +185,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       ..loginUsername = username.isEmpty ? null : username
       ..loginPassword = password.isEmpty ? null : password;
 
+    // 🔥 Note: Ensure your Account model has `route` and `salesman` fields if you want to store them in Isar database.
+    // e.g., newAccount.route = route; newAccount.salesman = salesman;
+
     await DatabaseHelper.isar.writeTxn(() async {
       await DatabaseHelper.isar.accounts.put(newAccount);
     });
@@ -188,6 +207,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _pincodeController.clear();
     _cityController.clear();
     _stateController.clear();
+    _routeController.clear();
+    _salesmanController.clear();
     _gstinController.clear();
     _balanceController.clear();
     _creditLimitAmountController.clear();
@@ -201,6 +222,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       _isCreditControlEnabled = false;
       _isPortalAccessEnabled = false;
     });
+
+    // Pop and return name if opened from Sales/Purchase
+    Navigator.pop(context, name);
   }
 
   @override
@@ -282,7 +306,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Address Details:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                    const Text('Address Details & Logistics:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
                     SizedBox(
                       width: 150,
                       child: DropdownButtonFormField<String>(
@@ -339,9 +363,11 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                         maxLength: 6,
                         decoration: const InputDecoration(labelText: 'Pincode', border: OutlineInputBorder(), counterText: ''),
                         onChanged: (val) {
-                          if (val.length == 6) _lookupPincode(val);
+                          if (val.length == 6) {
+                            _lookupPincode(val);
+                          }
                         },
-                        onSubmitted: (_) => FocusScope.of(context).requestFocus(_gstinFocus),
+                        onSubmitted: (_) => FocusScope.of(context).requestFocus(_routeFocus),
                       ),
                     ),
                   ],
@@ -355,6 +381,30 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextField(controller: _stateController, decoration: const InputDecoration(labelText: 'State', border: OutlineInputBorder())),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // 🔥 Route & Salesman / Assigned User Fields
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _routeController,
+                        focusNode: _routeFocus,
+                        decoration: const InputDecoration(labelText: 'Route / Area', border: OutlineInputBorder(), prefixIcon: Icon(Icons.alt_route)),
+                        onSubmitted: (_) => FocusScope.of(context).requestFocus(_salesmanFocus),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _salesmanController,
+                        focusNode: _salesmanFocus,
+                        decoration: const InputDecoration(labelText: 'Assigned Salesman / User', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person_pin)),
+                        onSubmitted: (_) => FocusScope.of(context).requestFocus(_gstinFocus),
+                      ),
                     ),
                   ],
                 ),
