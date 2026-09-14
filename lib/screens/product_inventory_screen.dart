@@ -53,13 +53,13 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     });
   }
 
-  // 📥 1. Template CSV Generator (With A-Z Price Tier & Opening/Closing Stock)
+  // 📥 1. Template CSV Generator (With Purchase Price, Opening/Closing Stock & A-Z Tier)
   Future<void> _downloadTemplateFile() async {
     try {
       List<List<dynamic>> rows = [];
       
-      // CSV Headers
-      rows.add(['Name', 'Category', 'Opening Stock', 'Closing Stock', 'Price', 'Price Tier (A-Z)', 'SKU']);
+      // CSV Headers (Purchase Price added)
+      rows.add(['Name', 'Category', 'Opening Stock', 'Closing Stock', 'Purchase Price', 'Selling Price', 'Price Tier (A-Z)', 'SKU']);
 
       if (_allInventoryItems.isNotEmpty) {
         for (var item in _allInventoryItems) {
@@ -68,25 +68,26 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
             item.category ?? '',
             item.openingStock ?? 0,
             item.stockQuantity,
+            item.purchasePrice,
             item.priceA,
             item.priceCategory ?? 'A',
             item.sku ?? ''
           ]);
         }
       } else {
-        rows.add(['ORLIFE 85W Cable', 'Charger', 10, 50, 150, 'A', 'CAB-85W']);
-        rows.add(['ORLIFE Power Bank', 'Power Bank', 5, 20, 899, 'B', 'PB-10K']);
+        rows.add(['ORLIFE 85W Cable', 'Charger', 10, 50, 100, 150, 'A', 'CAB-85W']);
+        rows.add(['ORLIFE Power Bank', 'Power Bank', 5, 20, 650, 899, 'B', 'PB-10K']);
       }
 
       String csvData = const ListToCsvConverter().convert(rows);
 
       final output = await getTemporaryDirectory();
-      final file = File('${output.path}/inventory_template_with_tier.csv');
+      final file = File('${output.path}/inventory_template_with_purchase.csv');
       await file.writeAsString(csvData);
 
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'Inventory CSV Template with A-Z Price Tier & Stock details from ORLIFE ERP.',
+        text: 'Inventory CSV Template with Purchase Price & Tiers from ORLIFE ERP.',
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -120,6 +121,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
         int successCount = 0;
         await DatabaseHelper.isar.writeTxn(() async {
+          // Headers: [Name, Category, Opening Stock, Closing Stock, Purchase Price, Selling Price, Price Tier (A-Z), SKU]
           for (int i = 1; i < fields.length; i++) {
             var row = fields[i];
             if (row.isNotEmpty && row[0].toString().trim().isNotEmpty) {
@@ -127,9 +129,10 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               String category = row.length > 1 ? row[1].toString().trim() : '';
               double openingStock = row.length > 2 ? double.tryParse(row[2].toString()) ?? 0.0 : 0.0;
               double closingStock = row.length > 3 ? double.tryParse(row[3].toString()) ?? 0.0 : 0.0;
-              double price = row.length > 4 ? double.tryParse(row[4].toString()) ?? 0.0 : 0.0;
-              String priceCategory = row.length > 5 ? row[5].toString().trim().toUpperCase() : 'A';
-              String sku = row.length > 6 ? row[6].toString().trim() : '';
+              double purchasePrice = row.length > 4 ? double.tryParse(row[4].toString()) ?? 0.0 : 0.0;
+              double price = row.length > 5 ? double.tryParse(row[5].toString()) ?? 0.0 : 0.0;
+              String priceCategory = row.length > 6 ? row[6].toString().trim().toUpperCase() : 'A';
+              String sku = row.length > 7 ? row[7].toString().trim() : '';
 
               if (!_priceCategories.contains(priceCategory)) {
                 priceCategory = 'A';
@@ -140,6 +143,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 ..category = category
                 ..openingStock = openingStock
                 ..stockQuantity = closingStock
+                ..purchasePrice = purchasePrice
                 ..priceA = price
                 ..priceCategory = priceCategory
                 ..sku = sku
@@ -171,6 +175,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     final TextEditingController categoryController = TextEditingController(text: itemToEdit?.category ?? '');
     final TextEditingController openingStockController = TextEditingController(text: itemToEdit?.openingStock?.toString() ?? '0');
     final TextEditingController qtyController = TextEditingController(text: itemToEdit?.stockQuantity.toString() ?? '0');
+    final TextEditingController purchasePriceController = TextEditingController(text: itemToEdit?.purchasePrice.toString() ?? '0');
     final TextEditingController priceController = TextEditingController(text: itemToEdit?.priceA.toString() ?? '0');
     
     String stockType = itemToEdit?.stockType ?? 'Fresh';
@@ -197,7 +202,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 const SizedBox(height: 10),
                 TextField(
                   controller: categoryController,
-                  decoration: const InputDecoration(labelText: 'Category (Manual type or select)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -224,21 +229,27 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                   children: [
                     Expanded(
                       child: TextField(
-                        controller: priceController,
+                        controller: purchasePriceController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Price (₹) *', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder()),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: _priceCategories.contains(priceCategory) ? priceCategory : 'A',
-                        items: _priceCategories.map((cat) => DropdownMenuItem(value: cat, child: Text('Tier $cat'))).toList(),
-                        onChanged: (val) => setDialogState(() => priceCategory = val!),
-                        decoration: const InputDecoration(labelText: 'Price Tier (A-Z)', border: OutlineInputBorder()),
+                      child: TextField(
+                        controller: priceController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Selling Price (₹) *', border: OutlineInputBorder()),
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: _priceCategories.contains(priceCategory) ? priceCategory : 'A',
+                  items: _priceCategories.map((cat) => DropdownMenuItem(value: cat, child: Text('Tier $cat'))).toList(),
+                  onChanged: (val) => setDialogState(() => priceCategory = val!),
+                  decoration: const InputDecoration(labelText: 'Price Tier (A-Z)', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -286,6 +297,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                   item.category = categoryController.text.trim();
                   item.openingStock = double.tryParse(openingStockController.text) ?? 0.0;
                   item.stockQuantity = double.tryParse(qtyController.text) ?? 0.0;
+                  item.purchasePrice = double.tryParse(purchasePriceController.text) ?? 0.0;
                   item.priceA = double.tryParse(priceController.text) ?? 0.0;
                   item.stockType = stockType;
                   item.priceCategory = priceCategory;
@@ -308,10 +320,10 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     );
   }
 
-  // 📦 Bulk Entry Dialog Feature (Manual entry option)
+  // 📦 Bulk Entry Dialog Feature
   void _showBulkEntryDialog() {
     final List<Map<String, dynamic>> bulkRows = [
-      {'name': TextEditingController(), 'category': TextEditingController(), 'qty': TextEditingController(text: '1'), 'price': TextEditingController(text: '0')}
+      {'name': TextEditingController(), 'category': TextEditingController(), 'qty': TextEditingController(text: '1'), 'purPrice': TextEditingController(text: '0'), 'price': TextEditingController(text: '0')}
     ];
 
     showDialog(
@@ -320,7 +332,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Bulk Product Entry'),
           content: SizedBox(
-            width: 550,
+            width: 600,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -344,15 +356,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                                 decoration: InputDecoration(labelText: 'Item ${index + 1} Name', border: const OutlineInputBorder(), isDense: true),
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              flex: 2,
-                              child: TextField(
-                                controller: row['category'],
-                                decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder(), isDense: true),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             Expanded(
                               flex: 1,
                               child: TextField(
@@ -361,13 +365,22 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                                 decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true),
                               ),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              flex: 1,
+                              child: TextField(
+                                controller: row['purPrice'],
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(labelText: 'Pur. ₹', border: OutlineInputBorder(), isDense: true),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
                             Expanded(
                               flex: 1,
                               child: TextField(
                                 controller: row['price'],
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder(), isDense: true),
+                                decoration: const InputDecoration(labelText: 'Sell ₹', border: OutlineInputBorder(), isDense: true),
                               ),
                             ),
                             IconButton(
@@ -394,6 +407,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                           'name': TextEditingController(),
                           'category': TextEditingController(),
                           'qty': TextEditingController(text: '1'),
+                          'purPrice': TextEditingController(text: '0'),
                           'price': TextEditingController(text: '0'),
                         });
                       });
@@ -416,6 +430,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                         ..itemName = name
                         ..category = (row['category'] as TextEditingController).text.trim()
                         ..stockQuantity = double.tryParse((row['qty'] as TextEditingController).text) ?? 0.0
+                        ..purchasePrice = double.tryParse((row['purPrice'] as TextEditingController).text) ?? 0.0
                         ..priceA = double.tryParse((row['price'] as TextEditingController).text) ?? 0.0
                         ..stockType = 'Fresh'
                         ..priceCategory = 'A';
@@ -479,7 +494,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         padding: const EdgeInsets.all(12.0),
         child: Column(
           children: [
-            // Search Bar & Filter Row
             Row(
               children: [
                 Expanded(
@@ -520,8 +534,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               ],
             ),
             const SizedBox(height: 12),
-
-            // Inventory List Table Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               color: Colors.teal.shade100,
@@ -529,13 +541,11 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 children: [
                   Expanded(flex: 2, child: Text('Item / Category', style: TextStyle(fontWeight: FontWeight.bold))),
                   Expanded(flex: 1, child: Text('Op / Cl Stock', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                  Expanded(flex: 1, child: Text('Rate / Tier', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                  Expanded(flex: 1, child: Text('Pur / Sell Rate', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
                   Expanded(flex: 1, child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
                 ],
               ),
             ),
-
-            // Inventory Items List
             Expanded(
               child: _filteredItems.isEmpty
                   ? const Center(child: Text('No inventory items found.', style: TextStyle(color: Colors.grey)))
@@ -575,7 +585,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                                   flex: 1,
                                   child: Column(
                                     children: [
-                                      Text('₹${item.priceA.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+                                      Text('P: ₹${item.purchasePrice.toStringAsFixed(0)} | S: ₹${item.priceA.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11)),
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                         decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(3)),
