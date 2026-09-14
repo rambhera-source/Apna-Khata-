@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../database/database_helper.dart';
 import '../models/account.dart'; // ✅ Correct Account Model
+import '../models/settings_model.dart'; // ✅ For CompanySettings (Routes & Salesmen)
 
 class AddAccountScreen extends StatefulWidget {
   const AddAccountScreen({super.key});
@@ -24,9 +25,11 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _cityController = TextEditingController();
   final _stateController = TextEditingController();
 
-  // 🔥 नए फील्ड्स: Route और Salesman/User के लिए Controllers
-  final _routeController = TextEditingController();
-  final _salesmanController = TextEditingController();
+  // 🔥 Route & Salesman Dropdown Variables & Lists
+  List<String> _availableRoutes = [];
+  List<String> _availableSalesmen = [];
+  String? _selectedRoute;
+  String? _selectedSalesman;
 
   final _gstinController = TextEditingController();
   final _balanceController = TextEditingController();
@@ -62,14 +65,70 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final FocusNode _streetFocus = FocusNode();
   final FocusNode _landmarkFocus = FocusNode();
   final FocusNode _pincodeFocus = FocusNode();
-  final FocusNode _routeFocus = FocusNode();
-  final FocusNode _salesmanFocus = FocusNode();
   final FocusNode _gstinFocus = FocusNode();
   final FocusNode _balanceFocus = FocusNode();
   final FocusNode _creditLimitFocus = FocusNode();
   final FocusNode _creditDaysFocus = FocusNode();
   final FocusNode _usernameFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMasterData(); // 👈 Settings se Routes aur Salesmen load karna
+  }
+
+  // 📂 CompanySettings se Routes aur Salesmen ki list fetch karna
+  Future<void> _loadMasterData() async {
+    final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
+    if (settings != null) {
+      setState(() {
+        _availableRoutes = List.from(settings.routes);
+        _availableSalesmen = List.from(settings.salesmen);
+      });
+    }
+  }
+
+  // ⚡ Quick Add Dialog (Naya Route ya Salesman turant add karne ke liye)
+  void _showQuickAddDialog(String titleType, Function(String) onAdded) {
+    final controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add New $titleType'),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(labelText: '$titleType Name', border: const OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            onPressed: () async {
+              String name = controller.text.trim();
+              if (name.isNotEmpty) {
+                final settings = await DatabaseHelper.isar.companySettings.where().findFirst() ?? CompanySettings();
+                await DatabaseHelper.isar.writeTxn(() async {
+                  if (titleType == 'Route') {
+                    if (!settings.routes.contains(name)) settings.routes.add(name);
+                  } else {
+                    if (!settings.salesmen.contains(name)) settings.salesmen.add(name);
+                  }
+                  await DatabaseHelper.isar.companySettings.put(settings);
+                });
+
+                onAdded(name);
+              }
+              if (!mounted) return;
+              Navigator.pop(context);
+            },
+            child: const Text('Add & Select'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -82,8 +141,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _pincodeController.dispose();
     _cityController.dispose();
     _stateController.dispose();
-    _routeController.dispose();
-    _salesmanController.dispose();
     _gstinController.dispose();
     _balanceController.dispose();
     _creditLimitAmountController.dispose();
@@ -97,8 +154,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _streetFocus.dispose();
     _landmarkFocus.dispose();
     _pincodeFocus.dispose();
-    _routeFocus.dispose();
-    _salesmanFocus.dispose();
     _gstinFocus.dispose();
     _balanceFocus.dispose();
     _creditLimitFocus.dispose();
@@ -108,7 +163,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     super.dispose();
   }
 
-  // 🌍 प Pin Pincode Auto-Fill Function (Fixed & Optimized)
+  // 🌍 Pincode Auto-Fill Function
   Future<void> _lookupPincode(String pincode) async {
     if (pincode.length == 6) {
       try {
@@ -125,7 +180,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           }
         }
       } catch (e) {
-        // Handle error silently or show snackbar if needed
+        // Handle error silently
       }
     }
   }
@@ -136,8 +191,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     final email = _emailController.text.trim();
     final address = '${_houseNoController.text.trim()}, ${_streetController.text.trim()}, Landmark: ${_landmarkController.text.trim()}, City: ${_cityController.text.trim()}, State: ${_stateController.text.trim()} - Pincode: ${_pincodeController.text.trim()}';
     
-    final route = _routeController.text.trim();
-    final salesman = _salesmanController.text.trim();
     final gstin = _gstinController.text.trim();
     double openingBal = double.tryParse(_balanceController.text) ?? 0.0;
     
@@ -174,6 +227,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       ..phone = phone.isEmpty ? null : phone
       ..email = email.isEmpty ? null : email
       ..address = (_groupCategory == 'Sundry Debtor' || _groupCategory == 'Sundry Creditor') ? address : null
+      ..route = _selectedRoute
+      ..salesman = _selectedSalesman
       ..gstin = gstin.isEmpty ? null : gstin
       ..priceCategory = _priceCategory
       ..creditLimitAmount = creditLimitAmt
@@ -184,9 +239,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       ..isPortalAccessEnabled = _isPortalAccessEnabled
       ..loginUsername = username.isEmpty ? null : username
       ..loginPassword = password.isEmpty ? null : password;
-
-    // 🔥 Note: Ensure your Account model has `route` and `salesman` fields if you want to store them in Isar database.
-    // e.g., newAccount.route = route; newAccount.salesman = salesman;
 
     await DatabaseHelper.isar.writeTxn(() async {
       await DatabaseHelper.isar.accounts.put(newAccount);
@@ -207,8 +259,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _pincodeController.clear();
     _cityController.clear();
     _stateController.clear();
-    _routeController.clear();
-    _salesmanController.clear();
     _gstinController.clear();
     _balanceController.clear();
     _creditLimitAmountController.clear();
@@ -221,6 +271,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       _priceCategory = 'A';
       _isCreditControlEnabled = false;
       _isPortalAccessEnabled = false;
+      _selectedRoute = null;
+      _selectedSalesman = null;
     });
 
     // Pop and return name if opened from Sales/Purchase
@@ -367,7 +419,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                             _lookupPincode(val);
                           }
                         },
-                        onSubmitted: (_) => FocusScope.of(context).requestFocus(_routeFocus),
                       ),
                     ),
                   ],
@@ -386,25 +437,73 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // 🔥 Route & Salesman / Assigned User Fields
+                // 🔥 Route Dropdown with Quick Add Button
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: _routeController,
-                        focusNode: _routeFocus,
-                        decoration: const InputDecoration(labelText: 'Route / Area', border: OutlineInputBorder(), prefixIcon: Icon(Icons.alt_route)),
-                        onSubmitted: (_) => FocusScope.of(context).requestFocus(_salesmanFocus),
+                      child: DropdownButtonFormField<String>(
+                        value: (_availableRoutes.contains(_selectedRoute)) ? _selectedRoute : null,
+                        hint: const Text('Select Route / Area'),
+                        isExpanded: true,
+                        items: _availableRoutes.map((route) {
+                          return DropdownMenuItem(value: route, child: Text(route));
+                        }).toList(),
+                        onChanged: (val) => setState(() => _selectedRoute = val),
+                        decoration: const InputDecoration(
+                          labelText: 'Route / Area',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.alt_route, color: Colors.teal),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle, color: Colors.teal, size: 30),
+                      tooltip: 'Add New Route',
+                      onPressed: () {
+                        _showQuickAddDialog('Route', (newRoute) {
+                          setState(() {
+                            _availableRoutes.add(newRoute);
+                            _selectedRoute = newRoute;
+                          });
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // 🔥 Salesman Dropdown with Quick Add Button
+                Row(
+                  children: [
                     Expanded(
-                      child: TextField(
-                        controller: _salesmanController,
-                        focusNode: _salesmanFocus,
-                        decoration: const InputDecoration(labelText: 'Assigned Salesman / User', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person_pin)),
-                        onSubmitted: (_) => FocusScope.of(context).requestFocus(_gstinFocus),
+                      child: DropdownButtonFormField<String>(
+                        value: (_availableSalesmen.contains(_selectedSalesman)) ? _selectedSalesman : null,
+                        hint: const Text('Select Salesman / User'),
+                        isExpanded: true,
+                        items: _availableSalesmen.map((salesman) {
+                          return DropdownMenuItem(value: salesman, child: Text(salesman));
+                        }).toList(),
+                        onChanged: (val) => setState(() => _selectedSalesman = val),
+                        decoration: const InputDecoration(
+                          labelText: 'Assigned Salesman / User',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.person_pin, color: Colors.teal),
+                        ),
                       ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle, color: Colors.teal, size: 30),
+                      tooltip: 'Add New Salesman',
+                      onPressed: () {
+                        _showQuickAddDialog('Salesman', (newSalesman) {
+                          setState(() {
+                            _availableSalesmen.add(newSalesman);
+                            _selectedSalesman = newSalesman;
+                          });
+                        });
+                      },
                     ),
                   ],
                 ),
