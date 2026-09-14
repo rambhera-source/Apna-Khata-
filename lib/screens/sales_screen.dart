@@ -125,7 +125,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   title: Text('Order No: ${ord.orderNo}', style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text('Date: ${DateFormat('dd-MM-yyyy').format(ord.date)}'),
                   trailing: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, isDense: true),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
                     onPressed: () {
                       Navigator.pop(context);
                       _loadSpecificOrderIntoBill(ord);
@@ -170,19 +170,19 @@ class _SalesScreenState extends State<SalesScreen> {
                   selectedProduct = val!;
                   priceController.text = selectedProduct.sellingPrice.toString();
                 },
-                decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder(), isDense: true),
+                decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: qtyController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder(), isDense: true),
+                decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: priceController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Selling Price (₹)', border: OutlineInputBorder(), isDense: true),
+                decoration: const InputDecoration(labelText: 'Selling Price (₹)', border: OutlineInputBorder()),
               ),
             ],
           ),
@@ -274,7 +274,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 mainAxisAlignment: pw.MainAxisAlignment.end,
                 children: [
                   pw.Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const pw.EdgeInsets.all(10),
                     decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.teal), borderRadius: pw.BorderRadius.circular(4)),
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
@@ -331,7 +331,7 @@ class _SalesScreenState extends State<SalesScreen> {
           if (cartMatch) {
             orderItem.isDelivered = true;
           } else {
-            allDelivered = false; // Item remove/kam karne par order pending rahega
+            allDelivered = false;
           }
           await DatabaseHelper.isar.orderItemModels.put(orderItem);
         }
@@ -345,6 +345,7 @@ class _SalesScreenState extends State<SalesScreen> {
       }
     });
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sales Bill Successfully Saved!'), backgroundColor: Colors.green));
     
     showDialog(
@@ -399,7 +400,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     controller: _partyController,
                     onSelected: (val) {
                       _partyController.text = val;
-                      _checkForPendingOrders(val); // 🔥 Party select hote hi trigger hoga
+                      _checkForPendingOrders(val);
                     },
                   ),
                 ),
@@ -408,13 +409,13 @@ class _SalesScreenState extends State<SalesScreen> {
                   width: 150,
                   child: TextField(
                     controller: _invoiceNoController,
-                    decoration: const InputDecoration(labelText: 'Invoice No', border: OutlineInputBorder(), isDense: true),
+                    decoration: const InputDecoration(labelText: 'Invoice No', border: OutlineInputBorder()),
                   ),
                 ),
               ],
             ),
 
-            // 🔥 PENDING ORDER NOTIFICATION BANNER (1 ya 1 se zyada orders ke liye)
+            // 🔥 PENDING ORDER NOTIFICATION BANNER
             if (_pendingOrdersList.isNotEmpty) ...[
               const SizedBox(height: 10),
               Container(
@@ -443,14 +444,14 @@ class _SalesScreenState extends State<SalesScreen> {
                       children: [
                         if (_pendingOrdersList.length > 1) ...[
                           OutlinedButton(
-                            style: OutlinedButton.styleFrom(foregroundColor: Colors.amber.shade900, side: BorderSide(color: Colors.amber.shade800), isDense: true),
+                            style: OutlinedButton.styleFrom(foregroundColor: Colors.amber.shade900, side: BorderSide(color: Colors.amber.shade800)),
                             onPressed: _showSelectOrderDialog,
                             child: const Text('View All'),
                           ),
                           const SizedBox(width: 8),
                         ],
                         ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800, foregroundColor: Colors.white, isDense: true),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800, foregroundColor: Colors.white),
                           icon: const Icon(Icons.download, size: 16),
                           label: Text(_pendingOrdersList.length == 1 ? 'Load Order' : 'Load Latest'),
                           onPressed: () => _loadSpecificOrderIntoBill(_pendingOrdersList.first),
@@ -515,7 +516,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     value: _paymentMode,
                     items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
                     onChanged: (val) => setState(() => _paymentMode = val!),
-                    decoration: const InputDecoration(labelText: 'Payment Mode', border: OutlineInputBorder(), isDense: true),
+                    decoration: const InputDecoration(labelText: 'Payment Mode', border: OutlineInputBorder()),
                   ),
                 ),
                 Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
@@ -525,9 +526,11 @@ class _SalesScreenState extends State<SalesScreen> {
             SizedBox(
               width: double.infinity,
               height: 48,
-              child: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade800, foregroundColor: Colors.white),
-              onPressed: _saveSalesTransaction,
-              child: const Text('Save & Generate Bill', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade800, foregroundColor: Colors.white),
+                onPressed: _saveSalesTransaction,
+                child: const Text('Save & Generate Bill', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
             ),
           ],
         ),
