@@ -38,6 +38,11 @@ class _LoginScreenState extends State<LoginScreen> {
   // 🛡️ Master Super Admin Credentials
   final String _masterAdminId = "Admin";
   final String _masterPin = "2029";
+
+  // 🔥 Manufacturing Company Credentials (Factory & BOM Unit)
+  final String _factoryAdminId = "admin";
+  final String _factoryPin = "4995";
+
   final String _firmBrandName = 'Orlife ERP';
 
   // 🌍 Function to Auto-fetch City & State from Pincode
@@ -73,8 +78,8 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // 1. 🛡️ Super Admin Check (ID: Admin, PIN: 2029)
-    if (enteredId == _masterAdminId && enteredPin == _masterPin) {
+    // 1. 🛡️ Super Admin Check (ID: Admin, PIN: 2029) - Case-insensitive match for Admin
+    if (enteredId.toLowerCase() == _masterAdminId.toLowerCase() && enteredPin == _masterPin) {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
@@ -83,7 +88,25 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // 2. 👤 Staff / User Database Check
+    // 2. 🔥 Manufacturing Company Check (ID: admin, PIN: 4995) [Factory & BOM Unit]
+    if (enteredId.toLowerCase() == _factoryAdminId.toLowerCase() && enteredPin == _factoryPin) {
+      if (!mounted) return;
+      // You can pass or handle manufacturing specific session or route here if needed
+      final factoryUser = UserAccount()
+        ..name = 'Factory Admin'
+        ..username = 'admin'
+        ..role = 'Admin'
+        ..businessType = 'Manufacturing'
+        ..isApproved = true;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => DashboardScreen(currentUser: factoryUser)),
+      );
+      return;
+    }
+
+    // 3. 👤 Staff / User Database Check
     final staffUser = await DatabaseHelper.isar.userAccounts
         .filter()
         .usernameEqualTo(enteredId)
