@@ -1,11 +1,12 @@
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/account.dart';
+import '../models/product.dart';
 import '../models/user_profile.dart';
 import '../models/bom_model.dart';
 import '../models/settings_model.dart';
-import '../models/inventory_model.dart';
-import '../models/user_model.dart'; // UserAccount model import
+import '../models/user_model.dart';
+import '../models/order_model.dart';
 
 class DatabaseHelper {
   static late Isar isar;
@@ -17,11 +18,13 @@ class DatabaseHelper {
       isar = await Isar.open(
         [
           AccountSchema, 
+          ProductSchema,
           UserProfileSchema, 
           BillOfMaterialsSchema, 
           CompanySettingsSchema,
-          InventoryStockSchema,
-          UserAccountSchema 
+          UserAccountSchema,
+          SalesOrderSchema,
+          OrderItemModelSchema,
         ],
         directory: dir.path,
       );
