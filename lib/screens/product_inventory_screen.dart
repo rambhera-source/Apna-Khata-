@@ -1,5 +1,11 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:csv/csv.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../database/database_helper.dart';
 import '../models/inventory_model.dart';
 
@@ -47,11 +53,123 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     });
   }
 
-  // ➕ Add or Edit Product Dialog (Fixed Save & Added Category & Price Category)
+  // 📥 1. Template CSV Generator (With A-Z Price Tier & Opening/Closing Stock)
+  Future<void> _downloadTemplateFile() async {
+    try {
+      List<List<dynamic>> rows = [];
+      
+      // CSV Headers
+      rows.add(['Name', 'Category', 'Opening Stock', 'Closing Stock', 'Price', 'Price Tier (A-Z)', 'SKU']);
+
+      if (_allInventoryItems.isNotEmpty) {
+        for (var item in _allInventoryItems) {
+          rows.add([
+            item.itemName,
+            item.category ?? '',
+            item.openingStock ?? 0,
+            item.stockQuantity,
+            item.priceA,
+            item.priceCategory ?? 'A',
+            item.sku ?? ''
+          ]);
+        }
+      } else {
+        rows.add(['ORLIFE 85W Cable', 'Charger', 10, 50, 150, 'A', 'CAB-85W']);
+        rows.add(['ORLIFE Power Bank', 'Power Bank', 5, 20, 899, 'B', 'PB-10K']);
+      }
+
+      String csvData = const ListToCsvConverter().convert(rows);
+
+      final output = await getTemporaryDirectory();
+      final file = File('${output.path}/inventory_template_with_tier.csv');
+      await file.writeAsString(csvData);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Inventory CSV Template with A-Z Price Tier & Stock details from ORLIFE ERP.',
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Template generate karne me error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // 📂 2. CSV File Import Function
+  Future<void> _importCsvFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'txt'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+        final input = File(filePath).openRead();
+        final fields = await input
+            .transform(utf8.decoder)
+            .transform(const CsvToListConverter())
+            .toList();
+
+        if (fields.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('File खाली है!'), backgroundColor: Colors.red),
+          );
+          return;
+        }
+
+        int successCount = 0;
+        await DatabaseHelper.isar.writeTxn(() async {
+          for (int i = 1; i < fields.length; i++) {
+            var row = fields[i];
+            if (row.isNotEmpty && row[0].toString().trim().isNotEmpty) {
+              String name = row[0].toString().trim();
+              String category = row.length > 1 ? row[1].toString().trim() : '';
+              double openingStock = row.length > 2 ? double.tryParse(row[2].toString()) ?? 0.0 : 0.0;
+              double closingStock = row.length > 3 ? double.tryParse(row[3].toString()) ?? 0.0 : 0.0;
+              double price = row.length > 4 ? double.tryParse(row[4].toString()) ?? 0.0 : 0.0;
+              String priceCategory = row.length > 5 ? row[5].toString().trim().toUpperCase() : 'A';
+              String sku = row.length > 6 ? row[6].toString().trim() : '';
+
+              if (!_priceCategories.contains(priceCategory)) {
+                priceCategory = 'A';
+              }
+
+              InventoryItem item = InventoryItem()
+                ..itemName = name
+                ..category = category
+                ..openingStock = openingStock
+                ..stockQuantity = closingStock
+                ..priceA = price
+                ..priceCategory = priceCategory
+                ..sku = sku
+                ..stockType = 'Fresh';
+
+              await DatabaseHelper.isar.inventoryItems.put(item);
+              successCount++;
+            }
+          }
+        });
+
+        if (!mounted) return;
+        _loadInventory();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('सफलतापूर्वक $successCount प्रोडक्ट्स इम्पोर्ट हो गए!'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('इम्पोर्ट करने में एरर आया: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // ➕ Add or Edit Product Dialog
   void _showAddEditProductDialog({InventoryItem? itemToEdit}) {
     final TextEditingController nameController = TextEditingController(text: itemToEdit?.itemName ?? '');
     final TextEditingController skuController = TextEditingController(text: itemToEdit?.sku ?? '');
     final TextEditingController categoryController = TextEditingController(text: itemToEdit?.category ?? '');
+    final TextEditingController openingStockController = TextEditingController(text: itemToEdit?.openingStock?.toString() ?? '0');
     final TextEditingController qtyController = TextEditingController(text: itemToEdit?.stockQuantity.toString() ?? '0');
     final TextEditingController priceController = TextEditingController(text: itemToEdit?.priceA.toString() ?? '0');
     
@@ -79,19 +197,31 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 const SizedBox(height: 10),
                 TextField(
                   controller: categoryController,
-                  decoration: const InputDecoration(labelText: 'Category (e.g. Charger, Battery)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Category (Manual type or select)', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
                       child: TextField(
-                        controller: qtyController,
+                        controller: openingStockController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Stock Qty *', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'Opening Stock', border: OutlineInputBorder()),
                       ),
                     ),
                     const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: qtyController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Closing Qty *', border: OutlineInputBorder()),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
                     Expanded(
                       child: TextField(
                         controller: priceController,
@@ -99,15 +229,16 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                         decoration: const InputDecoration(labelText: 'Price (₹) *', border: OutlineInputBorder()),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _priceCategories.contains(priceCategory) ? priceCategory : 'A',
+                        items: _priceCategories.map((cat) => DropdownMenuItem(value: cat, child: Text('Tier $cat'))).toList(),
+                        onChanged: (val) => setDialogState(() => priceCategory = val!),
+                        decoration: const InputDecoration(labelText: 'Price Tier (A-Z)', border: OutlineInputBorder()),
+                      ),
+                    ),
                   ],
-                ),
-                const SizedBox(height: 10),
-                // Price Category (A to Z) Dropdown
-                DropdownButtonFormField<String>(
-                  value: _priceCategories.contains(priceCategory) ? priceCategory : 'A',
-                  items: _priceCategories.map((cat) => DropdownMenuItem(value: cat, child: Text('Price Tier $cat'))).toList(),
-                  onChanged: (val) => setDialogState(() => priceCategory = val!),
-                  decoration: const InputDecoration(labelText: 'Price Category (A - Z)', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -153,6 +284,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                   item.itemName = name;
                   item.sku = skuController.text.trim();
                   item.category = categoryController.text.trim();
+                  item.openingStock = double.tryParse(openingStockController.text) ?? 0.0;
                   item.stockQuantity = double.tryParse(qtyController.text) ?? 0.0;
                   item.priceA = double.tryParse(priceController.text) ?? 0.0;
                   item.stockType = stockType;
@@ -176,10 +308,10 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     );
   }
 
-  // 📦 Bulk Entry Dialog Feature
+  // 📦 Bulk Entry Dialog Feature (Manual entry option)
   void _showBulkEntryDialog() {
     final List<Map<String, dynamic>> bulkRows = [
-      {'name': TextEditingController(), 'qty': TextEditingController(text: '1'), 'price': TextEditingController(text: '0'), 'category': TextEditingController()}
+      {'name': TextEditingController(), 'category': TextEditingController(), 'qty': TextEditingController(text: '1'), 'price': TextEditingController(text: '0')}
     ];
 
     showDialog(
@@ -188,7 +320,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Bulk Product Entry'),
           content: SizedBox(
-            width: 500,
+            width: 550,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -206,10 +338,18 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                         child: Row(
                           children: [
                             Expanded(
-                              flex: 3,
+                              flex: 2,
                               child: TextField(
                                 controller: row['name'],
                                 decoration: InputDecoration(labelText: 'Item ${index + 1} Name', border: const OutlineInputBorder(), isDense: true),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: row['category'],
+                                decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder(), isDense: true),
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -252,9 +392,9 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                       setDialogState(() {
                         bulkRows.add({
                           'name': TextEditingController(),
+                          'category': TextEditingController(),
                           'qty': TextEditingController(text: '1'),
                           'price': TextEditingController(text: '0'),
-                          'category': TextEditingController()
                         });
                       });
                     },
@@ -274,6 +414,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                     if (name.isNotEmpty) {
                       InventoryItem item = InventoryItem()
                         ..itemName = name
+                        ..category = (row['category'] as TextEditingController).text.trim()
                         ..stockQuantity = double.tryParse((row['qty'] as TextEditingController).text) ?? 0.0
                         ..priceA = double.tryParse((row['price'] as TextEditingController).text) ?? 0.0
                         ..stockType = 'Fresh'
@@ -313,9 +454,19 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: const Icon(Icons.download),
+            onPressed: _downloadTemplateFile,
+            tooltip: 'Download CSV Template',
+          ),
+          IconButton(
+            icon: const Icon(Icons.file_upload),
+            onPressed: _importCsvFile,
+            tooltip: 'Upload CSV File (Bulk Update)',
+          ),
+          IconButton(
             icon: const Icon(Icons.playlist_add),
             onPressed: _showBulkEntryDialog,
-            tooltip: 'Bulk Entry',
+            tooltip: 'Bulk Manual Entry',
           ),
           IconButton(
             icon: const Icon(Icons.add_box),
@@ -376,9 +527,9 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               color: Colors.teal.shade100,
               child: const Row(
                 children: [
-                  Expanded(flex: 3, child: Text('Item Name / Category / SKU', style: TextStyle(fontWeight: FontWeight.bold))),
-                  Expanded(flex: 1, child: Text('Stock', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                  Expanded(flex: 1, child: Text('Rate (₹)', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                  Expanded(flex: 2, child: Text('Item / Category', style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(flex: 1, child: Text('Op / Cl Stock', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                  Expanded(flex: 1, child: Text('Rate / Tier', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
                   Expanded(flex: 1, child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
                 ],
               ),
@@ -401,53 +552,36 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                             child: Row(
                               children: [
                                 Expanded(
-                                 flex: 3,
+                                 flex: 2,
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                      Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                       const SizedBox(height: 2),
-                                      Wrap(
-                                        spacing: 4,
-                                        children: [
-                                          if (item.category != null && item.category!.isNotEmpty)
-                                            Text('${item.category} | ', style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
-                                          if (item.sku != null && item.sku!.isNotEmpty)
-                                            Text('SKU: ${item.sku} | ', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                            decoration: BoxDecoration(
-                                              color: isReplacement ? Colors.orange.shade100 : Colors.green.shade100,
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              isReplacement ? 'Replacement' : 'Fresh',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                                color: isReplacement ? Colors.orange.shade800 : Colors.green.shade800,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                      Text('${item.category ?? "General"} | SKU: ${item.sku ?? "-"}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
                                     ],
                                   ),
                                 ),
                                 Expanded(
                                   flex: 1,
-                                  child: Text(
-                                    '${item.stockQuantity}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal),
-                                    textAlign: TextAlign.center,
+                                  child: Column(
+                                    children: [
+                                      Text('Cl: ${item.stockQuantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
+                                      Text('Op: ${item.openingStock ?? 0}', style: const TextStyle(fontSize: 10, color: Colors.blueGrey)),
+                                    ],
                                   ),
                                 ),
                                 Expanded(
                                   flex: 1,
-                                  child: Text(
-                                    '₹${item.priceA.toStringAsFixed(2)}',
-                                    style: const TextStyle(fontSize: 13),
-                                    textAlign: TextAlign.center,
+                                  child: Column(
+                                    children: [
+                                      Text('₹${item.priceA.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                        decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(3)),
+                                        child: Text('Tier: ${item.priceCategory ?? "A"}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.brown)),
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 Expanded(
