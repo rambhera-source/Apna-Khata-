@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ For saving visible modules preference
 import '../database/database_helper.dart';
 import '../models/account.dart';
 import '../models/product.dart';
@@ -33,8 +34,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _totalProducts = 0;
   int _pendingOrdersCount = 0;
   bool _isLoading = true;
+  bool _isGridView = false; 
   String _businessType = 'Wholesaler / Retailer';
   String _userName = 'ORLIFE ERP User';
+
+  // 📌 Customizable Module Keys Map (Default sabhi true rahenge)
+  final Map<String, bool> _visibleModules = {
+    'sale_billing': true,
+    'sales_return': true,
+    'purchase': true,
+    'purchase_return': true,
+    'ledger': true,
+    'orders': true,
+    'inventory': true,
+    'manufacturing': true,
+    'payment': true,
+    'receipt': true,
+    'general_voucher': true,
+    'settings': true,
+  };
 
   final FocusNode _focusNode = FocusNode();
 
@@ -45,6 +63,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _businessType = widget.currentUser!.businessType;
       _userName = widget.currentUser!.name.isNotEmpty ? widget.currentUser!.name : 'ORLIFE ERP';
     }
+    _loadUserPreferences();
     _loadDashboardData();
   }
 
@@ -52,6 +71,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _focusNode.dispose();
     super.dispose();
+  }
+
+  // 💾 Load saved user module visibility preferences
+  Future<void> _loadUserPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      for (String key in _visibleModules.keys) {
+        _visibleModules[key] = prefs.getBool('mod_$key') ?? true;
+      }
+    });
+  }
+
+  // 💾 Save user module visibility preferences
+  Future<void> _saveUserPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (String key in _visibleModules.keys) {
+      await prefs.setBool('mod_$key', _visibleModules[key]!);
+    }
   }
 
   Future<void> _loadDashboardData() async {
@@ -75,7 +112,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // 🔗 Navigation Methods for All Modules
+  // 🛠️ Open Customization Dialog to select Home Screen Icons
+  void _showCustomizeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Customize Home Icons', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: _visibleModules.keys.map((key) {
+                    String title = key.replaceAll('_', ' ').toUpperCase();
+                    return CheckboxListTile(
+                      title: Text(title, style: const TextStyle(fontSize: 14)),
+                      value: _visibleModules[key],
+                      activeColor: Colors.amber.shade900,
+                      onChanged: (bool? value) {
+                        setDialogState(() {
+                          _visibleModules[key] = value ?? true;
+                        });
+                        setState(() {});
+                        _saveUserPreferences();
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // 🔗 Navigation Methods
   void _openLedger() {
     if (Navigator.canPop(context)) Navigator.pop(context);
     Navigator.push(context, MaterialPageRoute(builder: (context) => const LedgerScreen())).then((_) => _loadDashboardData());
@@ -177,6 +257,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             foregroundColor: Colors.white,
             actions: [
               IconButton(
+                icon: const Icon(Icons.dashboard_customize),
+                tooltip: 'Customize Home Icons',
+                onPressed: _showCustomizeDialog,
+              ),
+              IconButton(
                 icon: const Icon(Icons.settings),
                 tooltip: 'Settings',
                 onPressed: _openSettings,
@@ -220,7 +305,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 ListTile(
                   leading: const Icon(Icons.receipt, color: Colors.green),
-                  title: const Text('Sale Billing [F8]'),
+                  title: const Text('Sale Billing'),
                   onTap: _openSaleBilling,
                 ),
                 ListTile(
@@ -230,7 +315,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 ListTile(
                   leading: const Icon(Icons.shopping_bag, color: Colors.blue),
-                  title: const Text('Purchase Entry [Ctrl+P]'),
+                  title: const Text('Purchase Entry'),
                   onTap: _openPurchase,
                 ),
                 ListTile(
@@ -240,38 +325,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 ListTile(
                   leading: const Icon(Icons.account_balance_wallet, color: Colors.indigo),
-                  title: const Text('Ledger & Parties [Ctrl+L]'),
+                  title: const Text('Ledger & Parties'),
                   onTap: _openLedger,
                 ),
                 ListTile(
                   leading: const Icon(Icons.shopping_cart, color: Colors.amber),
-                  title: const Text('Orders & Sales [Ctrl+O]'),
+                  title: const Text('Orders & Sales'),
                   onTap: _openOrders,
                 ),
                 ListTile(
                   leading: const Icon(Icons.inventory_2, color: Colors.orange),
-                  title: const Text('Inventory & Products [Ctrl+I]'),
+                  title: const Text('Inventory & Products'),
                   onTap: _openInventory,
                 ),
                 if (isManufacturing)
                   ListTile(
                     leading: const Icon(Icons.precision_manufacturing, color: Colors.deepPurple),
-                    title: const Text('BOM & Production [Ctrl+M]'),
+                    title: const Text('BOM & Production'),
                     onTap: () => _openManufacturing(true),
                   ),
                 ListTile(
                   leading: const Icon(Icons.payment, color: Colors.red),
-                  title: const Text('Payment Voucher [F5]'),
+                  title: const Text('Payment Voucher'),
                   onTap: _openPayment,
                 ),
                 ListTile(
                   leading: const Icon(Icons.request_quote, color: Colors.teal),
-                  title: const Text('Receipt Voucher [F6]'),
+                  title: const Text('Receipt Voucher'),
                   onTap: _openReceipt,
                 ),
                 ListTile(
                   leading: const Icon(Icons.note_alt, color: Colors.brown),
-                  title: const Text('General Voucher [F7]'),
+                  title: const Text('General Voucher'),
                   onTap: _openGeneralVoucher,
                 ),
                 ListTile(
@@ -367,16 +452,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       );
                     } else {
-                      // ================= MOBILE LAYOUT =================
+                      // ================= MOBILE LAYOUT (With List/Grid & Customization) =================
                       return Padding(
                         padding: const EdgeInsets.all(16.0),
-                        child: ListView(
+                        child: Column(
                           children: [
                             _buildSummaryCard(isManufacturing),
-                            const SizedBox(height: 20),
-                            const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.tune, color: Colors.brown),
+                                      tooltip: 'Customize Icons',
+                                      onPressed: _showCustomizeDialog,
+                                    ),
+                                    ToggleButtons(
+                                      isSelected: [!_isGridView, _isGridView],
+                                      onPressed: (index) {
+                                        setState(() {
+                                          _isGridView = index == 1;
+                                        });
+                                      },
+                                      borderRadius: BorderRadius.circular(8),
+                                      selectedColor: Colors.white,
+                                      fillColor: Colors.amber.shade900,
+                                      color: Colors.black87,
+                                      constraints: const BoxConstraints(minWidth: 40, minHeight: 32),
+                                      children: const [
+                                        Icon(Icons.view_list, size: 18),
+                                        Icon(Icons.grid_view, size: 18),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 10),
-                            _buildMainActionsList(isManufacturing),
+                            Expanded(
+                              child: _isGridView 
+                                  ? _buildMainActionsGrid(isManufacturing)
+                                  : ListView(
+                                      children: [
+                                        _buildMainActionsList(isManufacturing),
+                                      ],
+                                    ),
+                            ),
                           ],
                         ),
                       );
@@ -418,34 +542,111 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMainActionsList(bool isManufacturing) {
-    return Column(
-      children: [
-        _buildActionTile(icon: Icons.receipt, iconColor: Colors.green, title: 'Sale Billing [F8]', subtitle: 'Create sale invoices & billing', onTap: _openSaleBilling),
-        const SizedBox(height: 10),
-        _buildActionTile(icon: Icons.assignment_return, iconColor: Colors.greenAccent, title: 'Sales Return', subtitle: 'Manage customer product returns / credit notes', onTap: _openSalesReturn),
-        const SizedBox(height: 10),
-        _buildActionTile(icon: Icons.shopping_bag, iconColor: Colors.blue, title: 'Purchase Entry [Ctrl+P]', subtitle: 'Manage supplier purchases & stock in', onTap: _openPurchase),
-        const SizedBox(height: 10),
-        _buildActionTile(icon: Icons.keyboard_return, iconColor: Colors.blueAccent, title: 'Purchase Return', subtitle: 'Manage returns to suppliers / debit notes', onTap: _openPurchaseReturn),
-        const SizedBox(height: 10),
-        _buildActionTile(icon: Icons.account_balance_wallet, iconColor: Colors.indigo, title: 'Ledger & Parties [Ctrl+L]', subtitle: 'Manage customer/supplier ledger balances', onTap: _openLedger),
-        const SizedBox(height: 10),
-        _buildActionTile(icon: Icons.shopping_cart, iconColor: Colors.amber, title: 'Orders & Sales [Ctrl+O]', subtitle: 'Book new orders, view history', onTap: _openOrders),
-        const SizedBox(height: 10),
-        _buildActionTile(icon: Icons.inventory_2, iconColor: Colors.orange, title: 'Inventory & Products [Ctrl+I]', subtitle: 'Manage chargers, batteries, accessories stock', onTap: _openInventory),
-        if (isManufacturing) ...[
-          const SizedBox(height: 10),
-          _buildActionTile(icon: Icons.precision_manufacturing, iconColor: Colors.deepPurple, title: 'BOM & Production [Ctrl+M]', subtitle: 'Manage bill of materials & production batches', onTap: () => _openManufacturing(true)),
-        ],
-        const SizedBox(height: 10),
-        _buildActionTile(icon: Icons.payment, iconColor: Colors.red, title: 'Payment Voucher [F5]', subtitle: 'Record payments made', onTap: _openPayment),
-        const SizedBox(height: 10),
-        _buildActionTile(icon: Icons.request_quote, iconColor: Colors.teal, title: 'Receipt Voucher [F6]', subtitle: 'Record money received', onTap: _openReceipt),
-        const SizedBox(height: 10),
-        _buildActionTile(icon: Icons.note_alt, iconColor: Colors.brown, title: 'General Voucher [F7]', subtitle: 'Journal & general accounting entries', onTap: _openGeneralVoucher),
-        const SizedBox(height: 10),
-        _buildActionTile(icon: Icons.settings, iconColor: Colors.blueGrey, title: 'Settings & Backup', subtitle: 'Configure software & data backup', onTap: _openSettings),
-      ],
+    List<Widget> tiles = [];
+
+    if (_visibleModules['sale_billing']!) {
+      tiles.add(_buildActionTile(icon: Icons.receipt, iconColor: Colors.green, title: 'Sale Billing', subtitle: 'Create sale invoices & billing', onTap: _openSaleBilling));
+    }
+    if (_visibleModules['sales_return']!) {
+      tiles.add(_buildActionTile(icon: Icons.assignment_return, iconColor: Colors.greenAccent, title: 'Sales Return', subtitle: 'Manage customer product returns / credit notes', onTap: _openSalesReturn));
+    }
+    if (_visibleModules['purchase']!) {
+      tiles.add(_buildActionTile(icon: Icons.shopping_bag, iconColor: Colors.blue, title: 'Purchase Entry', subtitle: 'Manage supplier purchases & stock in', onTap: _openPurchase));
+    }
+    if (_visibleModules['purchase_return']!) {
+      tiles.add(_buildActionTile(icon: Icons.keyboard_return, iconColor: Colors.blueAccent, title: 'Purchase Return', subtitle: 'Manage returns to suppliers / debit notes', onTap: _openPurchaseReturn));
+    }
+    if (_visibleModules['ledger']!) {
+      tiles.add(_buildActionTile(icon: Icons.account_balance_wallet, iconColor: Colors.indigo, title: 'Ledger & Parties', subtitle: 'Manage customer/supplier ledger balances', onTap: _openLedger));
+    }
+    if (_visibleModules['orders']!) {
+      tiles.add(_buildActionTile(icon: Icons.shopping_cart, iconColor: Colors.amber, title: 'Orders & Sales', subtitle: 'Book new orders, view history', onTap: _openOrders));
+    }
+    if (_visibleModules['inventory']!) {
+      tiles.add(_buildActionTile(icon: Icons.inventory_2, iconColor: Colors.orange, title: 'Inventory & Products', subtitle: 'Manage chargers, batteries, accessories stock', onTap: _openInventory));
+    }
+    if (isManufacturing && _visibleModules['manufacturing']!) {
+      tiles.add(_buildActionTile(icon: Icons.precision_manufacturing, iconColor: Colors.deepPurple, title: 'BOM & Production', subtitle: 'Manage bill of materials & production batches', onTap: () => _openManufacturing(true)));
+    }
+    if (_visibleModules['payment']!) {
+      tiles.add(_buildActionTile(icon: Icons.payment, iconColor: Colors.red, title: 'Payment Voucher', subtitle: 'Record payments made', onTap: _openPayment));
+    }
+    if (_visibleModules['receipt']!) {
+      tiles.add(_buildActionTile(icon: Icons.request_quote, iconColor: Colors.teal, title: 'Receipt Voucher', subtitle: 'Record money received', onTap: _openReceipt));
+    }
+    if (_visibleModules['general_voucher']!) {
+      tiles.add(_buildActionTile(icon: Icons.note_alt, iconColor: Colors.brown, title: 'General Voucher', subtitle: 'Journal & general accounting entries', onTap: _openGeneralVoucher));
+    }
+    if (_visibleModules['settings']!) {
+      tiles.add(_buildActionTile(icon: Icons.settings, iconColor: Colors.blueGrey, title: 'Settings & Backup', subtitle: 'Configure software & data backup', onTap: _openSettings));
+    }
+
+    // Add spacing between tiles dynamically
+    List<Widget> spacedTiles = [];
+    for (int i = 0; i < tiles.length; i++) {
+      spacedTiles.add(tiles[i]);
+      if (i < tiles.length - 1) spacedTiles.add(const SizedBox(height: 10));
+    }
+
+    return Column(children: spacedTiles);
+  }
+
+  Widget _buildMainActionsGrid(bool isManufacturing) {
+    final List<Map<String, dynamic>> allItems = [
+      {'key': 'sale_billing', 'icon': Icons.receipt, 'color': Colors.green, 'title': 'Sale Billing', 'onTap': _openSaleBilling},
+      {'key': 'sales_return', 'icon': Icons.assignment_return, 'color': Colors.greenAccent, 'title': 'Sales Return', 'onTap': _openSalesReturn},
+      {'key': 'purchase', 'icon': Icons.shopping_bag, 'color': Colors.blue, 'title': 'Purchase', 'onTap': _openPurchase},
+      {'key': 'purchase_return', 'icon': Icons.keyboard_return, 'color': Colors.blueAccent, 'title': 'Pur. Return', 'onTap': _openPurchaseReturn},
+      {'key': 'ledger', 'icon': Icons.account_balance_wallet, 'color': Colors.indigo, 'title': 'Ledger', 'onTap': _openLedger},
+      {'key': 'orders', 'icon': Icons.shopping_cart, 'color': Colors.amber, 'title': 'Orders', 'onTap': _openOrders},
+      {'key': 'inventory', 'icon': Icons.inventory_2, 'color': Colors.orange, 'title': 'Inventory', 'onTap': _openInventory},
+      {'key': 'manufacturing', 'icon': Icons.precision_manufacturing, 'color': Colors.deepPurple, 'title': 'BOM/Mfg', 'onTap': () => _openManufacturing(true)},
+      {'key': 'payment', 'icon': Icons.payment, 'color': Colors.red, 'title': 'Payment', 'onTap': _openPayment},
+      {'key': 'receipt', 'icon': Icons.request_quote, 'color': Colors.teal, 'title': 'Receipt', 'onTap': _openReceipt},
+      {'key': 'general_voucher', 'icon': Icons.note_alt, 'color': Colors.brown, 'title': 'Gen Voucher', 'onTap': _openGeneralVoucher},
+      {'key': 'settings', 'icon': Icons.settings, 'color': Colors.blueGrey, 'title': 'Settings', 'onTap': _openSettings},
+    ];
+
+    // Filter items based on user selection
+    final List<Map<String, dynamic>> filteredItems = allItems.where((item) {
+      if (item['key'] == 'manufacturing' && !isManufacturing) return false;
+      return _visibleModules[item['key']] ?? true;
+    }).toList();
+
+    return GridView.builder(
+      itemCount: filteredItems.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 1.25,
+      ),
+      itemBuilder: (context, index) {
+        final item = filteredItems[index];
+        return InkWell(
+          onPressed: item['onTap'],
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(item['icon'], color: item['color'], size: 36),
+                const SizedBox(height: 8),
+                Text(
+                  item['title'],
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
