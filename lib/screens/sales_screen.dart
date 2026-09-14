@@ -99,8 +99,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 final newAccount = Account()
                   ..name = name
                   ..phone = phoneController.text.trim()
-                  ..address = addressController.text.trim()
-                  ..type = 'Customer';
+                  ..address = addressController.text.trim();
                 await DatabaseHelper.isar.accounts.put(newAccount);
               });
 
@@ -172,7 +171,7 @@ class _SalesScreenState extends State<SalesScreen> {
               final newProduct = Product()
                 ..name = name
                 ..sellingPrice = price
-                ..stock = stock;
+                ..stock = stock.toDouble(); // ✅ Fixed: converted int to double
 
               await DatabaseHelper.isar.writeTxn(() async {
                 await DatabaseHelper.isar.products.put(newProduct);
@@ -519,7 +518,7 @@ class _SalesScreenState extends State<SalesScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Bill Saved Successfully!'),
-        content: const Text('Kya aap is bill का print lena chahte hain ya WhatsApp par share karna chahte hain?'),
+        content: const Text('Kya aap is bill ka print lena chahte hain ya WhatsApp par share karna chahte hain?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
           ElevatedButton.icon(
