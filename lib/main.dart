@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'database/database_helper.dart';
 import 'screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await DatabaseHelper.initDB();
+  
+  // Web par SQLite database run nahi hota, isliye sirf mobile par init hoga
+  if (!kIsWeb) {
+    await DatabaseHelper.initDB();
+  }
   
   runApp(const AccountingApp());
 }
