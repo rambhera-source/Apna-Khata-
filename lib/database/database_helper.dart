@@ -13,16 +13,15 @@ class DatabaseHelper {
   static Future<void> initDB() async {
     final dir = await getApplicationDocumentsDirectory();
     
-    // Check karein agar Isar pehle se open nahi hai toh open karein
     if (Isar.instanceNames.isEmpty) {
       isar = await Isar.open(
         [
-          PartySchema, 
+          AccountSchema, 
           UserProfileSchema, 
           BillOfMaterialsSchema, 
           CompanySettingsSchema,
           InventoryStockSchema,
-          UserAccountSchema // Staff signup/login ke liye
+          UserAccountSchema 
         ],
         directory: dir.path,
       );
@@ -31,9 +30,9 @@ class DatabaseHelper {
     }
   }
 
-  // --- Party Functions (Updated with new Party model fields) ---
-  static Future<List<Party>> getParties() async {
-    return await isar.parties.where().findAll();
+  // --- Account / Party Functions ---
+  static Future<List<Account>> getParties() async {
+    return await isar.accounts.where().findAll();
   }
 
   static Future<void> addParty({
@@ -53,7 +52,7 @@ class DatabaseHelper {
     String? loginUsername,
     String? loginPassword,
   }) async {
-    final party = Party()
+    final account = Account()
       ..name = name
       ..groupCategory = groupCategory
       ..phone = phone
@@ -71,7 +70,7 @@ class DatabaseHelper {
       ..loginPassword = loginPassword;
 
     await isar.writeTxn(() async {
-      await isar.parties.put(party);
+      await isar.accounts.put(account);
     });
   }
 
@@ -81,7 +80,7 @@ class DatabaseHelper {
       ..username = username
       ..password = password
       ..businessType = businessType
-      ..subscriptionExpiry = DateTime.now().add(const Duration(days: 365)) // 1 saal ka default plan
+      ..subscriptionExpiry = DateTime.now().add(const Duration(days: 365))
       ..isActive = true;
 
     await isar.writeTxn(() async {
