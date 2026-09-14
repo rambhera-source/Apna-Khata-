@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import '../models/account.dart';
-import '../models/product.dart';
+import '../models/inventory_model.dart';
 import '../models/order_model.dart';
 import 'searchable_field.dart';
 
