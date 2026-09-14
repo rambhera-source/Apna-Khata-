@@ -34,9 +34,14 @@ jobs:
 
       - name: Force Kotlin Version to 1.8.10
         run: |
+          # build.gradle में वर्शन अपडेट करें
           if [ -f "android/build.gradle" ]; then
             sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.8.10'/g" android/build.gradle
           fi
+          
+          # settings.gradle या अन्य फाइलों में अगर पुराना 1.7.10 वर्शन है तो उसे भी ठीक करें
+          find . -name "*.gradle" -type f -exec sed -i "s/1.7.10/1.8.10/g" {} +
+          find . -name "*.gradle.kts" -type f -exec sed -i "s/1.7.10/1.8.10/g" {} +
 
       - name: Install dependencies
         run: flutter pub get
