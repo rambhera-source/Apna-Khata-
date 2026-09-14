@@ -7,7 +7,7 @@ import '../models/product.dart';
 import '../models/order_model.dart';
 import '../models/user_model.dart';
 
-// ✅ All Screens Imported
+// ✅ All Screens Imported (Including AddAccountScreen)
 import 'sales_screen.dart';
 import 'sales_return_screen.dart';
 import 'purchase_screen.dart';
@@ -19,6 +19,7 @@ import 'manufacturing_screen.dart';
 import 'voucher_entry_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
+import 'add_account_screen.dart'; // 🔥 Added Import
 
 class DashboardScreen extends StatefulWidget {
   final UserAccount? currentUser;
@@ -39,6 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // 📌 Module Visibility Map
   final Map<String, bool> _visibleModules = {
+    'add_account': true,
     'sale_billing': true,
     'sales_return': true,
     'purchase': true,
@@ -135,6 +137,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // 🔗 Navigation Methods
+  void _openAddAccount() {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const AddAccountScreen())).then((_) => _loadDashboardData());
+  }
+
   void _openLedger() {
     if (Navigator.canPop(context)) Navigator.pop(context);
     Navigator.push(context, MaterialPageRoute(builder: (context) => const LedgerScreen())).then((_) => _loadDashboardData());
@@ -216,6 +223,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       autofocus: true,
       child: CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.keyA, control: true): _openAddAccount,
           const SingleActivator(LogicalKeyboardKey.keyL, control: true): _openLedger,
           const SingleActivator(LogicalKeyboardKey.keyO, control: true): _openOrders,
           const SingleActivator(LogicalKeyboardKey.f8): _openSaleBilling,
@@ -281,6 +289,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ],
                   ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.person_add, color: Colors.teal),
+                  title: const Text('Add Account / Party'),
+                  onTap: _openAddAccount,
                 ),
                 ListTile(
                   leading: const Icon(Icons.receipt, color: Colors.green),
@@ -395,6 +408,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       const Text('💻 PC ERP Hotkeys', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
                                       const Divider(),
                                       const SizedBox(height: 4),
+                                      _buildShortcutButton('Add Account [Ctrl+A]', Icons.person_add, Colors.teal, _openAddAccount),
+                                      const SizedBox(height: 6),
                                       _buildShortcutButton('Ledger [Ctrl+L]', Icons.account_balance_wallet, Colors.indigo, _openLedger),
                                       const SizedBox(height: 6),
                                       _buildShortcutButton('Sale Bill [F8]', Icons.receipt, Colors.green, _openSaleBilling),
@@ -523,6 +538,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildMainActionsList(bool isManufacturing) {
     List<Widget> tiles = [];
 
+    if (_visibleModules['add_account']!) {
+      tiles.add(_buildActionTile(icon: Icons.person_add, iconColor: Colors.teal, title: 'Add Account / Party', subtitle: 'Create new customer, supplier or ledger', onTap: _openAddAccount));
+    }
     if (_visibleModules['sale_billing']!) {
       tiles.add(_buildActionTile(icon: Icons.receipt, iconColor: Colors.green, title: 'Sale Billing', subtitle: 'Create sale invoices & billing', onTap: _openSaleBilling));
     }
@@ -571,6 +589,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildMainActionsGrid(bool isManufacturing) {
     final List<Map<String, dynamic>> allItems = [
+      {'key': 'add_account', 'icon': Icons.person_add, 'color': Colors.teal, 'title': 'Add Account', 'onTap': _openAddAccount},
       {'key': 'sale_billing', 'icon': Icons.receipt, 'color': Colors.green, 'title': 'Sale Billing', 'onTap': _openSaleBilling},
       {'key': 'sales_return', 'icon': Icons.assignment_return, 'color': Colors.greenAccent, 'title': 'Sales Return', 'onTap': _openSalesReturn},
       {'key': 'purchase', 'icon': Icons.shopping_bag, 'color': Colors.blue, 'title': 'Purchase', 'onTap': _openPurchase},
@@ -582,7 +601,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       {'key': 'payment', 'icon': Icons.payment, 'color': Colors.red, 'title': 'Payment', 'onTap': _openPayment},
       {'key': 'receipt', 'icon': Icons.request_quote, 'color': Colors.teal, 'title': 'Receipt', 'onTap': _openReceipt},
       {'key': 'general_voucher', 'icon': Icons.note_alt, 'color': Colors.brown, 'title': 'Gen Voucher', 'onTap': _openGeneralVoucher},
-      {'key': 'settings', 'icon': Icons.settings, 'color': Colors.blueGrey, 'title': 'Settings', 'onTap': _openSettings},
+      {'key': 'settings', 'icon': Icons.settings, 'color': Colors.blueGrey, 'title': 'Settings', 'onTag': _openSettings},
     ];
 
     final List<Map<String, dynamic>> filteredItems = allItems.where((item) {
