@@ -25,6 +25,9 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _returnNoController = TextEditingController(text: 'SR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
+  // 📅 Selected Return Date Variable
+  DateTime _selectedDate = DateTime.now();
+
   List<String> _allAccounts = [];
   List<Product> _allProducts = [];
   final List<Map<String, dynamic>> _returnItems = [];
@@ -44,42 +47,218 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     });
   }
 
-  void _addItem() {
-    if (_allProducts.isEmpty) return;
-    Product selectedProduct = _allProducts.first;
-    final TextEditingController qtyController = TextEditingController(text: '1');
+  // ➕ Direct New Party/Customer Create Dialog
+  void _showAddNewPartyDialog() {
+    final TextEditingController newPartyController = TextEditingController(text: _partyController.text);
+    final TextEditingController phoneController = TextEditingController();
+    final TextEditingController addressController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add Return Item'),
+        title: const Text('Add New Customer / Party'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            DropdownButtonFormField<Product>(
-              value: selectedProduct,
-              items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
-              onChanged: (val) => selectedProduct = val!,
-              decoration: const InputDecoration(labelText: 'Product', border: OutlineInputBorder()),
+            TextField(
+              controller: newPartyController,
+              decoration: const InputDecoration(labelText: 'Party Name *', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
-            TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Return Qty', border: OutlineInputBorder())),
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: addressController,
+              decoration: const InputDecoration(labelText: 'Address', border: OutlineInputBorder()),
+            ),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
-              int q = int.tryParse(qtyController.text) ?? 1;
-              setState(() {
-                _returnItems.add({'name': selectedProduct.name, 'qty': q, 'price': selectedProduct.sellingPrice});
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+            onPressed: () async {
+              String name = newPartyController.text.trim();
+              if (name.isEmpty) return;
+
+              await DatabaseHelper.isar.writeTxn(() async {
+                final newAccount = Account()
+                  ..name = name
+                  ..phone = phoneController.text.trim()
+                  ..address = addressController.text.trim();
+                await DatabaseHelper.isar.accounts.put(newAccount);
               });
+
+              await _loadData();
+              setState(() {
+                _partyController.text = name;
+              });
+
               Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Party "$name" successfully added!'), backgroundColor: Colors.green),
+              );
             },
-            child: const Text('Add'),
+            child: const Text('Save & Select'),
           ),
         ],
       ),
+    );
+  }
+
+  // ➕ Direct New Product Create Dialog
+  void _showAddNewProductDialog(BuildContext parentContext, Function(Product) onProductCreated) {
+    final TextEditingController prodNameController = TextEditingController();
+    final TextEditingController priceController = TextEditingController();
+    final TextEditingController stockController = TextEditingController(text: '10');
+
+    showDialog(
+      context: parentContext,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Product'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: prodNameController,
+              decoration: const InputDecoration(labelText: 'Product Name *', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: priceController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Selling Price (₹) *', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: stockController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Initial Stock', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+            onPressed: () async {
+              String name = prodNameController.text.trim();
+              double price = double.tryParse(priceController.text) ?? 0.0;
+              int stock = int.tryParse(stockController.text) ?? 0;
+
+              if (name.isEmpty || price <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Kripya naam aur sahi price bharein!'), backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              final newProduct = Product()
+                ..name = name
+                ..sellingPrice = price
+                ..stock = stock.toDouble();
+
+              await DatabaseHelper.isar.writeTxn(() async {
+                await DatabaseHelper.isar.products.put(newProduct);
+              });
+
+              await _loadData();
+              Navigator.pop(context);
+              onProductCreated(newProduct);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Product "$name" added successfully!'), backgroundColor: Colors.green),
+              );
+            },
+            child: const Text('Save & Select'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addItem() {
+    if (_allProducts.isEmpty) {
+      _showAddNewProductDialog(context, (newProd) {
+        _addItem();
+      });
+      return;
+    }
+
+    Product selectedProduct = _allProducts.first;
+    final TextEditingController qtyController = TextEditingController(text: '1');
+    final TextEditingController priceController = TextEditingController(text: selectedProduct.sellingPrice.toString());
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Add Return Item'),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(foregroundColor: Colors.deepOrange),
+                    icon: const Icon(Icons.add_circle, size: 18),
+                    label: const Text('New Product'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showAddNewProductDialog(context, (createdProduct) {
+                        setState(() {
+                          selectedProduct = createdProduct;
+                          priceController.text = createdProduct.sellingPrice.toString();
+                        });
+                        _addItem();
+                      });
+                    },
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<Product>(
+                    value: _allProducts.contains(selectedProduct) ? selectedProduct : _allProducts.first,
+                    items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
+                    onChanged: (val) {
+                      setDialogState(() {
+                        selectedProduct = val!;
+                        priceController.text = selectedProduct.sellingPrice.toString();
+                      });
+                    },
+                    decoration: const InputDecoration(labelText: 'Product', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Return Qty', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder())),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+                  onPressed: () {
+                    int q = int.tryParse(qtyController.text) ?? 1;
+                    double p = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
+                    setState(() {
+                      _returnItems.add({'name': selectedProduct.name, 'qty': q, 'price': p});
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -96,7 +275,8 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
             pw.Text('CREDIT NOTE / SALES RETURN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.deepOrange)),
             pw.SizedBox(height: 10),
-            pw.Text('Return No: ${_returnNoController.text} | Party: ${_partyController.text}'),
+            pw.Text('Return No: ${_returnNoController.text} | Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}'),
+            pw.Text('Party: ${_partyController.text}'),
             pw.SizedBox(height: 15),
             pw.Table.fromTextArray(
               headers: ['Item', 'Qty', 'Price', 'Total'],
@@ -120,10 +300,13 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   }
 
   Future<void> _saveReturn() async {
-    if (_partyController.text.isEmpty || _returnItems.isEmpty) return;
+    if (_partyController.text.isEmpty || _returnItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Return Items bharein!'), backgroundColor: Colors.red));
+      return;
+    }
 
     final txn = AccountingTransaction()
-      ..date = DateTime.now()
+      ..date = _selectedDate
       ..voucherType = 'Sales Return'
       ..voucherNumber = _returnNoController.text
       ..partyName = _partyController.text.trim()
@@ -173,30 +356,99 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            SearchableField(label: 'Customer / Party Name *', items: _allAccounts, controller: _partyController, onSelected: (v) {}),
+            // 📅 Date Selector and Return No Row
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(color: Colors.grey.shade400),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    ),
+                    icon: const Icon(Icons.calendar_today, size: 16, color: Colors.deepOrange),
+                    label: Text(
+                      'Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}',
+                      style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035),
+                      );
+                      if (picked != null && picked != _selectedDate) {
+                        setState(() => _selectedDate = picked);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 150,
+                  child: TextField(controller: _returnNoController, decoration: const InputDecoration(labelText: 'Return No', border: OutlineInputBorder())),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // 👤 Party Selection with 'Add New' Option
+            Row(
+              children: [
+                Expanded(
+                  child: SearchableField(
+                    label: 'Customer / Party Name *',
+                    items: _allAccounts,
+                    controller: _partyController,
+                    onSelected: (v) {},
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepOrange.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                  ),
+                  icon: const Icon(Icons.person_add, size: 18),
+                  label: const Text('New'),
+                  onPressed: _showAddNewPartyDialog,
+                ),
+              ],
+            ),
             const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Return Items:', style: TextStyle(fontWeight: FontWeight.bold)),
-                ElevatedButton.icon(onPressed: _addItem, icon: const Icon(Icons.add, size: 16), label: const Text('Add Return Item')),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+                  onPressed: _addItem, 
+                  icon: const Icon(Icons.add, size: 16), 
+                  label: const Text('Add Return Item'),
+                ),
               ],
             ),
+            const SizedBox(height: 8),
             Expanded(
-              child: ListView.builder(
-                itemCount: _returnItems.length,
-                itemBuilder: (context, index) {
-                  final item = _returnItems[index];
-                  return Card(
-                    child: ListTile(
-                      title: Text(item['name']),
-                      subtitle: Text('Qty: ${item['qty']} | Price: ${item['price']}'),
-                      trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _returnItems.removeAt(index))),
+              child: _returnItems.isEmpty
+                  ? const Center(child: Text('Koi return item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
+                  : ListView.builder(
+                      itemCount: _returnItems.length,
+                      itemBuilder: (context, index) {
+                        final item = _returnItems[index];
+                        return Card(
+                          child: ListTile(
+                            title: Text(item['name']),
+                            subtitle: Text('Qty: ${item['qty']} | Price: ₹ ${item['price']}'),
+                            trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _returnItems.removeAt(index))),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
+            const Divider(),
             Text('Total Return: ₹ $_returnTotal', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
             const SizedBox(height: 16),
             SizedBox(
