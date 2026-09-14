@@ -395,7 +395,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                     labelText: 'Amount (₹) *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.currency_rupee),
-                    fillColor: Colors.purple54, // Fixed color reference
+                    fillColor: Colors.purple.shade50, // Fixed color reference
                     filled: true,
                   ),
                 ),
