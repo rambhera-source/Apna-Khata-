@@ -15,7 +15,10 @@ class InventoryItem {
 
   late String category = 'Mobile Accessories'; // e.g. "Mobile Accessories", "Cables", "Power Banks"
   
-  double stockQuantity = 0.0; // Current Stock
+  double stockQuantity = 0.0; // Current Stock (Closing Stock)
+  double? openingStock = 0.0; // 🔥 Opening Stock for tracking
+  String? priceCategory = 'A'; // 🔥 Selected Price Tier ('A' to 'Z')
+  
   late String unit = 'Pcs'; // e.g. "Pcs", "Box", "Set"
 
   // 🖼️ 4 Product Images ke local file paths
