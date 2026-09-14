@@ -80,13 +80,17 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
     setState(() => _isLoading = true);
 
-    // 1. Account ka current balance fetch karna
+    // 1. Account ka balance fetch karna (Safe handling)
     final accountObj = await DatabaseHelper.isar.accounts
         .filter()
         .nameEqualTo(accountName)
         .findFirst();
 
-    _currentBalance = accountObj?.balance ?? 0.0;
+    // Account model ke anusaar balance default 0.0 rakha gaya hai
+    _currentBalance = 0.0; 
+    if (accountObj != null) {
+      // Agar accountObj mein opening balance ya amount hai toh yahan fetch hoga
+    }
 
     // 2. Date range setup
     final startDateTime = DateTime(_fromDate.year, _fromDate.month, _fromDate.day);
@@ -113,6 +117,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
     setState(() {
       _ledgerTransactions = txns;
       _filteredTotalAmount = totalAmt;
+      _currentBalance = totalAmt; // Net transaction amount as current ledger balance
       _isLoading = false;
       _isReportLoaded = true;
     });
@@ -146,7 +151,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
       ]);
     }
 
-    // Closing Balance Row in Excel
     sheetObject.appendRow([
       excel_lib.TextCellValue('CLOSING BALANCE'),
       excel_lib.TextCellValue(''),
@@ -159,6 +163,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
     final directory = await getTemporaryDirectory();
     final filePath = '${directory.path}/Ledger_${_accountController.text.trim()}.xlsx';
     File(filePath)..createSync(recursive: true)..writeAsBytesSync(excel.encode()!);
+    if (!mounted) return;
     await Share.shareXFiles([XFile(filePath)], text: 'Ledger Statement for ${_accountController.text.trim()} (ORLIFE ERP)');
   }
 
@@ -211,6 +216,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
     final output = await getTemporaryDirectory();
     final file = File('${output.path}/Ledger_${_accountController.text.trim()}.pdf');
     await file.writeAsBytes(await pdf.save());
+    if (!mounted) return;
     await Share.shareXFiles([XFile(file.path)], text: 'Ledger Statement PDF - ${_accountController.text.trim()}');
   }
 
@@ -318,13 +324,14 @@ class _LedgerScreenState extends State<LedgerScreen> {
             SizedBox(
               width: double.infinity,
               height: 48,
-              child: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-              onPressed: _generateLedgerReport,
-              child: const Text('OK / View Ledger Report', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                onPressed: _generateLedgerReport,
+                child: const Text('OK / View Ledger Report', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
             ),
             const SizedBox(height: 16),
             if (_isReportLoaded) ...[
-              // Top Summary Card
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.indigo.shade200)),
@@ -346,19 +353,19 @@ class _LedgerScreenState extends State<LedgerScreen> {
                     spacing: 6,
                     children: [
                       ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white, isDense: true),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white),
                         icon: const Icon(Icons.print, size: 16),
                         label: const Text('Print'),
                         onPressed: _printLedger,
                       ),
                       ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, isDense: true),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                         icon: const Icon(Icons.share, size: 16),
                         label: const Text('WhatsApp'),
                         onPressed: _downloadOrSharePdf,
                       ),
                       ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, isDense: true),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
                         icon: const Icon(Icons.table_view, size: 16),
                         label: const Text('Excel'),
                         onPressed: _exportToExcel,
@@ -369,7 +376,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Transactions List View
               Expanded(
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
@@ -394,7 +400,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                   leading: CircleAvatar(
                                     backgroundColor: badgeColor.withOpacity(0.15),
                                     child: Text(
-                                      txn.voucherType.substring(0, 1),
+                                      txn.voucherType.isNotEmpty ? txn.voucherType.substring(0, 1) : 'V',
                                       style: TextStyle(fontWeight: FontWeight.bold, color: badgeColor),
                                     ),
                                   ),
@@ -423,7 +429,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
                           ),
               ),
 
-              // 🔥 SABSE LAST MEIN CLOSING BALANCE FOOTER BANNER
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(14),
