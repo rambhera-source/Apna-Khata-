@@ -425,7 +425,6 @@ class _SalesScreenState extends State<SalesScreen> {
             .findFirst();
 
         if (invItem != null) {
-          // Stock quantity minus karenge aur stockType match karenge
           invItem.stockQuantity -= soldQty;
           if (invItem.stockQuantity < 0) invItem.stockQuantity = 0;
           invItem.stockType = itemStockType;
@@ -562,7 +561,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     );
                   },
                   child: Container(
-                    padding: const symmetricPadding(horizontal: 10, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12), // 👈 Fixed here
                     decoration: BoxDecoration(
                       color: _globalStockType == 'Fresh' ? Colors.green.shade50 : Colors.orange.shade50,
                       border: Border.all(
@@ -772,7 +771,7 @@ class _SalesScreenState extends State<SalesScreen> {
                           decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
                         ),
                       ),
-                      Text('Total: ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
+                      Text('Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
                     ],
                   ),
                 ],
@@ -793,9 +792,4 @@ class _SalesScreenState extends State<SalesScreen> {
       ),
     );
   }
-}
-
-// Helper extension for EdgeInsets in InkWell container if needed
-EdgeInsets symmetricPadding({required double horizontal, required double vertical}) {
-  return EdgeInsets.symmetric(horizontal: horizontal, vertical: vertical);
 }
