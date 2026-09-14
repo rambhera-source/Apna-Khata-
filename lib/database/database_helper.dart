@@ -7,6 +7,7 @@ import '../models/bom_model.dart';
 import '../models/settings_model.dart';
 import '../models/user_model.dart';
 import '../models/order_model.dart';
+import '../models/transaction_model.dart'; // ✅ Added AccountingTransaction Model Import
 
 class DatabaseHelper {
   static late Isar isar;
@@ -25,6 +26,7 @@ class DatabaseHelper {
           UserAccountSchema,
           SalesOrderSchema,
           OrderItemModelSchema,
+          AccountingTransactionSchema, // ✅ Added AccountingTransaction Schema Registration
         ],
         directory: dir.path,
       );
@@ -64,7 +66,7 @@ class DatabaseHelper {
       ..gstin = gstin
       ..priceCategory = priceCategory
       ..creditLimitAmount = creditLimitAmount
-      ..creditDaysLimit = creditDaysLimit
+      ..creditDaysLimit = creditDays
       ..isCreditControlEnabled = isCreditControlEnabled
       ..openingBalance = openingBalance
       ..balanceType = balanceType
