@@ -7,7 +7,7 @@ import '../models/bom_model.dart';
 import '../models/settings_model.dart';
 import '../models/user_model.dart';
 import '../models/order_model.dart';
-import '../models/transaction_model.dart'; // ✅ Added AccountingTransaction Model Import
+import '../models/transaction_model.dart';
 
 class DatabaseHelper {
   static late Isar isar;
@@ -26,7 +26,7 @@ class DatabaseHelper {
           UserAccountSchema,
           SalesOrderSchema,
           OrderItemModelSchema,
-          AccountingTransactionSchema, // ✅ Added AccountingTransaction Schema Registration
+          AccountingTransactionSchema,
         ],
         directory: dir.path,
       );
@@ -66,7 +66,7 @@ class DatabaseHelper {
       ..gstin = gstin
       ..priceCategory = priceCategory
       ..creditLimitAmount = creditLimitAmount
-      ..creditDaysLimit = creditDays
+      ..creditDaysLimit = creditDaysLimit // ✅ Fixed typo here
       ..isCreditControlEnabled = isCreditControlEnabled
       ..openingBalance = openingBalance
       ..balanceType = balanceType
@@ -93,7 +93,7 @@ class DatabaseHelper {
     });
   }
 
-  static Future<UserProfile?> loginUser(String username, String password) async {
+    static Future<UserProfile?> loginUser(String username, String password) async {
     return await isar.userProfiles
         .filter()
         .usernameEqualTo(username)
