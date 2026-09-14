@@ -6,7 +6,18 @@ import '../models/account.dart';
 import '../models/product.dart';
 import '../models/order_model.dart';
 import '../models/user_model.dart';
+
+// ✅ All Screens Imported
+import 'sales_screen.dart';
+import 'sales_return_screen.dart';
+import 'purchase_screen.dart';
+import 'purchase_return_screen.dart';
+import 'ledger_screen.dart';
 import 'orders_management_screen.dart';
+import 'product_inventory_screen.dart';
+import 'manufacturing_screen.dart';
+import 'voucher_entry_screen.dart';
+import 'settings_screen.dart';
 import 'login_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -64,60 +75,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // ⌨️ Action Handlers for Hotkeys & Button Clicks
+  // 🔗 Navigation Methods for All Modules
   void _openLedger() {
     if (Navigator.canPop(context)) Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ledger & Parties Screen Open [Ctrl+L]')));
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const LedgerScreen())).then((_) => _loadDashboardData());
   }
 
   void _openOrders() {
     if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const OrdersManagementScreen()),
-    ).then((_) => _loadDashboardData());
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersManagementScreen())).then((_) => _loadDashboardData());
   }
 
   void _openSaleBilling() {
     if (Navigator.canPop(context)) Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sale Billing / Invoice Screen Open [F8]')));
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesScreen())).then((_) => _loadDashboardData());
   }
 
-  void _openPayment() {
+  void _openSalesReturn() {
     if (Navigator.canPop(context)) Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment Voucher Open [F5]')));
-  }
-
-  void _openReceipt() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Receipt Voucher Open [F6]')));
-  }
-
-  void _openGeneralVoucher() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('General Voucher Open [F7]')));
-  }
-
-  void _openInventory() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Inventory & Products Screen Open [Ctrl+I]')));
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReturnScreen())).then((_) => _loadDashboardData());
   }
 
   void _openPurchase() {
     if (Navigator.canPop(context)) Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Purchase Entry Screen Open [Ctrl+P]')));
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseScreen())).then((_) => _loadDashboardData());
+  }
+
+  void _openPurchaseReturn() {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseReturnScreen())).then((_) => _loadDashboardData());
+  }
+
+  void _openInventory() {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen())).then((_) => _loadDashboardData());
   }
 
   void _openManufacturing(bool isMfg) {
     if (Navigator.canPop(context)) Navigator.pop(context);
     if (isMfg) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('BOM & Production Module Open! [Ctrl+M]')));
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const ManufacturingScreen())).then((_) => _loadDashboardData());
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yeh module sirf Manufacturing users ke liye hai!'), backgroundColor: Colors.red));
     }
   }
 
-  // 🚪 Logout Handler
+  void _openPayment() {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const VoucherEntryScreen())).then((_) => _loadDashboardData());
+  }
+
+  void _openReceipt() {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const VoucherEntryScreen())).then((_) => _loadDashboardData());
+  }
+
+  void _openGeneralVoucher() {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const VoucherEntryScreen())).then((_) => _loadDashboardData());
+  }
+
+  void _openSettings() {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())).then((_) => _loadDashboardData());
+  }
+
   void _handleLogout() {
     if (Navigator.canPop(context)) Navigator.pop(context);
     Navigator.pushReplacement(
@@ -155,6 +177,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             foregroundColor: Colors.white,
             actions: [
               IconButton(
+                icon: const Icon(Icons.settings),
+                tooltip: 'Settings',
+                onPressed: _openSettings,
+              ),
+              IconButton(
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Refresh Data',
                 onPressed: _loadDashboardData,
@@ -162,7 +189,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           
-          // 📱 MOBILE LEFT SIDEBAR (DRAWER) - Fixed Touch / Tap Issues
+          // 📱 MOBILE LEFT SIDEBAR (DRAWER)
           drawer: Drawer(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -197,9 +224,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onTap: _openSaleBilling,
                 ),
                 ListTile(
+                  leading: const Icon(Icons.assignment_return, color: Colors.greenAccent),
+                  title: const Text('Sales Return'),
+                  onTap: _openSalesReturn,
+                ),
+                ListTile(
                   leading: const Icon(Icons.shopping_bag, color: Colors.blue),
                   title: const Text('Purchase Entry [Ctrl+P]'),
                   onTap: _openPurchase,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.keyboard_return, color: Colors.blueAccent),
+                  title: const Text('Purchase Return'),
+                  onTap: _openPurchaseReturn,
                 ),
                 ListTile(
                   leading: const Icon(Icons.account_balance_wallet, color: Colors.indigo),
@@ -237,6 +274,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: const Text('General Voucher [F7]'),
                   onTap: _openGeneralVoucher,
                 ),
+                ListTile(
+                  leading: const Icon(Icons.settings, color: Colors.blueGrey),
+                  title: const Text('Settings & Backup'),
+                  onTap: _openSettings,
+                ),
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.logout, color: Colors.red),
@@ -255,7 +297,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     bool isDesktop = constraints.maxWidth > 850;
 
                     if (isDesktop) {
-                      // ================= PC / DESKTOP LAYOUT (With Right Shortcuts Panel) =================
+                      // ================= PC / DESKTOP LAYOUT =================
                       return Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Row(
@@ -293,7 +335,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       const SizedBox(height: 6),
                                       _buildShortcutButton('Sale Bill [F8]', Icons.receipt, Colors.green, _openSaleBilling),
                                       const SizedBox(height: 6),
+                                      _buildShortcutButton('Sales Return', Icons.assignment_return, Colors.greenAccent, _openSalesReturn),
+                                      const SizedBox(height: 6),
                                       _buildShortcutButton('Purchase [Ctrl+P]', Icons.shopping_bag, Colors.blue, _openPurchase),
+                                      const SizedBox(height: 6),
+                                      _buildShortcutButton('Purchase Return', Icons.keyboard_return, Colors.blueAccent, _openPurchaseReturn),
                                       const SizedBox(height: 6),
                                       _buildShortcutButton('Order [Ctrl+O]', Icons.add_shopping_cart, Colors.amber, _openOrders),
                                       const SizedBox(height: 6),
@@ -308,6 +354,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         const SizedBox(height: 6),
                                         _buildShortcutButton('BOM/Mfg [Ctrl+M]', Icons.precision_manufacturing, Colors.deepPurple, () => _openManufacturing(true)),
                                       ],
+                                      const SizedBox(height: 6),
+                                      _buildShortcutButton('Settings', Icons.settings, Colors.blueGrey, _openSettings),
                                       const Divider(),
                                       _buildShortcutButton('Logout', Icons.logout, Colors.red, _handleLogout),
                                     ],
@@ -319,7 +367,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       );
                     } else {
-                      // ================= MOBILE LAYOUT (Clean Single Column) =================
+                      // ================= MOBILE LAYOUT =================
                       return Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: ListView(
@@ -374,7 +422,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         _buildActionTile(icon: Icons.receipt, iconColor: Colors.green, title: 'Sale Billing [F8]', subtitle: 'Create sale invoices & billing', onTap: _openSaleBilling),
         const SizedBox(height: 10),
+        _buildActionTile(icon: Icons.assignment_return, iconColor: Colors.greenAccent, title: 'Sales Return', subtitle: 'Manage customer product returns / credit notes', onTap: _openSalesReturn),
+        const SizedBox(height: 10),
         _buildActionTile(icon: Icons.shopping_bag, iconColor: Colors.blue, title: 'Purchase Entry [Ctrl+P]', subtitle: 'Manage supplier purchases & stock in', onTap: _openPurchase),
+        const SizedBox(height: 10),
+        _buildActionTile(icon: Icons.keyboard_return, iconColor: Colors.blueAccent, title: 'Purchase Return', subtitle: 'Manage returns to suppliers / debit notes', onTap: _openPurchaseReturn),
         const SizedBox(height: 10),
         _buildActionTile(icon: Icons.account_balance_wallet, iconColor: Colors.indigo, title: 'Ledger & Parties [Ctrl+L]', subtitle: 'Manage customer/supplier ledger balances', onTap: _openLedger),
         const SizedBox(height: 10),
@@ -391,6 +443,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _buildActionTile(icon: Icons.request_quote, iconColor: Colors.teal, title: 'Receipt Voucher [F6]', subtitle: 'Record money received', onTap: _openReceipt),
         const SizedBox(height: 10),
         _buildActionTile(icon: Icons.note_alt, iconColor: Colors.brown, title: 'General Voucher [F7]', subtitle: 'Journal & general accounting entries', onTap: _openGeneralVoucher),
+        const SizedBox(height: 10),
+        _buildActionTile(icon: Icons.settings, iconColor: Colors.blueGrey, title: 'Settings & Backup', subtitle: 'Configure software & data backup', onTap: _openSettings),
       ],
     );
   }
