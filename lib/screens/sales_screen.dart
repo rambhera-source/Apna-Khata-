@@ -13,7 +13,8 @@ import '../models/account.dart';
 import '../models/product.dart';
 import '../models/transaction_model.dart';
 import '../models/order_model.dart';
-import '../models/settings_model.dart'; // 🔥 Settings Model for GST Check
+import '../models/settings_model.dart'; 
+import '../models/inventory_model.dart'; // 🔥 Inventory Model for Stock Type
 import 'searchable_field.dart';
 import 'add_account_screen.dart';        
 import 'product_inventory_screen.dart'; 
@@ -35,10 +36,13 @@ class _SalesScreenState extends State<SalesScreen> {
   List<String> _allAccounts = [];
   List<Product> _allProducts = [];
   
-  // Cart items list
+  // Cart items list: { 'name': String, 'qty': int, 'price': double, 'stockType': String }
   final List<Map<String, dynamic>> _cartItems = [];
   String _paymentMode = 'Cash';
   final List<String> _paymentModes = ['Cash', 'Bank / UPI', 'Credit'];
+
+  // 🔥 Default Global Stock Type for Bill ('Fresh' or 'Replacement')
+  String _globalStockType = 'Fresh';
 
   // 🔥 GST Settings State Variables
   bool _isGstActive = false;
@@ -141,6 +145,7 @@ class _SalesScreenState extends State<SalesScreen> {
             'name': item.productName,
             'qty': item.qty,
             'price': item.price,
+            'stockType': _globalStockType, // 👈 Uses default or selected stock type
           });
         }
       }
@@ -189,7 +194,7 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // 🛒 Add Item to Cart Manually
+  // 🛒 Add Item to Cart Manually (with Global Stock Type)
   void _addItemToCart() {
     if (_allProducts.isEmpty) {
       _navigateToInventoryScreen();
@@ -252,6 +257,7 @@ class _SalesScreenState extends State<SalesScreen> {
               actions: [
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                 ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
                   onPressed: () {
                     int q = int.tryParse(qtyController.text) ?? 1;
                     double pr = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
@@ -260,6 +266,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         'name': selectedProduct.name,
                         'qty': q,
                         'price': pr,
+                        'stockType': _globalStockType, // 👈 Attached current bill stock type
                       });
                     });
                     Navigator.pop(context);
@@ -281,7 +288,6 @@ class _SalesScreenState extends State<SalesScreen> {
 
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    // यदि GST ऑन है तो 18% टैक्स जोड़ते हैं (या इसे अपने अनुसार एडजस्ट कर सकते हैं)
     return _subTotal * 0.18;
   }
 
@@ -289,7 +295,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return _subTotal + _taxAmount;
   }
 
-  // 📄 Professional Sales Invoice PDF & Print / Share Generator (With GST Support)
+  // 📄 Professional Sales Invoice PDF & Print / Share Generator
   Future<void> _generateAndPrintOrShareInvoice({required bool isWhatsApp}) async {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) return;
@@ -320,6 +326,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       pw.Text(_isGstActive ? 'TAX INVOICE (GST)' : 'BILL / ESTIMATE', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
                       pw.Text('Invoice No: ${_invoiceNoController.text}'),
                       pw.Text('Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}'),
+                      pw.Text('Stock Type: $_globalStockType', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ],
                   ),
                 ],
@@ -337,7 +344,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   double total = (item['qty'] as int) * (item['price'] as double);
                   return [
                     '${index + 1}',
-                    item['name'],
+                    '${item['name']} (${item['stockType']})',
                     '${item['qty']}',
                     '${item['price']}',
                     '${total.toStringAsFixed(2)}',
@@ -387,7 +394,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // 💾 Save Sales Transaction
+  // 💾 Save Sales Transaction & Deduct Inventory Stock
   Future<void> _saveSalesTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
@@ -395,6 +402,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     await DatabaseHelper.isar.writeTxn(() async {
+      // 1. Save Transaction
       final txn = AccountingTransaction()
         ..date = _selectedDate
         ..voucherType = 'Sales'
@@ -402,9 +410,30 @@ class _SalesScreenState extends State<SalesScreen> {
         ..partyName = _partyController.text.trim()
         ..cashOrBank = _paymentMode
         ..amount = _grandTotal
-        ..notes = _isGstActive ? 'GST Sales Invoice generated via ORLIFE ERP' : 'Sales Invoice generated via ORLIFE ERP';
+        ..notes = _isGstActive ? 'GST Sales Invoice ([$_globalStockType Stock])' : 'Sales Invoice ([$_globalStockType Stock])';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
+      // 2. 🔥 Update Inventory Items Stock based on Fresh / Replacement
+      for (var cartItem in _cartItems) {
+        String prodName = cartItem['name'];
+        double soldQty = (cartItem['qty'] as int).toDouble();
+        String itemStockType = cartItem['stockType'] ?? 'Fresh';
+
+        final invItem = await DatabaseHelper.isar.inventoryItems
+            .filter()
+            .itemNameEqualTo(prodName, caseSensitive: false)
+            .findFirst();
+
+        if (invItem != null) {
+          // Stock quantity minus karenge aur stockType match karenge
+          invItem.stockQuantity -= soldQty;
+          if (invItem.stockQuantity < 0) invItem.stockQuantity = 0;
+          invItem.stockType = itemStockType;
+          await DatabaseHelper.isar.inventoryItems.put(invItem);
+        }
+      }
+
+      // 3. Update Pending Order status if loaded
       if (_selectedPendingOrder != null) {
         await _selectedPendingOrder!.items.load();
         
@@ -429,7 +458,7 @@ class _SalesScreenState extends State<SalesScreen> {
     });
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sales Bill Successfully Saved!'), backgroundColor: Colors.green));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sales Bill Successfully Saved & Stock Updated!'), backgroundColor: Colors.green));
     
     showDialog(
       context: context,
@@ -481,6 +510,7 @@ class _SalesScreenState extends State<SalesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 📅 Date Selector, Invoice Number & Stock Type Toggle Button
             Row(
               children: [
                 Expanded(
@@ -508,12 +538,58 @@ class _SalesScreenState extends State<SalesScreen> {
                     },
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 SizedBox(
-                  width: 150,
+                  width: 130,
                   child: TextField(
                     controller: _invoiceNoController,
                     decoration: const InputDecoration(labelText: 'Invoice No', border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 🔥 Stock Type Quick Toggle Button (Default Fresh)
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _globalStockType = _globalStockType == 'Fresh' ? 'Replacement' : 'Fresh';
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Stock Source switched to: $_globalStockType'),
+                        duration: const Duration(milliseconds: 800),
+                        backgroundColor: _globalStockType == 'Fresh' ? Colors.green.shade700 : Colors.orange.shade800,
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const symmetricPadding(horizontal: 10, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _globalStockType == 'Fresh' ? Colors.green.shade50 : Colors.orange.shade50,
+                      border: Border.all(
+                        color: _globalStockType == 'Fresh' ? Colors.green : Colors.orange,
+                        width: 1.5,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _globalStockType == 'Fresh' ? Icons.check_circle : Icons.swap_horiz,
+                          size: 18,
+                          color: _globalStockType == 'Fresh' ? Colors.green.shade800 : Colors.orange.shade900,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _globalStockType,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: _globalStockType == 'Fresh' ? Colors.green.shade800 : Colors.orange.shade900,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -616,9 +692,30 @@ class _SalesScreenState extends State<SalesScreen> {
                       itemBuilder: (context, index) {
                         final item = _cartItems[index];
                         double total = (item['qty'] as int) * (item['price'] as double);
+                        bool isFresh = item['stockType'] == 'Fresh';
                         return Card(
                           child: ListTile(
-                            title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                            title: Row(
+                              children: [
+                                Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isFresh ? Colors.green.shade100 : Colors.orange.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    item['stockType'],
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isFresh ? Colors.green.shade800 : Colors.orange.shade900,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                             subtitle: Text('Qty: ${item['qty']} | Price: ₹ ${item['price']}'),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -675,7 +772,7 @@ class _SalesScreenState extends State<SalesScreen> {
                           decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
                         ),
                       ),
-                      Text('Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
+                      Text('Total: ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
                     ],
                   ),
                 ],
@@ -696,4 +793,9 @@ class _SalesScreenState extends State<SalesScreen> {
       ),
     );
   }
+}
+
+// Helper extension for EdgeInsets in InkWell container if needed
+EdgeInsets symmetricPadding({required double horizontal, required double vertical}) {
+  return EdgeInsets.symmetric(horizontal: horizontal, vertical: vertical);
 }
