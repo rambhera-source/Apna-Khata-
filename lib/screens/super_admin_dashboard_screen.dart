@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/user_model.dart';
+import 'dashboard_screen.dart'; // ✅ Imported to navigate back to Main Dashboard
+import 'login_screen.dart'; // ✅ Imported for logout redirection
 
 class SuperAdminDashboardScreen extends StatefulWidget {
-  const SuperAdminDashboardScreen({super.key});
+  final UserAccount? currentUser;
+  const SuperAdminDashboardScreen({super.key, this.currentUser});
 
   @override
   State<SuperAdminDashboardScreen> createState() => _SuperAdminDashboardScreenState();
@@ -76,7 +79,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Create New User (Direct Admin)'),
+              title: const Text('Create New Company / User'),
               content: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -84,7 +87,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   children: [
                     TextField(
                       controller: nameController,
-                      decoration: const InputDecoration(labelText: 'Full Name *', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'Company / Full Name *', border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 10),
                     TextField(
@@ -162,7 +165,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                       return;
                     }
 
-                    // Check if username already exists
                     final existingUser = await DatabaseHelper.isar.userAccounts
                         .filter()
                         .usernameEqualTo(username)
@@ -176,14 +178,13 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                       return;
                     }
 
-                    // Save directly as approved user
                     await DatabaseHelper.isar.writeTxn(() async {
                       final newUser = UserAccount()
                         ..name = name
                         ..username = username
                         ..pin = pin
                         ..role = 'Staff'
-                        ..isApproved = true // Direct approved
+                        ..isApproved = true
                         ..subscriptionPlan = selectedPlan
                         ..validityDate = validityController.text.trim()
                         ..canManageOrders = canManageOrders
@@ -197,10 +198,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                     if (!mounted) return;
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Naya user safaltapurvak create kar diya gaya hai!'), backgroundColor: Colors.green),
+                      const SnackBar(content: Text('Nayi company/user safaltapurvak create kar di gayi hai!'), backgroundColor: Colors.green),
                     );
                   },
-                  child: const Text('Create User'),
+                  child: const Text('Create'),
                 ),
               ],
             );
@@ -365,7 +366,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           actions: [
             IconButton(
               icon: const Icon(Icons.person_add),
-              tooltip: 'Create New User',
+              tooltip: 'Create New Company/User',
               onPressed: _showCreateUserDialog,
             ),
             IconButton(
@@ -384,6 +385,81 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
             ],
           ),
         ),
+
+        // 📱 LEFT SIDEBAR (DRAWER) FOR SUPER ADMIN PANEL
+        drawer: Drawer(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              DrawerHeader(
+                decoration: const BoxDecoration(color: Colors.indigo),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const CircleAvatar(
+                      backgroundColor: Colors.white,
+                      radius: 26,
+                      child: Icon(Icons.admin_panel_settings, color: Colors.indigo, size: 30),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Super Admin Control',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.currentUser?.name ?? 'Master Administrator',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.dashboard, color: Colors.indigo),
+                title: const Text('Go to Dashboard'),
+                onTap: () {
+                  Navigator.pop(context); // Close drawer
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DashboardScreen(currentUser: widget.currentUser),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.business_center, color: Colors.green),
+                title: const Text('Create New Company'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreateUserDialog();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.playlist_add, color: Colors.teal),
+                title: const Text('Create Subscription Plan'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreatePlanDialog();
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+
         body: TabBarView(
           children: [
             // ================= TAB 1: PENDING SIGNUP REQUESTS =================
