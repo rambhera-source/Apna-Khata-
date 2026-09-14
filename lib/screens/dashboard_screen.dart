@@ -76,15 +76,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     physics: const NeverScrollableScrollPhysics,
                     childAspectRatio: 1.5,
                     children: [
-                      _buildStatCard('Total Parties', '$_totalParties', Icons.people, Colors.blue, null),
-                      _buildStatCard('Products / Stock', '$_totalProducts', Icons.inventory, Colors.green, null),
-                      _buildStatCard('Pending Orders', '$_pendingOrdersCount', Icons.shopping_cart_checkout, Colors.orange, null),
-                      _buildStatCard('Quick Billing', 'New', Icons.receipt_long, Colors.purple, () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const OrdersManagementScreen()),
-                        ).then((_) => _loadDashboardData());
-                      }),
+                      _buildStatCard('Total Parties', '$_totalParties', Icons.people, Colors.blue),
+                      _buildStatCard('Products / Stock', '$_totalProducts', Icons.inventory, Colors.green),
+                      _buildStatCard('Pending Orders', '$_pendingOrdersCount', Icons.shopping_cart_checkout, Colors.orange),
+                      _buildStatCard(
+                        'Quick Billing',
+                        'New',
+                        Icons.receipt_long,
+                        Colors.purple,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const OrdersManagementScreen()),
+                          ).then((_) => _loadDashboardData());
+                        },
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -116,7 +122,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, VoidCallback? onTap) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
