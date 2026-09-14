@@ -25,6 +25,13 @@ jobs:
           flutter-version: '3.19.6'
           channel: 'stable'
 
+      - name: Fix / Regenerate Android Project Folder
+        run: |
+          flutter create -t app temp_proj
+          rm -rf android
+          cp -r temp_proj/android android
+          rm -rf temp_proj
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -42,3 +49,4 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 7
+
