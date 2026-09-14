@@ -23,16 +23,13 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
   List<InventoryItem> _allInventoryItems = [];
   List<InventoryItem> _filteredItems = [];
   
-  // 🔥 Default stock filter set to 'Fresh'
   String _selectedStockFilter = 'Fresh'; 
   String? _selectedCategoryFilter; 
   bool _isStockAscending = true; 
 
-  // 🔥 Date Filter Variables
   DateTime? _startDate;
   DateTime? _endDate;
 
-  // A to Z Price Tiers List
   final List<String> _priceCategories = List.generate(26, (index) => String.fromCharCode(65 + index));
 
   @override
@@ -59,7 +56,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
           matchesStockType = item.stockType == 'Replacement';
         }
 
-        // Category filter check
         bool matchesCategory = true;
         if (_selectedCategoryFilter != null && _selectedCategoryFilter != 'All') {
           matchesCategory = (item.category ?? 'General') == _selectedCategoryFilter;
@@ -68,7 +64,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         return matchesQuery && matchesStockType && matchesCategory;
       }).toList();
 
-      // Sort by Closing Stock
       _filteredItems.sort((a, b) {
         if (_isStockAscending) {
           return a.stockQuantity.compareTo(b.stockQuantity);
@@ -79,7 +74,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     });
   }
 
-  // 📅 Date Range Picker Dialog
   Future<void> _selectDateRange() async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
@@ -99,7 +93,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  // 🔄 Toggle Stock Sorting
   void _toggleStockSorting() {
     setState(() {
       _isStockAscending = !_isStockAscending;
@@ -113,7 +106,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     );
   }
 
-  // 📂 Category Selection Dialog Filter
   void _showCategoryFilterDialog() {
     Set<String> categories = _allInventoryItems
         .map((item) => item.category ?? 'General')
@@ -161,7 +153,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     );
   }
 
-  // 📥 Template CSV Generator
   Future<void> _downloadTemplateFile() async {
     try {
       List<List<dynamic>> rows = [];
@@ -226,7 +217,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  // 📂 CSV Import Function
   Future<void> _importCsvFile() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -311,7 +301,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  // 🔍 Product History & Details Popup
   Future<void> _showProductHistoryDialog(InventoryItem item) async {
     final transactions = await DatabaseHelper.isar.accountingTransactions
         .filter()
@@ -402,7 +391,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     );
   }
 
-  // ➕ Add or Edit Product Dialog
   void _showAddEditProductDialog({InventoryItem? itemToEdit}) {
     final TextEditingController nameController = TextEditingController(text: itemToEdit?.itemName ?? '');
     final TextEditingController skuController = TextEditingController(text: itemToEdit?.sku ?? '');
@@ -530,7 +518,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
                 if (isDuplicate) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है!'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle से मौजूद है!'), backgroundColor: Colors.red),
                   );
                   return;
                 }
@@ -578,7 +566,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         title: const Text('Product Inventory Management'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
-        // 🔥 Duplicate '+' action icon removed from appbar
       ),
       body: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -603,7 +590,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 Expanded(
                   flex: 2,
                   child: DropdownButtonFormField<String>(
-                    value: _selectedStockFilter, // 👈 Defaults to 'Fresh'
+                    value: _selectedStockFilter,
                     decoration: InputDecoration(
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
@@ -635,7 +622,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            // 🔥 Date Filter Bar Row
             Row(
               children: [
                 Expanded(
@@ -671,14 +657,13 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            // Active Category Filter Indicator (if any)
             if (_selectedCategoryFilter != null && _selectedCategoryFilter != 'All') ...[
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.between,
                   children: [
                     Text('Filtered by Category: $_selectedCategoryFilter', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
                     InkWell(
@@ -694,7 +679,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 ),
               ),
             ],
-            // Header Row for Clean Mobile View
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               color: Colors.teal.shade100,
@@ -785,19 +769,26 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
-                                        InkWell(
+                                        // 🔥 Fixed InkWell to IconButton to resolve compilation error
+                                        IconButton(
+                                          icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
                                           onPressed: () => _showAddEditProductDialog(itemToEdit: item),
-                                          child: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                                          tooltip: 'Edit Item',
+                                          constraints: const BoxConstraints(),
+                                          padding: EdgeInsets.zero,
                                         ),
-                                        const SizedBox(width: 8),
-                                        InkWell(
+                                        const SizedBox(width: 12),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete, size: 18, color: Colors.red),
                                           onPressed: () async {
                                             await DatabaseHelper.isar.writeTxn(() async {
                                               await DatabaseHelper.isar.inventoryItems.delete(item.id);
                                             });
                                             _loadInventory();
                                           },
-                                          child: const Icon(Icons.delete, size: 18, color: Colors.red),
+                                          tooltip: 'Delete Item',
+                                          constraints: const BoxConstraints(),
+                                          padding: EdgeInsets.zero,
                                         ),
                                       ],
                                     ),
