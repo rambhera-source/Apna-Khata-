@@ -1,4 +1,4 @@
-name: Build and Deploy Web
+name: Build Flutter APK
 
 on:
   push:
@@ -6,15 +6,18 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-web:
+  build:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -23,17 +26,21 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Create Web Platform Files
-        run: flutter create . --platforms=web --project-name apna_khata
+      - name: Recreate Android Platform
+        run: |
+          flutter create . --org in.khatahisab --platforms=android
 
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build Web Release
-        run: flutter build web --release --base-href "/Apna-Khata-/"
+      - name: Accept Android Licenses
+        run: yes | flutter doctor --android-licenses
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./build/web
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
