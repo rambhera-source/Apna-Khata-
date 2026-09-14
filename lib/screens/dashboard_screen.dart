@@ -14,10 +14,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _selectedIndex = 0;
-
-  // Dashboard Stats
-  double _totalSales = 0.0;
   int _totalParties = 0;
   int _totalProducts = 0;
   int _pendingOrdersCount = 0;
@@ -72,7 +68,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 📊 Stats Grid Cards
                   GridView.count(
                     crossAxisCount: 2,
                     crossAxisSpacing: 12,
@@ -81,10 +76,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     physics: const NeverScrollableScrollPhysics,
                     childAspectRatio: 1.5,
                     children: [
-                      _buildStatCard('Total Parties', '$_totalParties', Icons.people, Colors.blue),
-                      _buildStatCard('Products / Stock', '$_totalProducts', Icons.inventory, Colors.green),
-                      _buildStatCard('Pending Orders', '$_pendingOrdersCount', Icons.shopping_cart_checkout, Colors.orange),
-                      _buildStatCard('Quick Billing', 'New', Icons.receipt_long, Colors.purple, onTap: () {
+                      _buildStatCard('Total Parties', '$_totalParties', Icons.people, Colors.blue, null),
+                      _buildStatCard('Products / Stock', '$_totalProducts', Icons.inventory, Colors.green, null),
+                      _buildStatCard('Pending Orders', '$_pendingOrdersCount', Icons.shopping_cart_checkout, Colors.orange, null),
+                      _buildStatCard('Quick Billing', 'New', Icons.receipt_long, Colors.purple, () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => const OrdersManagementScreen()),
@@ -95,8 +90,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 24),
                   const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
-                  
-                  // 🚀 Shortcut Buttons
                   Expanded(
                     child: ListView(
                       children: [
@@ -123,7 +116,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, VoidCallback? onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
