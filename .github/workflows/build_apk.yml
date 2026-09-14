@@ -28,7 +28,7 @@ jobs:
 
       - name: Recreate Android Platform
         run: |
-          flutter create . --org in.khatahisab --platforms=android
+          flutter create . --org in.khatahisab --platforms=android --project-name apna_khata
 
       - name: Get Dependencies
         run: flutter pub get
