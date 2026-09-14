@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:csv/csv.dart'; // CSV read karne ke liye (ya file_picker)
 import '../database/database_helper.dart';
 import '../models/account.dart';
-import 'add_account_screen.dart'; // आपका डिटेल्ड फॉर्म
+import 'add_account_screen.dart'; // आपका डिटेल्ड फॉर्म (नया जोड़ने और एडिट करने के लिए उपयोग किया जा सकता है)
 
 class PartiesMasterScreen extends StatefulWidget {
   const PartiesMasterScreen({super.key});
@@ -21,7 +24,7 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
     _loadParties();
   }
 
-  // डेटाबेस से सभी अकाउंट्स/पार्टियों को लोड करना
+  // 📂 डेटाबेस से सभी अकाउंट्स/पार्टियों को लोड करना
   Future<void> _loadParties() async {
     setState(() => _isLoading = true);
     final accounts = await DatabaseHelper.isar.accounts.where().findAll();
@@ -31,6 +34,144 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
     });
   }
 
+  // ⚠️ Delete Warning Popup (Yes/No)
+  void _confirmDelete(Account party) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Party?'),
+        content: Text('Kya aap sach mein "${party.name}" ko delete karna chahte hain? Yeh action wapas nahi liya ja sakta.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('No', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(context);
+              await DatabaseHelper.isar.writeTxn(() async {
+                await DatabaseHelper.isar.accounts.delete(party.id);
+              });
+              _loadParties();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Party safely delete ho gayi!'), backgroundColor: Colors.red),
+              );
+            },
+            child: const Text('Yes, Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 📊 Excel / CSV File se Bulk Import Function
+  Future<void> _importPartiesFromExcel() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'txt'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+        final input = File(filePath).openRead();
+        final fields = await input
+            .transform(utf8.decoder)
+            .transform(const CsvToListConverter())
+            .toList();
+
+        int successCount = 0;
+
+        await DatabaseHelper.isar.writeTxn(() async {
+          // Row 1 header maan kar index 1 se start karte hain (Name, Phone, Group, Balance)
+          for (int i = 1; i < fields.length; i++) {
+            var row = fields[i];
+            if (row.isNotEmpty && row[0] != null) {
+              String name = row[0].toString().trim();
+              if (name.isNotEmpty) {
+                // Check if already exists
+                final existing = await DatabaseHelper.isar.accounts.filter().nameEqualTo(name, caseSensitive: false).findFirst();
+                if (existing == null) {
+                  final account = Account()
+                    ..name = name
+                    ..groupCategory = row.length > 1 && row[1] != null ? row[1].toString() : 'Sundry Debtor'
+                    ..phone = row.length > 2 && row[2] != null ? row[2].toString() : null
+                    ..address = row.length > 3 && row[3] != null ? row[3].toString() : null
+                    ..openingBalance = row.length > 4 && row[4] != null ? double.tryParse(row[4].toString()) ?? 0.0 : 0.0
+                    ..balanceType = row.length > 5 && row[5] != null ? row[5].toString() : 'Dr';
+                  
+                  await DatabaseHelper.isar.accounts.put(account);
+                  successCount++;
+                }
+              }
+            }
+          }
+        });
+
+        _loadParties();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successCount parties successfully import ho gayi!'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import karne mein error aayi: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // ✏️ Modify / Edit Party Dialog ya Screen
+  void _editParty(Account party) {
+    // यहाँ आप चाहें तो AddAccountScreen को Edit मोड में खोल सकते हैं या एक छोटा डायरेक्ट एडिट डायलॉग बना सकते हैं।
+    // सरल शब्दों में पार्टी का नाम, फोन और बैलेंस एडिट करने के लिए:
+    final nameController = TextEditingController(text: party.name);
+    final phoneController = TextEditingController(text: party.phone ?? '');
+    final balanceController = TextEditingController(text: party.openingBalance.toString());
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit Party: ${party.name}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Party Name', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            TextField(controller: phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            TextField(controller: balanceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Opening Balance', border: OutlineInputBorder())),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            onPressed: () async {
+              String newName = nameController.text.trim();
+              if (newName.isNotEmpty) {
+                await DatabaseHelper.isar.writeTxn(() async {
+                  party.name = newName;
+                  party.phone = phoneController.text.trim().isEmpty ? null : phoneController.text.trim();
+                  party.openingBalance = double.tryParse(balanceController.text) ?? party.openingBalance;
+                  await DatabaseHelper.isar.accounts.put(party);
+                });
+                Navigator.pop(context);
+                _loadParties();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Party successfully updated!'), backgroundColor: Colors.green),
+                );
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -38,10 +179,18 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
         title: const Text('Parties & Accounts Master'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
+        actions: [
+          // 📥 Excel/CSV Bulk Import Button in AppBar
+          IconButton(
+            icon: const Icon(Icons.file_upload),
+            tooltip: 'Bulk Import from Excel/CSV',
+            onPressed: _importPartiesFromExcel,
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // 🔍 ऊपर एक स्टेटस या हेडर बार
+          // 🔍 ऊपर स्टेटस और एक्शन बार
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.teal.shade50,
@@ -54,12 +203,10 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Add New Party'),
                   onPressed: () async {
-                    // जैसे ही इस पर क्लिक करेंगे, आपका डिटेल्ड AddAccountScreen खुल जाएगा
                     await Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => const AddAccountScreen()),
                     );
-                    // वापस आने पर लिस्ट ऑटोमैटिक अपडेट हो जाएगी
                     _loadParties();
                   },
                 ),
@@ -67,7 +214,7 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
             ),
           ),
           
-          // 📋 नीचे सभी पार्टियों की लाइव लिस्ट
+          // 📋 नीचे सभी पार्टियों की लाइव लिस्ट (Modify & Delete Options के साथ)
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -95,12 +242,28 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
                               ),
                               title: Text(party.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('Group: ${party.groupCategory} | Phone: ${party.phone ?? 'N/A'}'),
-                              trailing: Text(
-                                '₹ ${party.openingBalance} ${party.balanceType}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: party.balanceType == 'Dr' ? Colors.red : Colors.green,
-                                ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '₹ ${party.openingBalance} ${party.balanceType}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: party.balanceType == 'Dr' ? Colors.red : Colors.green,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // ✏️ Edit / Modify Button
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                                    onPressed: () => _editParty(party),
+                                  ),
+                                  // 🗑️ Delete Button with Warning
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                    onPressed: () => _confirmDelete(party),
+                                  ),
+                                ],
                               ),
                             ),
                           );
