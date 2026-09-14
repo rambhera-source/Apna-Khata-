@@ -165,7 +165,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                         'name': selectedProduct.name,
                         'qty': q,
                         'price': pr,
-                        'stockType': _globalStockType, // 👈 Attached current bill stock type
+                        'stockType': _globalStockType,
                       });
                     });
                     Navigator.pop(context);
@@ -317,7 +317,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         String prodName = cartItem['name'];
         int boughtQty = cartItem['qty'];
         double newPurchasePrice = cartItem['price'];
-        String itemStockType = cartItem['stockType'] ?? 'Fresh';
 
         final product = await DatabaseHelper.isar.products
             .filter()
