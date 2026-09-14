@@ -13,6 +13,8 @@ import '../models/account.dart';
 import '../models/product.dart';
 import '../models/transaction_model.dart';
 import 'searchable_field.dart';
+import 'add_account_screen.dart';        // 🔥 Add Account Screen Imported
+import 'product_inventory_screen.dart'; // 🔥 Product Inventory Screen Imported
 
 class PurchaseScreen extends StatefulWidget {
   const PurchaseScreen({super.key});
@@ -49,143 +51,36 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     });
   }
 
-  void _showAddNewSupplierDialog() {
-    final TextEditingController newSupplierController = TextEditingController(text: _supplierController.text);
-    final TextEditingController phoneController = TextEditingController();
-    final TextEditingController addressController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Supplier / Vendor'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: newSupplierController,
-              decoration: const InputDecoration(labelText: 'Supplier Name *', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: addressController,
-              decoration: const InputDecoration(labelText: 'Address', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
-            onPressed: () async {
-              String name = newSupplierController.text.trim();
-              if (name.isEmpty) return;
-
-              await DatabaseHelper.isar.writeTxn(() async {
-                final newAccount = Account()
-                  ..name = name
-                  ..phone = phoneController.text.trim()
-                  ..address = addressController.text.trim();
-                await DatabaseHelper.isar.accounts.put(newAccount);
-              });
-
-              await _loadDropdownData();
-              setState(() {
-                _supplierController.text = name;
-              });
-
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Supplier "$name" successfully added!'), backgroundColor: Colors.green),
-              );
-            },
-            child: const Text('Save & Select'),
-          ),
-        ],
-      ),
+  // 👤 1. Open Full AddAccountScreen instead of simple dialog
+  void _navigateToAddNewSupplier() async {
+    final String? newSupplierName = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddAccountScreen()),
     );
+
+    await _loadDropdownData();
+
+    if (newSupplierName != null && newSupplierName.isNotEmpty) {
+      setState(() {
+        _supplierController.text = newSupplierName;
+      });
+    }
   }
 
-  void _showAddNewProductDialog(BuildContext parentContext, Function(Product) onProductCreated) {
-    final TextEditingController prodNameController = TextEditingController();
-    final TextEditingController priceController = TextEditingController();
-    final TextEditingController stockController = TextEditingController(text: '10');
-
-    showDialog(
-      context: parentContext,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Product'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: prodNameController,
-              decoration: const InputDecoration(labelText: 'Product Name *', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: priceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Purchase Price (₹) *', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: stockController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Initial Stock', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
-            onPressed: () async {
-              String name = prodNameController.text.trim();
-              double price = double.tryParse(priceController.text) ?? 0.0;
-              int stock = int.tryParse(stockController.text) ?? 0;
-
-              if (name.isEmpty || price <= 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Kripya naam aur sahi price bharein!'), backgroundColor: Colors.red),
-                );
-                return;
-              }
-
-              final newProduct = Product()
-                ..name = name
-                ..sellingPrice = price * 1.2 
-                ..stock = stock.toDouble(); // ✅ Fixed: Converted int to double properly
-
-              await DatabaseHelper.isar.writeTxn(() async {
-                await DatabaseHelper.isar.products.put(newProduct);
-              });
-
-              await _loadDropdownData();
-              Navigator.pop(context);
-              onProductCreated(newProduct);
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Product "$name" added successfully!'), backgroundColor: Colors.green),
-              );
-            },
-            child: const Text('Save & Select'),
-          ),
-        ],
-      ),
+  // 📦 2. Open ProductInventoryScreen for Managing Inventory / Products
+  void _navigateToInventoryScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
     );
+
+    // Refresh products list after returning from Inventory screen
+    await _loadDropdownData();
   }
 
   void _addItemToCart() {
     if (_allProducts.isEmpty) {
-      _showAddNewProductDialog(context, (newProd) {
-        _addItemToCart();
-      });
+      _navigateToInventoryScreen();
       return;
     }
 
@@ -206,16 +101,10 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   TextButton.icon(
                     style: TextButton.styleFrom(foregroundColor: Colors.blue.shade800),
                     icon: const Icon(Icons.add_circle, size: 18),
-                    label: const Text('New Product'),
+                    label: const Text('Manage Inventory'),
                     onPressed: () {
                       Navigator.pop(context);
-                      _showAddNewProductDialog(context, (createdProduct) {
-                        setState(() {
-                          selectedProduct = createdProduct;
-                          priceController.text = createdProduct.sellingPrice.toString();
-                        });
-                        _addItemToCart();
-                      });
+                      _navigateToInventoryScreen();
                     },
                   ),
                 ],
@@ -404,7 +293,19 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Purchase Bill Inward'), backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: const Text('Purchase Bill Inward'),
+        backgroundColor: Colors.blue.shade800,
+        foregroundColor: Colors.white,
+        actions: [
+          // 📦 Inventory Screen Shortcut Button in AppBar
+          IconButton(
+            icon: const Icon(Icons.inventory_2),
+            onPressed: _navigateToInventoryScreen,
+            tooltip: 'Manage Inventory / Products',
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -464,7 +365,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   ),
                   icon: const Icon(Icons.person_add, size: 18),
                   label: const Text('New'),
-                  onPressed: _showAddNewSupplierDialog,
+                  onPressed: _navigateToAddNewSupplier,
                 ),
               ],
             ),
