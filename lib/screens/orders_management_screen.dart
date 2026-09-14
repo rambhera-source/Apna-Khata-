@@ -6,6 +6,7 @@ import '../models/account.dart';
 import '../models/product.dart';
 import '../models/order_model.dart';
 import 'searchable_field.dart';
+import 'product_inventory_screen.dart'; // 🔥 Product Inventory Screen Imported
 
 class OrdersManagementScreen extends StatefulWidget {
   const OrdersManagementScreen({super.key});
@@ -58,6 +59,16 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     });
   }
 
+  // 📦 Open ProductInventoryScreen for Managing Inventory / Products
+  void _navigateToInventoryScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
+    );
+    // Refresh products list after returning from Inventory screen
+    await _loadData();
+  }
+
   // 🔍 Fetch Orders Date-wise
   Future<void> _fetchOrders() async {
     setState(() => _isLoadingOrders = true);
@@ -79,49 +90,72 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     });
   }
 
-  // Add Item Dialog for Booking
+  // Add Item Dialog for Booking (Updated with Manage Inventory button)
   void _addItemDialog() {
-    if (_allProducts.isEmpty) return;
+    if (_allProducts.isEmpty) {
+      _navigateToInventoryScreen();
+      return;
+    }
+
     Product selectedProduct = _allProducts.first;
     final TextEditingController qtyController = TextEditingController(text: '1');
     final TextEditingController priceController = TextEditingController(text: selectedProduct.sellingPrice.toString());
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Product to Order'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<Product>(
-              value: selectedProduct,
-              items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text('${p.name} (Stock: ${p.stock})'))).toList(),
-              onChanged: (val) {
-                selectedProduct = val!;
-                priceController.text = selectedProduct.sellingPrice.toString();
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Add Product to Order'),
+              TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: Colors.amber.shade900),
+                icon: const Icon(Icons.add_circle, size: 18),
+                label: const Text('Manage Inventory'),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _navigateToInventoryScreen();
+                },
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<Product>(
+                value: _allProducts.contains(selectedProduct) ? selectedProduct : _allProducts.first,
+                items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text('${p.name} (Stock: ${p.stock})'))).toList(),
+                onChanged: (val) {
+                  setDialogState(() {
+                    selectedProduct = val!;
+                    priceController.text = selectedProduct.sellingPrice.toString();
+                  });
+                },
+                decoration: const InputDecoration(labelText: 'Product', border: OutlineInputBorder(), isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 12),
+              TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true)),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade900, foregroundColor: Colors.white),
+              onPressed: () {
+                int q = int.tryParse(qtyController.text) ?? 1;
+                double pr = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
+                setState(() {
+                  _orderItems.add({'name': selectedProduct.name, 'qty': q, 'price': pr});
+                });
+                Navigator.pop(context);
               },
-              decoration: const InputDecoration(labelText: 'Product', border: OutlineInputBorder(), isDense: true),
+              child: const Text('Add'),
             ),
-            const SizedBox(height: 12),
-            TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder(), isDense: true)),
-            const SizedBox(height: 12),
-            TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true)),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              int q = int.tryParse(qtyController.text) ?? 1;
-              double pr = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
-              setState(() {
-                _orderItems.add({'name': selectedProduct.name, 'qty': q, 'price': pr});
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Add'),
-          ),
-        ],
       ),
     );
   }
@@ -304,6 +338,12 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
           ],
         ),
         actions: [
+          // 📦 Inventory Screen Shortcut Button in AppBar
+          IconButton(
+            icon: const Icon(Icons.inventory_2),
+            onPressed: _navigateToInventoryScreen,
+            tooltip: 'Manage Inventory / Products',
+          ),
           if (_isSelectionMode)
             IconButton(
               icon: const Icon(Icons.delete_sweep, size: 28),
