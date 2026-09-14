@@ -60,10 +60,10 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               value: selectedProduct,
               items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
               onChanged: (val) => selectedProduct = val!,
-              decoration: const InputDecoration(labelText: 'Product', border: OutlineInputBorder(), isDense: true),
+              decoration: const InputDecoration(labelText: 'Product', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
-            TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Return Qty', border: OutlineInputBorder(), isDense: true)),
+            TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Return Qty', border: OutlineInputBorder())),
           ],
         ),
         actions: [
@@ -72,7 +72,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             onPressed: () {
               int q = int.tryParse(qtyController.text) ?? 1;
               setState(() {
-                _returnItems.add({'name': selectedProduct.name, 'qty': q, 'price': selectedProduct.purchasePrice});
+                _returnItems.add({'name': selectedProduct.name, 'qty': q, 'price': selectedProduct.priceA});
               });
               Navigator.pop(context);
             },
@@ -135,6 +135,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       await DatabaseHelper.isar.accountingTransactions.put(txn);
     });
 
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -198,7 +199,15 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             ),
             Text('Total Return: ₹ $_returnTotal', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
             const SizedBox(height: 16),
-            SizedBox(width: double.infinity, height: 48, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white), onPressed: _saveReturn, child: const Text('Save Return Note', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)))),
+            SizedBox(
+              width: double.infinity, 
+              height: 48, 
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white), 
+                onPressed: _saveReturn, 
+                child: const Text('Save Return Note', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
           ],
         ),
       ),
