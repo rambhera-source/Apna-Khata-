@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/user_model.dart';
 import 'dashboard_screen.dart';
-import 'super_admin_dashboard_screen.dart'; // ✅ Super Admin screen imported
+import 'super_admin_dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,14 +22,43 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _loginPinController = TextEditingController();
   
   // Controllers for Signup
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController();
-  final TextEditingController _signupPinController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController(); // Full Name / Owner Name
+  final TextEditingController _firmNameController = TextEditingController(); // Firm Name
+  final TextEditingController _usernameController = TextEditingController(); // Mobile Number
+  final TextEditingController _gstController = TextEditingController(); // GST Number
+  final TextEditingController _pincodeController = TextEditingController(); // Pincode
+  final TextEditingController _cityController = TextEditingController(); // City (Auto-filled)
+  final TextEditingController _stateController = TextEditingController(); // State (Auto-filled)
+  final TextEditingController _addressController = TextEditingController(); // Detailed Address
+  final TextEditingController _signupPinController = TextEditingController(); // Security PIN
+
+  // Business Type Selection for Signup ('Manufacturing' or 'Wholesaler / Retailer')
+  String _selectedBusinessType = 'Wholesaler / Retailer';
 
   // 🛡️ Master Super Admin Credentials
   final String _masterAdminId = "Admin";
   final String _masterPin = "2029";
-  final String _firmName = 'Orlife ERP';
+  final String _firmBrandName = 'Orlife ERP';
+
+  // 🌍 Function to Auto-fetch City & State from Pincode
+  Future<void> _lookupPincode(String pincode) async {
+    if (pincode.length != 6) return;
+    try {
+      final response = await http.get(Uri.parse('https://api.postalpincode.in/pincode/$pincode'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data[0]['Status'] == 'Success') {
+          final postOffice = data[0]['PostOffice'][0];
+          setState(() {
+            _cityController.text = postOffice['District'] ?? '';
+            _stateController.text = postOffice['State'] ?? '';
+          });
+        }
+      }
+    } catch (e) {
+      // Handle network error silently or show a small hint
+    }
+  }
 
   // 🟢 Login Logic with Role-Based Redirection
   Future<void> _handleLogin() async {
@@ -47,12 +78,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const SuperAdminDashboardScreen()), // ✅ Opens Super Admin Master Control
+        MaterialPageRoute(builder: (context) => const SuperAdminDashboardScreen()),
       );
       return;
     }
 
-    // 2. 👤 Staff Database Check (Username & PIN matching)
+    // 2. 👤 Staff / User Database Check
     final staffUser = await DatabaseHelper.isar.userAccounts
         .filter()
         .usernameEqualTo(enteredId)
@@ -62,17 +93,16 @@ class _LoginScreenState extends State<LoginScreen> {
     if (staffUser != null) {
       if (!mounted) return;
       if (staffUser.isApproved) {
-        // ✅ Role-based routing for staff/other users
         if (staffUser.role == 'Admin') {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const SuperAdminDashboardScreen()),
           );
         } else {
-          // Standard Staff / Accounting View
+          // ✅ Passing currentUser to Dashboard so businessType & permissions apply correctly
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const DashboardScreen()),
+            MaterialPageRoute(builder: (context) => DashboardScreen(currentUser: staffUser)),
           );
         }
       } else {
@@ -94,21 +124,26 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // 🟢 Signup Logic
+  // 🟢 Signup Logic with All Professional Fields
   Future<void> _handleSignup() async {
     final name = _nameController.text.trim();
-    final username = _usernameController.text.trim();
+    final firmName = _firmNameController.text.trim();
+    final username = _usernameController.text.trim(); // Mobile Number
+    final gst = _gstController.text.trim();
+    final pincode = _pincodeController.text.trim();
+    final city = _cityController.text.trim();
+    final state = _stateController.text.trim();
+    final address = _addressController.text.trim();
     final pin = _signupPinController.text.trim();
 
-    if (name.isEmpty || username.isEmpty || pin.length < 4) {
+    if (name.isEmpty || firmName.isEmpty || username.isEmpty || pincode.isEmpty || pin.length < 4) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya sabhi fields sahi bharein (PIN min 4 digits)!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Kripya sabhi mandatory fields (Name, Firm, Mobile, Pincode, PIN) bharein!'), backgroundColor: Colors.red),
       );
       return;
     }
 
-    // Restrict staff from using 'Admin' as username
     if (username.toLowerCase() == 'admin') {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -126,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (existingUser != null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Yeh Username/Mobile pehle se registered hai!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Yeh Mobile Number pehle se registered hai!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -135,10 +170,11 @@ class _LoginScreenState extends State<LoginScreen> {
     await DatabaseHelper.isar.writeTxn(() async {
       final newUser = UserAccount()
         ..name = name
-        ..username = username
+        ..username = username // Mobile number
         ..pin = pin
-        ..role = 'Staff' // Default role for signups
-        ..isApproved = false;
+        ..role = 'Staff'
+        ..isApproved = false
+        ..businessType = _selectedBusinessType; // Manufacturing or Wholesaler / Retailer
 
       await DatabaseHelper.isar.userAccounts.put(newUser);
     });
@@ -151,11 +187,17 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
 
-    // Switch back to login mode after successful signup
+    // Switch back to login mode after successful signup & clear controllers
     setState(() {
       _isLoginMode = true;
       _nameController.clear();
+      _firmNameController.clear();
       _usernameController.clear();
+      _gstController.clear();
+      _pincodeController.clear();
+      _cityController.clear();
+      _stateController.clear();
+      _addressController.clear();
       _signupPinController.clear();
     });
   }
@@ -165,7 +207,13 @@ class _LoginScreenState extends State<LoginScreen> {
     _loginIdController.dispose();
     _loginPinController.dispose();
     _nameController.dispose();
+    _firmNameController.dispose();
     _usernameController.dispose();
+    _gstController.dispose();
+    _pincodeController.dispose();
+    _cityController.dispose();
+    _stateController.dispose();
+    _addressController.dispose();
     _signupPinController.dispose();
     super.dispose();
   }
@@ -190,19 +238,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     CircleAvatar(
                       radius: 35,
                       backgroundColor: Colors.teal.shade100,
-                      child: Icon(_isLoginMode ? Icons.lock_outline : Icons.person_add, size: 35, color: Colors.teal),
+                      child: Icon(_isLoginMode ? Icons.lock_outline : Icons.business, size: 35, color: Colors.teal),
                     ),
                     const SizedBox(height: 16),
                     
                     // Firm Title
                     Text(
-                      _firmName,
+                      _firmBrandName,
                       style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.teal),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      _isLoginMode ? 'Secure Business Login' : 'Staff Account Request',
+                      _isLoginMode ? 'Secure Business Login' : 'New ERP Business Signup',
                       style: const TextStyle(fontSize: 13, color: Colors.grey),
                     ),
                     const SizedBox(height: 24),
@@ -213,7 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextField(
                         controller: _loginIdController,
                         decoration: InputDecoration(
-                          labelText: 'Admin ID / Username',
+                          labelText: 'Mobile Number / Admin ID',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           prefixIcon: const Icon(Icons.person_outline),
                         ),
@@ -248,11 +296,37 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ] else ...[
-                      // SIGNUP VIEW FIELDS
+                      // ================= SIGNUP VIEW FIELDS =================
+                      const Text('Select Business Category:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        value: _selectedBusinessType,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Wholesaler / Retailer', child: Text('Wholesaler / Retailer (Trading & Khata)')),
+                          DropdownMenuItem(value: 'Manufacturing', child: Text('Manufacturing (Factory & BOM)')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _selectedBusinessType = val);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _firmNameController,
+                        decoration: InputDecoration(
+                          labelText: 'Firm / Company Name *',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          prefixIcon: const Icon(Icons.store),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: _nameController,
                         decoration: InputDecoration(
-                          labelText: 'Full Name',
+                          labelText: 'Owner / Contact Person Name *',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           prefixIcon: const Icon(Icons.person),
                         ),
@@ -262,9 +336,72 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _usernameController,
                         keyboardType: TextInputType.phone,
                         decoration: InputDecoration(
-                          labelText: 'Mobile Number / Username',
+                          labelText: 'Mobile Number (Login ID) *',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           prefixIcon: const Icon(Icons.phone),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _gstController,
+                        decoration: InputDecoration(
+                          labelText: 'GST Number (Optional)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          prefixIcon: const Icon(Icons.receipt_long),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: _pincodeController,
+                              keyboardType: TextInputType.number,
+                              maxLength: 6,
+                              decoration: InputDecoration(
+                                labelText: 'Pincode *',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                prefixIcon: const Icon(Icons.pin_drop),
+                                counterText: '',
+                              ),
+                              onChanged: (val) {
+                                if (val.length == 6) {
+                                  _lookupPincode(val);
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: _cityController,
+                              decoration: InputDecoration(
+                                labelText: 'City',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _stateController,
+                        decoration: InputDecoration(
+                          labelText: 'State',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          prefixIcon: const Icon(Icons.map),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _addressController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'Complete Address / Location',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          prefixIcon: const Icon(Icons.location_on),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -274,7 +411,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         obscureText: true,
                         maxLength: 6,
                         decoration: InputDecoration(
-                          labelText: 'Create Security PIN',
+                          labelText: 'Create Security PIN (Min 4 digits) *',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           prefixIcon: const Icon(Icons.lock),
                           counterText: '',
@@ -307,7 +444,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         });
                       },
                       child: Text(
-                        _isLoginMode ? 'New User? Request Signup' : 'Already have an account? Login',
+                        _isLoginMode ? 'New Business? Register Here' : 'Already registered? Login here',
                         style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
                       ),
                     ),
