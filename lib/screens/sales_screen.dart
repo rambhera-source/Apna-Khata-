@@ -10,7 +10,6 @@ import 'package:share_plus/share_plus.dart';
 
 import '../database/database_helper.dart';
 import '../models/account.dart';
-import '../models/product.dart';
 import '../models/transaction_model.dart';
 import '../models/order_model.dart';
 import '../models/settings_model.dart'; 
@@ -29,13 +28,18 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _invoiceNoController = TextEditingController(text: 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
+  // 🔥 Freight & Discount Controllers
+  final TextEditingController _freightController = TextEditingController(text: '0');
+  final TextEditingController _discountValueController = TextEditingController(text: '0');
+  String _discountType = '₹'; // '₹' or '%'
+
   // 📅 Selected Bill Date Variable
   DateTime _selectedDate = DateTime.now();
 
   List<String> _allAccounts = [];
-  List<InventoryItem> _allInventoryItems = []; // 🔥 Using InventoryItem model directly
+  List<InventoryItem> _allInventoryItems = [];
   
-  // Cart items list: { 'name': String, 'qty': int, 'price': double, 'stockType': String }
+  // Cart items list: { 'name': String, 'sku': String, 'qty': int, 'price': double, 'stockType': String }
   final List<Map<String, dynamic>> _cartItems = [];
   String _paymentMode = 'Cash';
   final List<String> _paymentModes = ['Cash', 'Bank / UPI', 'Credit'];
@@ -135,6 +139,7 @@ class _SalesScreenState extends State<SalesScreen> {
         if (!item.isDelivered) {
           _cartItems.add({
             'name': item.productName,
+            'sku': '-',
             'qty': item.qty,
             'price': item.price,
             'stockType': _globalStockType,
@@ -223,7 +228,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 children: [
                   DropdownButtonFormField<InventoryItem>(
                     value: selectedItem,
-                    items: _allInventoryItems.map((p) => DropdownMenuItem(value: p, child: Text('${p.itemName} (Stock: ${p.stockQuantity})'))).toList(),
+                    items: _allInventoryItems.map((p) => DropdownMenuItem(value: p, child: Text('${p.itemName} (SKU: ${p.sku ?? "-"})'))).toList(),
                     onChanged: (val) {
                       setDialogState(() {
                         selectedItem = val!;
@@ -256,6 +261,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     setState(() {
                       _cartItems.add({
                         'name': selectedItem.itemName,
+                        'sku': selectedItem.sku ?? '-',
                         'qty': q,
                         'price': pr,
                         'stockType': _globalStockType,
@@ -428,18 +434,33 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // 🧮 Calculations
+  // 🧮 Calculations (Subtotal, Freight, Discount, Tax, Grand Total)
   double get _subTotal {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
+  double get _freightAmount {
+    return double.tryParse(_freightController.text) ?? 0.0;
+  }
+
+  double get _discountAmount {
+    double val = double.tryParse(_discountValueController.text) ?? 0.0;
+    if (_discountType == '%') {
+      return (_subTotal * val) / 100;
+    }
+    return val;
+  }
+
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    return _subTotal * 0.18;
+    double taxableValue = _subTotal - _discountAmount + _freightAmount;
+    if (taxableValue < 0) taxableValue = 0;
+    return taxableValue * 0.18;
   }
 
   double get _grandTotal {
-    return _subTotal + _taxAmount;
+    double total = _subTotal - _discountAmount + _freightAmount + _taxAmount;
+    return total < 0 ? 0 : total;
   }
 
   // 📄 Professional Sales Invoice PDF & Print / Share Generator
@@ -485,13 +506,13 @@ class _SalesScreenState extends State<SalesScreen> {
               pw.Text('Payment Mode: $_paymentMode'),
               pw.SizedBox(height: 15),
               pw.Table.fromTextArray(
-                headers: ['S.No', 'Item Description', 'Qty', 'Price (₹)', 'Total (₹)'],
+                headers: ['S.No', 'Item Description (SKU)', 'Qty', 'Price (₹)', 'Total (₹)'],
                 data: List.generate(_cartItems.length, (index) {
                   final item = _cartItems[index];
                   double total = (item['qty'] as int) * (item['price'] as double);
                   return [
                     '${index + 1}',
-                    '${item['name']} (${item['stockType']})',
+                    '${item['name']} [${item['sku']}] (${item['stockType']})',
                     '${item['qty']}',
                     '${item['price']}',
                     '${total.toStringAsFixed(2)}',
@@ -512,6 +533,8 @@ class _SalesScreenState extends State<SalesScreen> {
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
+                        if (_discountAmount > 0) pw.Text('Discount: - ₹ ${_discountAmount.toStringAsFixed(2)}'),
+                        if (_freightAmount > 0) pw.Text('Freight: + ₹ ${_freightAmount.toStringAsFixed(2)}'),
                         if (_isGstActive) ...[
                           pw.SizedBox(height: 4),
                           pw.Text('CGST (9%): ₹ ${(_taxAmount / 2).toStringAsFixed(2)}'),
@@ -640,7 +663,6 @@ class _SalesScreenState extends State<SalesScreen> {
         title: Text(_isGstActive ? 'Sales Invoice (GST Mode)' : 'Sales Invoice (Simple Mode)'),
         backgroundColor: Colors.teal.shade800,
         foregroundColor: Colors.white,
-        // 🔥 Inventory icon removed from AppBar
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -814,56 +836,72 @@ class _SalesScreenState extends State<SalesScreen> {
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('Add Item'),
-                  onPressed: _addItemToCart, // 👈 Opens Advanced Product Add / Select Popup
+                  onPressed: _addItemToCart,
                 ),
               ],
             ),
             const SizedBox(height: 8),
+
+            // 🔥 Professional Table List View for Items in Bill
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              color: Colors.teal.shade100,
+              child: const Row(
+                children: [
+                  Expanded(flex: 1, child: Text('No.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  Expanded(flex: 4, child: Text('Product Name / SKU', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+                  Expanded(flex: 2, child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+                  Expanded(flex: 2, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.right)),
+                  SizedBox(width: 30),
+                ],
+              ),
+            ),
             Expanded(
               child: _cartItems.isEmpty
-                  ? const Center(child: Text('Koi item add nahi kiya gaya hai. Party select karein ya order load karein.', style: TextStyle(color: Colors.grey)))
+                  ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
                   : ListView.builder(
                       itemCount: _cartItems.length,
                       itemBuilder: (context, index) {
                         final item = _cartItems[index];
                         double total = (item['qty'] as int) * (item['price'] as double);
-                        bool isFresh = item['stockType'] == 'Fresh';
-                        return Card(
-                          child: ListTile(
-                            title: Row(
-                              children: [
-                                Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isFresh ? Colors.green.shade100 : Colors.orange.shade100,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    item['stockType'],
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: isFresh ? Colors.green.shade800 : Colors.orange.shade900,
-                                    ),
-                                  ),
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(flex: 1, child: Text('${index + 1}', style: const TextStyle(fontSize: 12))),
+                              Expanded(
+                                flex: 4,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    Text('SKU: ${item['sku']} (${item['stockType']})', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            subtitle: Text('Qty: ${item['qty']} | Price: ₹ ${item['price']}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('₹ ${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                  onPressed: () {
-                                    setState(() => _cartItems.removeAt(index));
-                                  },
-                                ),
-                              ],
-                            ),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: Text('${item['qty']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text('₹${item['price']}', style: const TextStyle(fontSize: 12), textAlign: TextAlign.center),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.teal), textAlign: TextAlign.right),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                                onPressed: () {
+                                  setState(() => _cartItems.removeAt(index));
+                                },
+                              ),
+                            ],
                           ),
                         );
                       },
@@ -871,6 +909,7 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const Divider(),
             
+            // 🔥 Subtotal, Freight, Discount, Tax & Grand Total Calculation Section
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8)),
@@ -883,8 +922,59 @@ class _SalesScreenState extends State<SalesScreen> {
                       Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                     ],
                   ),
+                  const SizedBox(height: 6),
+                  // 🔥 Discount Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Discount:', style: TextStyle(fontSize: 13)),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 80,
+                            child: TextField(
+                              controller: _discountValueController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            width: 60,
+                            child: DropdownButtonFormField<String>(
+                              value: _discountType,
+                              items: const [
+                                DropdownMenuItem(value: '₹', child: Text('₹')),
+                                DropdownMenuItem(value: '%', child: Text('%')),
+                              ],
+                              onChanged: (val) => setState(() => _discountType = val!),
+                              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  // 🔥 Freight Charge Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Freight / Shipping:', style: TextStyle(fontSize: 13)),
+                      SizedBox(
+                        width: 100,
+                        child: TextField(
+                          controller: _freightController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    ],
+                  ),
                   if (_isGstActive) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -898,7 +988,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       SizedBox(
-                        width: 150,
+                        width: 140,
                         child: DropdownButtonFormField<String>(
                           value: _paymentMode,
                           items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
@@ -906,7 +996,7 @@ class _SalesScreenState extends State<SalesScreen> {
                           decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
                         ),
                       ),
-                      Text('Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
+                      Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
                     ],
                   ),
                 ],
