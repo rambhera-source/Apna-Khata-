@@ -22,9 +22,15 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<InventoryItem> _allInventoryItems = [];
   List<InventoryItem> _filteredItems = [];
-  String _selectedStockFilter = 'All'; // 'All', 'Fresh', 'Replacement'
-  String? _selectedCategoryFilter; // 🔥 Category Filter State
-  bool _isStockAscending = true; // 🔥 Stock Sorting State (Low to High / High to Low)
+  
+  // 🔥 Default stock filter set to 'Fresh'
+  String _selectedStockFilter = 'Fresh'; 
+  String? _selectedCategoryFilter; 
+  bool _isStockAscending = true; 
+
+  // 🔥 Date Filter Variables
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   // A to Z Price Tiers List
   final List<String> _priceCategories = List.generate(26, (index) => String.fromCharCode(65 + index));
@@ -53,7 +59,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
           matchesStockType = item.stockType == 'Replacement';
         }
 
-        // 🔥 Category filter check
+        // Category filter check
         bool matchesCategory = true;
         if (_selectedCategoryFilter != null && _selectedCategoryFilter != 'All') {
           matchesCategory = (item.category ?? 'General') == _selectedCategoryFilter;
@@ -62,18 +68,38 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         return matchesQuery && matchesStockType && matchesCategory;
       }).toList();
 
-      // 🔥 Sort by Closing Stock
+      // Sort by Closing Stock
       _filteredItems.sort((a, b) {
         if (_isStockAscending) {
-          return a.stockQuantity.compareTo(b.stockQuantity); // Low to High (Low Stock first)
+          return a.stockQuantity.compareTo(b.stockQuantity);
         } else {
-          return b.stockQuantity.compareTo(a.stockQuantity); // High to Low (High Stock first)
+          return b.stockQuantity.compareTo(a.stockQuantity);
         }
       });
     });
   }
 
-  // 🔄 Toggle Stock Sorting (Low Stock <-> High Stock)
+  // 📅 Date Range Picker Dialog
+  Future<void> _selectDateRange() async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      initialDateRange: _startDate != null && _endDate != null
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : null,
+    );
+
+    if (picked != null) {
+      setState(() {
+        _startDate = picked.start;
+        _endDate = picked.end;
+        _filterItems(_searchController.text);
+      });
+    }
+  }
+
+  // 🔄 Toggle Stock Sorting
   void _toggleStockSorting() {
     setState(() {
       _isStockAscending = !_isStockAscending;
@@ -552,13 +578,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         title: const Text('Product Inventory Management'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_box),
-            onPressed: () => _showAddEditProductDialog(),
-            tooltip: 'Add New Product',
-          ),
-        ],
+        // 🔥 Duplicate '+' action icon removed from appbar
       ),
       body: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -583,7 +603,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 Expanded(
                   flex: 2,
                   child: DropdownButtonFormField<String>(
-                    value: _selectedStockFilter,
+                    value: _selectedStockFilter, // 👈 Defaults to 'Fresh'
                     decoration: InputDecoration(
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
@@ -614,15 +634,51 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            // 🔥 Active Category Filter Indicator (if any)
+            const SizedBox(height: 8),
+            // 🔥 Date Filter Bar Row
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      side: BorderSide(color: Colors.teal.shade300),
+                    ),
+                    icon: const Icon(Icons.date_range, size: 16, color: Colors.teal),
+                    label: Text(
+                      _startDate == null || _endDate == null
+                          ? 'Filter by Date Range'
+                          : '${DateFormat('dd-MM-yyyy').format(_startDate!)} to ${DateFormat('dd-MM-yyyy').format(_endDate!)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.black87),
+                    ),
+                    onPressed: _selectDateRange,
+                  ),
+                ),
+                if (_startDate != null) ...[
+                  const SizedBox(width: 6),
+                  IconButton(
+                    icon: const Icon(Icons.clear, size: 18, color: Colors.red),
+                    onPressed: () {
+                      setState(() {
+                        _startDate = null;
+                        _endDate = null;
+                        _filterItems(_searchController.text);
+                      });
+                    },
+                    tooltip: 'Clear Date Filter',
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Active Category Filter Indicator (if any)
             if (_selectedCategoryFilter != null && _selectedCategoryFilter != 'All') ...[
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.between,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Filtered by Category: $_selectedCategoryFilter', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
                     InkWell(
@@ -638,7 +694,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 ),
               ),
             ],
-            // Header Row for Clean Mobile View (Category & Closing Stock are clickable!)
+            // Header Row for Clean Mobile View
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               color: Colors.teal.shade100,
@@ -648,7 +704,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                   Expanded(
                     flex: 2,
                     child: InkWell(
-                      onTap: _showCategoryFilterDialog, // 🔥 Clickable Category Header for Filter
+                      onTap: _showCategoryFilterDialog,
                       child: Row(
                         children: const [
                           Text('Category', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
@@ -660,7 +716,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                   Expanded(
                     flex: 1,
                     child: InkWell(
-                      onTap: _toggleStockSorting, // 🔥 Clickable Closing Stock for Low/High Sorting
+                      onTap: _toggleStockSorting,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -685,12 +741,11 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 3),
                           child: InkWell(
-                            onTap: () => _showProductHistoryDialog(item), // Click on card opens History Popup
+                            onTap: () => _showProductHistoryDialog(item),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                               child: Row(
                                 children: [
-                                  // Product Name & SKU ID
                                   Expanded(
                                     flex: 3,
                                     child: Column(
@@ -702,7 +757,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                                       ],
                                     ),
                                   ),
-                                  // Clickable Category text
                                   Expanded(
                                     flex: 2,
                                     child: InkWell(
@@ -718,7 +772,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                                       ),
                                     ),
                                   ),
-                                  // Closing Stock
                                   Expanded(
                                     flex: 1,
                                     child: Text(
@@ -727,7 +780,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                                       textAlign: TextAlign.center,
                                     ),
                                   ),
-                                  // Edit & Delete Action Buttons
                                   Expanded(
                                     flex: 1,
                                     child: Row(
