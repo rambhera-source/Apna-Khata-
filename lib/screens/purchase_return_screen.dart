@@ -165,7 +165,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                         'name': selectedProduct.name,
                         'qty': q,
                         'price': pr,
-                        'stockType': _globalStockType, // 👈 Attached current return stock type
+                        'stockType': _globalStockType,
                       });
                     });
                     Navigator.pop(context);
@@ -324,7 +324,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             .findFirst();
 
         if (product != null) {
-          product.stock -= returnedQty; // माल सप्लायर को वापस किया है तो स्टॉक घटेगा
+          product.stock -= returnedQty;
           if (product.stock < 0) product.stock = 0;
           await DatabaseHelper.isar.products.put(product);
         }
@@ -411,7 +411,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 🔥 Stock Type Quick Toggle Button for Purchase Return (Replacement Default)
+                // 🔥 Stock Type Quick Toggle Button for Purchase Return
                 InkWell(
                   onTap: () {
                     setState(() {
@@ -569,7 +569,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Test('CGST + SGST (18%):', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                        const Text('CGST + SGST (18%):', style: TextStyle(color: Colors.grey, fontSize: 13)), // 👈 Fixed Test -> Text
                         Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
                       ],
                     ),
