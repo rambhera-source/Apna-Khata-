@@ -55,7 +55,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
     Product selectedProduct = _allProducts.first;
     final TextEditingController qtyController = TextEditingController(text: '1');
-    final TextEditingController priceController = TextEditingController(text: selectedProduct.priceA.toString());
+    final TextEditingController priceController = TextEditingController(text: selectedProduct.sellingPrice.toString());
 
     showDialog(
       context: context,
@@ -70,7 +70,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
                 onChanged: (val) {
                   selectedProduct = val!;
-                  priceController.text = selectedProduct.priceA.toString();
+                  priceController.text = selectedProduct.sellingPrice.toString();
                 },
                 decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder()),
               ),
@@ -85,7 +85,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             ElevatedButton(
               onPressed: () {
                 int q = int.tryParse(qtyController.text) ?? 1;
-                double p = double.tryParse(priceController.text) ?? selectedProduct.priceA;
+                double p = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
                 setState(() {
                   _cartItems.add({'name': selectedProduct.name, 'qty': q, 'price': p});
                 });
