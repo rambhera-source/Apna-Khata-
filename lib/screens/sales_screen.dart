@@ -13,9 +13,10 @@ import '../models/account.dart';
 import '../models/product.dart';
 import '../models/transaction_model.dart';
 import '../models/order_model.dart';
+import '../models/settings_model.dart'; // 🔥 Settings Model for GST Check
 import 'searchable_field.dart';
-import 'add_account_screen.dart';        // 🔥 Add Account Screen Imported
-import 'product_inventory_screen.dart'; // 🔥 Product Inventory Screen Imported
+import 'add_account_screen.dart';        
+import 'product_inventory_screen.dart'; 
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -34,10 +35,14 @@ class _SalesScreenState extends State<SalesScreen> {
   List<String> _allAccounts = [];
   List<Product> _allProducts = [];
   
-  // Cart items list: { 'name': String, 'qty': int, 'price': double }
+  // Cart items list
   final List<Map<String, dynamic>> _cartItems = [];
   String _paymentMode = 'Cash';
   final List<String> _paymentModes = ['Cash', 'Bank / UPI', 'Credit'];
+
+  // 🔥 GST Settings State Variables
+  bool _isGstActive = false;
+  String _companyGstin = '';
 
   // 🔥 Multi-Pending Order Tracking Variables
   List<SalesOrder> _pendingOrdersList = [];
@@ -47,26 +52,33 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDropdownData();
+    _loadDropdownDataAndSettings();
   }
 
-  Future<void> _loadDropdownData() async {
+  // 📂 Load Accounts, Products and Company GST Settings
+  Future<void> _loadDropdownDataAndSettings() async {
     final accounts = await DatabaseHelper.isar.accounts.where().findAll();
     final products = await DatabaseHelper.isar.products.where().findAll();
+    final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
+
     setState(() {
       _allAccounts = accounts.map((a) => a.name).toList();
       _allProducts = products;
+      if (settings != null) {
+        _isGstActive = settings.isGstEnabled;
+        _companyGstin = settings.gstin ?? '';
+      }
     });
   }
 
-  // 👤 1. Open Full AddAccountScreen instead of simple dialog
+  // 👤 1. Open Full AddAccountScreen
   void _navigateToAddNewParty() async {
     final String? newPartyName = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const AddAccountScreen()),
     );
 
-    await _loadDropdownData();
+    await _loadDropdownDataAndSettings();
 
     if (newPartyName != null && newPartyName.isNotEmpty) {
       setState(() {
@@ -76,18 +88,16 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // 📦 2. Open ProductInventoryScreen for Adding New Products / Items
+  // 📦 2. Open ProductInventoryScreen
   void _navigateToInventoryScreen() async {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
     );
-
-    // Refresh products list after returning from Inventory screen
-    await _loadDropdownData();
+    await _loadDropdownDataAndSettings();
   }
 
-  // 🔍 Step 1: Party select hote hi saare pending orders fetch karna
+  // 🔍 Step 1: Party select hote hi pending orders fetch karna
   Future<void> _checkForPendingOrders(String partyName) async {
     if (partyName.isEmpty) return;
 
@@ -118,7 +128,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // 📥 Step 2: Specific selected order ko bill cart mein load karna
+  // 📥 Step 2: Specific selected order load karna
   Future<void> _loadSpecificOrderIntoBill(SalesOrder order) async {
     await order.items.load();
 
@@ -142,7 +152,7 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // 📋 Step 3: Agar 1 से zyada orders hain, toh user ko select karne ka Dialog dikhana
+  // 📋 Step 3: Select Order Dialog
   void _showSelectOrderDialog() {
     showDialog(
       context: context,
@@ -179,7 +189,7 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // 🛒 Add Item to Cart Manually (with Inventory Screen Shortcut)
+  // 🛒 Add Item to Cart Manually
   void _addItemToCart() {
     if (_allProducts.isEmpty) {
       _navigateToInventoryScreen();
@@ -264,11 +274,22 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  double get _grandTotal {
+  // 🧮 Calculations (Subtotal, Tax, Grand Total)
+  double get _subTotal {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  // 📄 Professional Sales Invoice PDF & Print / Share Generator
+  double get _taxAmount {
+    if (!_isGstActive) return 0.0;
+    // यदि GST ऑन है तो 18% टैक्स जोड़ते हैं (या इसे अपने अनुसार एडजस्ट कर सकते हैं)
+    return _subTotal * 0.18;
+  }
+
+  double get _grandTotal {
+    return _subTotal + _taxAmount;
+  }
+
+  // 📄 Professional Sales Invoice PDF & Print / Share Generator (With GST Support)
   Future<void> _generateAndPrintOrShareInvoice({required bool isWhatsApp}) async {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) return;
@@ -289,12 +310,14 @@ class _SalesScreenState extends State<SalesScreen> {
                     children: [
                       pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
                       pw.Text('Wholesale & Retail Mobile Parts & Accessories', style: const pw.TextStyle(fontSize: 10)),
+                      if (_isGstActive && _companyGstin.isNotEmpty)
+                        pw.Text('GSTIN: $_companyGstin', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ],
                   ),
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
-                      pw.Text('TAX INVOICE / SALES', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
+                      pw.Text(_isGstActive ? 'TAX INVOICE (GST)' : 'BILL / ESTIMATE', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
                       pw.Text('Invoice No: ${_invoiceNoController.text}'),
                       pw.Text('Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}'),
                     ],
@@ -334,6 +357,13 @@ class _SalesScreenState extends State<SalesScreen> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
+                        pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
+                        if (_isGstActive) ...[
+                          pw.SizedBox(height: 4),
+                          pw.Text('CGST (9%): ₹ ${(_taxAmount / 2).toStringAsFixed(2)}'),
+                          pw.Text('SGST (9%): ₹ ${(_taxAmount / 2).toStringAsFixed(2)}'),
+                        ],
+                        pw.Divider(),
                         pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
                         pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
                       ],
@@ -357,7 +387,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // 💾 Save Sales Transaction & Update Pending Order Status / Remaining Items
+  // 💾 Save Sales Transaction
   Future<void> _saveSalesTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
@@ -365,7 +395,6 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     await DatabaseHelper.isar.writeTxn(() async {
-      // 1. Save Accounting Transaction with selected date
       final txn = AccountingTransaction()
         ..date = _selectedDate
         ..voucherType = 'Sales'
@@ -373,10 +402,9 @@ class _SalesScreenState extends State<SalesScreen> {
         ..partyName = _partyController.text.trim()
         ..cashOrBank = _paymentMode
         ..amount = _grandTotal
-        ..notes = 'Sales Invoice generated via ORLIFE ERP';
+        ..notes = _isGstActive ? 'GST Sales Invoice generated via ORLIFE ERP' : 'Sales Invoice generated via ORLIFE ERP';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
-      // 2. Update Pending Order status if loaded
       if (_selectedPendingOrder != null) {
         await _selectedPendingOrder!.items.load();
         
@@ -437,11 +465,10 @@ class _SalesScreenState extends State<SalesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sales Invoice (Billing)'),
+        title: Text(_isGstActive ? 'Sales Invoice (GST Mode)' : 'Sales Invoice (Simple Mode)'),
         backgroundColor: Colors.teal.shade800,
         foregroundColor: Colors.white,
         actions: [
-          // 📦 Inventory Screen Shortcut Button in AppBar
           IconButton(
             icon: const Icon(Icons.inventory_2),
             onPressed: _navigateToInventoryScreen,
@@ -454,7 +481,6 @@ class _SalesScreenState extends State<SalesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 📅 Date Selector and Invoice Number Row
             Row(
               children: [
                 Expanded(
@@ -494,7 +520,6 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 👤 Party Selection with 'Add New Party' Option (Opens AddAccountScreen)
             Row(
               children: [
                 Expanded(
@@ -522,7 +547,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ],
             ),
 
-            // 🔥 PENDING ORDER NOTIFICATION BANNER
             if (_pendingOrdersList.isNotEmpty) ...[
               const SizedBox(height: 10),
               Container(
@@ -614,22 +638,50 @@ class _SalesScreenState extends State<SalesScreen> {
                     ),
             ),
             const Divider(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                SizedBox(
-                  width: 200,
-                  child: DropdownButtonFormField<String>(
-                    value: _paymentMode,
-                    items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                    onChanged: (val) => setState(() => _paymentMode = val!),
-                    decoration: const InputDecoration(labelText: 'Payment Mode', border: OutlineInputBorder()),
+            
+            // 💰 Totals & GST Summary Box
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8)),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
                   ),
-                ),
-                Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
-              ],
+                  if (_isGstActive) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('CGST + SGST (18%):', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                        Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                      ],
+                    ),
+                  ],
+                  const Divider(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      SizedBox(
+                        width: 150,
+                        child: DropdownButtonFormField<String>(
+                          value: _paymentMode,
+                          items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                          onChanged: (val) => setState(() => _paymentMode = val!),
+                          decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
+                        ),
+                      ),
+                      Text('Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               height: 48,
