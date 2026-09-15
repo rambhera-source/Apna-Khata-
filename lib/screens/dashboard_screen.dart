@@ -2,22 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
 
-import '../../database/database_helper.dart';
-import '../../models/transaction_model.dart';
+import '../database/database_helper.dart';
+import '../models/transaction_model.dart';
 
-// 🔥 Your Exact Original Screen Files Imports
-import '../sales/sales_screen.dart';
-import '../sales/sales_return_screen.dart';
-import '../purchase/purchase_screen.dart';
-import '../purchase/purchase_return_screen.dart';
-import '../daybook_screen.dart';
-import '../ledger_screen.dart';
-import '../financial_reports_screen.dart';
-import '../product_inventory_screen.dart';
-import '../parties_master_screen.dart';
-import '../orders_management_screen.dart';
-import '../voucher_entry_screen.dart';
-import '../setting/settings_screen.dart';
+// 🔥 Updated import paths since the file is now directly in lib/screens/
+import 'sales/sales_screen.dart';
+import 'sales/sales_return_screen.dart';
+import 'purchase/purchase_screen.dart';
+import 'purchase/purchase_return_screen.dart';
+import 'daybook_screen.dart';
+import 'ledger_screen.dart';
+import 'financial_reports_screen.dart';
+import 'product_inventory_screen.dart';
+import 'parties_master_screen.dart';
+import 'orders_management_screen.dart';
+import 'voucher_entry_screen.dart';
+import 'setting/settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final dynamic currentUser;
@@ -178,7 +178,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 🔥 MODULES GRID (Using your actual screen classes)
+                    // 🔥 MODULES GRID
                     const Text('Quick Operations & Masters', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
                     const SizedBox(height: 8),
 
