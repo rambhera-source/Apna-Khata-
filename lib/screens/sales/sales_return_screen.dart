@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
@@ -71,12 +72,13 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     List<Map<String, dynamic>> loadedCharges = [];
     if (settings != null) {
       try {
-        loadedCharges = List<Map<String, dynamic>>.from(settings.extraCharges.map((e) {
-          if (e is Map) {
-            return Map<String, dynamic>.from(e);
+        loadedCharges = settings.extraCharges.map((e) {
+          try {
+            return Map<String, dynamic>.from(jsonDecode(e));
+          } catch (_) {
+            return {'name': e.toString(), 'type': 'Add', 'mode': 'Fixed', 'value': 0.0};
           }
-          return {'name': e.toString(), 'type': 'Add', 'mode': 'Fixed', 'value': 0.0};
-        }));
+        }).toList();
       } catch (_) {
         loadedCharges = [
           {'name': 'Packing Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 0.0},
