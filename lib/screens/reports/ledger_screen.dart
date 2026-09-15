@@ -13,7 +13,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/transaction_model.dart';
-import 'searchable_field.dart';
+import '../searchable_field.dart'; // ✅ Updated relative import path
 
 class LedgerScreen extends StatefulWidget {
   const LedgerScreen({super.key});
@@ -86,10 +86,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
         .nameEqualTo(accountName)
         .findFirst();
 
-    // Account model ke anusaar balance default 0.0 rakha gaya hai
     _currentBalance = 0.0; 
     if (accountObj != null) {
-      // Agar accountObj mein opening balance ya amount hai toh yahan fetch hoga
+      // Account balance data logic
     }
 
     // 2. Date range setup
@@ -117,7 +116,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
     setState(() {
       _ledgerTransactions = txns;
       _filteredTotalAmount = totalAmt;
-      _currentBalance = totalAmt; // Net transaction amount as current ledger balance
+      _currentBalance = totalAmt;
       _isLoading = false;
       _isReportLoaded = true;
     });
