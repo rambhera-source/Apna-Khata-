@@ -219,7 +219,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
   Future<void> _importCsvFile() async {
     try {
-      // 🔥 Updated to FileType.any and withData: true for reliable file picking across devices
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         withData: true,
@@ -230,11 +229,13 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         List<List<dynamic>> fields = [];
 
         if (file.bytes != null) {
-          final csvString = utf8.decode(file.bytes!);
+          // 🔥 Fixed: allowMalformed: true prevents decoding crashes on special characters
+          final csvString = utf8.decode(file.bytes!, allowMalformed: true);
           fields = const CsvToListConverter().convert(csvString);
         } else if (file.path != null) {
-          final input = File(file.path!).openRead();
-          fields = await input.transform(utf8.decoder).transform(const CsvToListConverter()).toList();
+          final bytes = await File(file.path!).readAsBytes();
+          final csvString = utf8.decode(bytes, allowMalformed: true);
+          fields = const CsvToListConverter().convert(csvString);
         }
 
         if (fields.isEmpty) {
@@ -536,7 +537,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
                 if (isDuplicate) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है!'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle से मौजूद है!'), backgroundColor: Colors.red),
                   );
                   return;
                 }
