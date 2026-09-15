@@ -8,14 +8,14 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../database/database_helper.dart';
-import '../models/account.dart';
-import '../models/transaction_model.dart';
-import '../models/order_model.dart';
-import '../models/settings_model.dart'; 
-import '../models/inventory_model.dart'; 
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/account.dart';
+import 'package:accounting_app/models/transaction_model.dart';
+import 'package:accounting_app/models/order_model.dart';
+import 'package:accounting_app/models/settings_model.dart'; 
+import 'package:accounting_app/models/inventory_model.dart'; 
 import 'searchable_field.dart';
-import 'add_account_screen.dart';        
+import '../account/add_account_screen.dart';        
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
