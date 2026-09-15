@@ -8,14 +8,18 @@ import '../sales/sales_screen.dart';
 import '../purchase/purchase_screen.dart';
 import '../sales/sales_return_screen.dart';
 import '../purchase/purchase_return_screen.dart';
-import '../account/accounts_screen.dart'; // ✅ Corrected path
+import '../setting/settings_screen.dart';
+
+// 🔥 Agar aapke project mein in screens ke naam ya folders alag hain, 
+// toh aap inhe apne project ke hisab se import kar sakte hain. 
+// Yahan humne standard relative paths ka use kiya hai:
+import '../accounts/accounts_screen.dart'; 
 import '../inventory/inventory_screen.dart';
 import '../daybook/daybook_screen.dart';
 import '../reports/reports_screen.dart';
-import '../setting/settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final dynamic currentUser; // ✅ Added back to support login & super admin passing
+  final dynamic currentUser;
 
   const DashboardScreen({super.key, this.currentUser});
 
@@ -42,7 +46,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final startOfDay = DateTime(now.year, now.month, now.day);
       final endOfDay = startOfDay.add(const Duration(days: 1));
 
-      // Fetch today's transactions
       final todayTxns = await DatabaseHelper.isar.accountingTransactions
           .filter()
           .dateBetween(startOfDay, endOfDay)
@@ -59,7 +62,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
 
-      // Fetch all transactions for Cash/Bank calculations
       final allTxns = await DatabaseHelper.isar.accountingTransactions.where().findAll();
       double cash = 0.0;
       double bank = 0.0;
@@ -127,7 +129,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 🔥 TOP SUMMARY CARDS
                     Row(
                       children: [
                         Expanded(
@@ -174,11 +175,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-
-                    // 🔥 MODULES GRID
                     const Text('Quick Operations & Masters', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
                     const SizedBox(height: 8),
-
                     GridView.count(
                       crossAxisCount: 3,
                       shrinkWrap: true,
