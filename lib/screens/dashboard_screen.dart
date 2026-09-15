@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import '../models/transaction_model.dart';
 
-// 🔥 Your Exact Original Screen Files Imports with Correct Folder Paths
 import 'sales/sales_screen.dart';
 import 'sales/sales_return_screen.dart';
 import 'purchase/purchase_screen.dart';
@@ -207,7 +206,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 🔥 TOP SUMMARY CARDS
                     Row(
                       children: [
                         Expanded(
@@ -254,11 +252,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-
-                    // 🔥 MODULES GRID
                     const Text('Quick Operations & Masters', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
                     const SizedBox(height: 8),
-
                     GridView.count(
                       crossAxisCount: 3,
                       shrinkWrap: true,
