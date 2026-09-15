@@ -3,13 +3,14 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:csv/csv.dart';
+import 'package:excel/excel.dart' as excel_pkg; // Excel reading support
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:csv/csv.dart';
 import 'package:http/http.dart' as http;
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
-import 'add_account_screen.dart'; // चूंकि यह भी 'account/' फोल्डर के अंदर है, इसलिए यह ऐसे ही रहेगा
+import 'add_account_screen.dart';
 
 class PartiesMasterScreen extends StatefulWidget {
   const PartiesMasterScreen({super.key});
@@ -95,64 +96,104 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
     }
   }
 
-  // 📊 Excel / CSV File se Bulk Import with Error Report Generation
-  Future<void> _importPartiesFromExcel() async {
+  // 📊 Universal Excel & CSV Import with Progress Dialog & Error Report Generation
+  Future<void> _importPartiesUniversal() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['csv', 'txt'],
+        allowedExtensions: ['csv', 'txt', 'xlsx', 'xls'],
         withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.single;
-        List<List<dynamic>> fields = [];
+        List<List<dynamic>> rows = [];
 
-        if (file.bytes != null) {
-          // 🔥 Fixed: added allowMalformed: true to prevent decoding crashes on special characters
-          final csvString = utf8.decode(file.bytes!, allowMalformed: true);
-          fields = const CsvToListConverter().convert(csvString);
-        } else if (file.path != null) {
-          final bytes = await File(file.path!).readAsBytes();
-          final csvString = utf8.decode(bytes, allowMalformed: true);
-          fields = const CsvToListConverter().convert(csvString);
+        String extension = file.extension?.toLowerCase() ?? '';
+        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || extension == 'xlsx' || extension == 'xls') {
+          // 📊 Handle Excel File (.xlsx / .xls)
+          var bytes = file.bytes ?? await File(file.path!).readAsBytes();
+          var excelFile = excel_pkg.Excel.decodeBytes(bytes);
+          for (var table in excelFile.tables.keys) {
+            var sheet = excelFile.tables[table];
+            if (sheet != null) {
+              for (var row in sheet.rows) {
+                rows.add(row.map((cell) => cell?.value ?? '').toList());
+              }
+            }
+            break; // First sheet only
+          }
+        } else {
+          // 📄 Handle CSV / Text File
+          String csvString = '';
+          if (file.bytes != null) {
+            csvString = utf8.decode(file.bytes!, allowMalformed: true);
+          } else if (file.path != null) {
+            final bytes = await File(file.path!).readAsBytes();
+            csvString = utf8.decode(bytes, allowMalformed: true);
+          }
+          rows = const CsvToListConverter().convert(csvString);
         }
+
+        if (rows.isEmpty) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Selected file is empty or invalid!'), backgroundColor: Colors.orange),
+          );
+          return;
+        }
+
+        // 🔄 Show Processing Dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Text('Processing & Importing Parties...'),
+              ],
+            ),
+          ),
+        );
 
         int successCount = 0;
         List<List<dynamic>> failedRows = [];
-        // Header row add करें failure file के लिए
-        if (fields.isNotEmpty) {
-          List<dynamic> header = List.from(fields[0]);
+        if (rows.isNotEmpty) {
+          List<dynamic> header = List.from(rows[0]);
           header.add('Failure Reason');
           failedRows.add(header);
         }
 
         await DatabaseHelper.isar.writeTxn(() async {
-          for (int i = 1; i < fields.length; i++) {
-            var row = fields[i];
-            if (row.length < 3) {
+          for (int i = 1; i < rows.length; i++) {
+            var row = rows[i];
+            if (row.length < 3 || row[0].toString().trim().isEmpty) {
               var failedRow = List.from(row);
-              failedRow.add('Insufficient columns / Empty row');
+              while (failedRow.length < rows[0].length) failedRow.add('');
+              failedRow.add('Insufficient columns or empty Party Name');
               failedRows.add(failedRow);
               continue;
             }
 
-            String name = row[0] != null ? row[0].toString().trim() : '';
-            String mobile = row[1] != null ? row[1].toString().trim() : '';
-            String groupCat = row[2] != null ? row[2].toString().trim() : 'Sundry Debtor';
-            double openingBal = row.length > 3 && row[3] != null ? double.tryParse(row[3].toString()) ?? 0.0 : 0.0;
-            String gstin = row.length > 4 && row[4] != null ? row[4].toString().trim() : '';
-            String pincode = row.length > 5 && row[5] != null ? row[5].toString().trim() : '';
+            String name = row[0].toString().trim();
+            String mobile = row[1].toString().trim();
+            String groupCat = row[2].toString().trim().isNotEmpty ? row[2].toString().trim() : 'Sundry Debtor';
+            double openingBal = row.length > 3 ? double.tryParse(row[3].toString()) ?? 0.0 : 0.0;
+            String gstin = row.length > 4 ? row[4].toString().trim() : '';
+            String pincode = row.length > 5 ? row[5].toString().trim() : '';
 
             // 1. Mandatory Fields Check
-            if (name.isEmpty || mobile.isEmpty || groupCat.isEmpty) {
+            if (name.isEmpty || mobile.isEmpty) {
               var failedRow = List.from(row);
-              failedRow.add('Mandatory field (Name/Mobile/Group) is missing');
+              while (failedRow.length < rows[0].length) failedRow.add('');
+              failedRow.add('Mandatory field (Name/Mobile) is missing');
               failedRows.add(failedRow);
               continue;
             }
 
-            // 2. Duplicate Mobile Check (1 Mobile = 1 Party)
+            // 2. Duplicate Check
             final existingByMobile = await DatabaseHelper.isar.accounts
                 .filter()
                 .phoneEqualTo(mobile)
@@ -165,6 +206,7 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
 
             if (existingByMobile != null) {
               var failedRow = List.from(row);
+              while (failedRow.length < rows[0].length) failedRow.add('');
               failedRow.add('Duplicate Mobile Number already exists');
               failedRows.add(failedRow);
               continue;
@@ -172,6 +214,7 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
 
             if (existingByName != null) {
               var failedRow = List.from(row);
+              while (failedRow.length < rows[0].length) failedRow.add('');
               failedRow.add('Duplicate Party Name already exists');
               failedRows.add(failedRow);
               continue;
@@ -192,8 +235,9 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
           }
         });
 
-        _loadParties();
         if (!mounted) return;
+        Navigator.pop(context); // Close progress dialog
+        _loadParties();
 
         // Agar koi fail records hain toh unki Error CSV file generate karein
         String? errorFilePath;
@@ -219,7 +263,7 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
                 Text('❌ Failed / Skipped: ${failedRows.length > 1 ? failedRows.length - 1 : 0} parties', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                 if (errorFilePath != null) ...[
                   const SizedBox(height: 12),
-                  const Text('Kuch records duplicate ya invalid hone ki wajah से fail ho gaye हैं. Aap failure report file download kar sakte hain.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Text('Kuch records duplicate ya invalid hone ki wajah se fail ho gaye hain. Aap failure report file download kar sakte hain.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ],
             ),
@@ -242,6 +286,8 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
+      if (Navigator.canPop(context)) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Import error: $e'), backgroundColor: Colors.red),
       );
@@ -356,7 +402,7 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
           IconButton(
             icon: const Icon(Icons.file_upload),
             tooltip: 'Bulk Import from Excel/CSV',
-            onPressed: _importPartiesFromExcel,
+            onPressed: _importPartiesUniversal, // 🔥 Universal Excel & CSV Import
           ),
         ],
       ),
