@@ -15,7 +15,7 @@ import 'package:accounting_app/models/transaction_model.dart';
 import 'package:accounting_app/models/settings_model.dart';
 import 'package:accounting_app/models/inventory_model.dart';
 import '../searchable_field.dart';
-import 'products/product_inventory_screen.dart';
+import '../products/product_inventory_screen.dart';
 
 class SalesReturnScreen extends StatefulWidget {
   const SalesReturnScreen({super.key});
@@ -28,17 +28,12 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _returnNoController = TextEditingController(text: 'SRN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
-  // Inline Product Search & Input Controllers
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
 
-  // Dynamic Charges List loaded from Settings
   List<Map<String, dynamic>> _presetChargesList = [];
-  
-  // Dynamic Bill Level Charges / Freight / Discounts rows
   final List<Map<String, dynamic>> _billChargesList = [];
 
-  // Selected Return Date Variable
   DateTime _selectedDate = DateTime.now();
 
   List<String> _allAccounts = [];
@@ -91,7 +86,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     });
   }
 
-  // ➕ Add item directly from inline row
   void _addInlineItemToReturnCart() {
     if (_selectedInlineProduct == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -192,7 +186,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     );
   }
 
-  // 🧮 Calculations
   double get _subTotal {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
@@ -373,7 +366,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     });
   }
 
-  // 🛡️ Smart Exit Warning Dialog
   Future<bool> _onWillPop() async {
     if (_cartItems.isEmpty) {
       return true;
@@ -454,7 +446,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                         labelText: 'Return No', 
                         border: OutlineInputBorder(),
                         filled: true,
-                        fillColor: Colors.grey200,
+                        fillColor: Colors.grey,
                       ),
                     ),
                   ),
@@ -510,7 +502,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               ),
               const SizedBox(height: 12),
 
-              // 🔥 INLINE PRODUCT SEARCH SECTION
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
@@ -665,7 +656,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               ),
               const Divider(),
               
-              // 🔥 BOTTOM CALCULATION & DYNAMIC CHARGES SECTION
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
