@@ -31,15 +31,14 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _invoiceNoController = TextEditingController(text: 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
   // Inline Product Search & Input Controllers with FocusNodes for smooth flow
+  final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
+  final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
 
-  // Dynamic Charges List loaded from Settings (Database)
   List<Map<String, dynamic>> _presetChargesList = [];
-  
-  // Dynamic Bill Level Charges / Freight / Discounts rows
   final List<Map<String, dynamic>> _billChargesList = [];
 
   DateTime _selectedDate = DateTime.now();
@@ -98,10 +97,10 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  void _navigateToAddNewParty() async {
+  void _navigateToAddNewPartyWithPreFill(String partyName) async {
     final String? newPartyName = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const AddAccountScreen()),
+      MaterialPageRoute(builder: (context) => AddAccountScreen(initialName: partyName)),
     );
 
     await _loadDropdownDataAndSettings();
@@ -177,76 +176,12 @@ class _SalesScreenState extends State<SalesScreen> {
       });
 
       _selectedInlineProduct = null;
+      _inlineSearchController.clear();
       _inlineQtyController.text = '1';
       _inlinePriceController.text = '0';
     });
-  }
 
-  void _editCartItem(int index) {
-    final item = _cartItems[index];
-    final qtyController = TextEditingController(text: item['qty'].toString());
-    final priceController = TextEditingController(text: item['price'].toString());
-    String editStockType = item['stockType'];
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Edit Item'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Item: ${item['name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: qtyController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: priceController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: editStockType,
-                    items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
-                    onChanged: (val) {
-                      setDialogState(() {
-                        editStockType = val!;
-                      });
-                    },
-                    decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder()),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-                  onPressed: () {
-                    int q = int.tryParse(qtyController.text) ?? 1;
-                    double pr = double.tryParse(priceController.text) ?? item['price'];
-                    
-                    setState(() {
-                      _cartItems[index]['qty'] = q;
-                      _cartItems[index]['price'] = pr;
-                      _cartItems[index]['stockType'] = editStockType;
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Update'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+    Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
   }
 
   double get _subTotal {
@@ -403,9 +338,52 @@ class _SalesScreenState extends State<SalesScreen> {
     });
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sales Bill Successfully Saved!'), backgroundColor: Colors.green));
-    _generateAndPrintOrShareInvoice(isWhatsApp: false);
-    _clearBill();
+
+    // ✨ Bill Saved Success Dialog with Share & Print options
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle, color: Colors.teal, size: 28),
+            SizedBox(width: 10),
+            Text('Bill Saved Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text('Aapka sales bill safalपूर्वक save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _clearBill();
+            },
+            child: const Text('Close', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            icon: const Icon(Icons.share, size: 16),
+            label: const Text('Share PDF'),
+            onPressed: () {
+              Navigator.pop(context);
+              _generateAndPrintOrShareInvoice(isWhatsApp: true);
+              _clearBill();
+            },
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            icon: const Icon(Icons.print, size: 16),
+            label: const Text('Print'),
+            onPressed: () {
+              Navigator.pop(context);
+              _generateAndPrintOrShareInvoice(isWhatsApp: false);
+              _clearBill();
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   void _clearBill() {
@@ -418,9 +396,7 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Future<bool> _onWillPop() async {
-    if (_cartItems.isEmpty) {
-      return true;
-    }
+    if (_cartItems.isEmpty) return true;
 
     final shouldPop = await showDialog<bool>(
       context: context,
@@ -429,10 +405,7 @@ class _SalesScreenState extends State<SalesScreen> {
         title: const Text('Discard Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         content: const Text('Kya aap waqai is sales bill ko exit karna chahte hain? Aapke add kiye gaye items hat jayenge.', style: TextStyle(fontSize: 13)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, elevation: 0),
             onPressed: () => Navigator.pop(context, true),
@@ -441,7 +414,6 @@ class _SalesScreenState extends State<SalesScreen> {
         ],
       ),
     );
-
     return shouldPop ?? false;
   }
 
@@ -482,51 +454,60 @@ class _SalesScreenState extends State<SalesScreen> {
                 children: [
                   Expanded(
                     flex: 2,
-                    child: TextField(
-                      controller: _invoiceNoController,
-                      readOnly: true,
-                      style: const TextStyle(fontSize: 12),
-                      decoration: InputDecoration(
-                        labelText: 'Invoice No',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                        filled: true,
-                        fillColor: Colors.grey.shade200,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    child: SizedBox(
+                      height: 42,
+                      child: TextField(
+                        controller: _invoiceNoController,
+                        readOnly: true,
+                        style: const TextStyle(fontSize: 12),
+                        decoration: InputDecoration(
+                          labelText: 'Invoice No',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          filled: true,
+                          fillColor: Colors.grey.shade200,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      value: _globalStockType,
-                      items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type, style: const TextStyle(fontSize: 12)))).toList(),
-                      onChanged: (val) => setState(() => _globalStockType = val!),
-                      decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10)),
+                    child: SizedBox(
+                      height: 42,
+                      child: DropdownButtonFormField<String>(
+                        value: _globalStockType,
+                        items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type, style: const TextStyle(fontSize: 12)))).toList(),
+                        onChanged: (val) => setState(() => _globalStockType = val!),
+                        decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10)),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      value: _paymentMode,
-                      items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
-                      onChanged: (val) => setState(() => _paymentMode = val!),
-                      decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10)),
+                    child: SizedBox(
+                      height: 42,
+                      child: DropdownButtonFormField<String>(
+                        value: _paymentMode,
+                        items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
+                        onChanged: (val) => setState(() => _paymentMode = val!),
+                        decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10)),
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
 
-              // 2. Premium Compact Date Selection & Customer Row
+              // 2. Date Selection & Customer Row
               Row(
                 children: [
                   Expanded(
                     flex: 2,
                     child: SizedBox(
-                      height: 40,
+                      height: 42,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -550,214 +531,276 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                   const SizedBox(width: 6),
                   Expanded(
-                    flex: 3,
-                    child: SearchableField(
-                      label: 'Customer / Party Name *',
-                      items: _allAccounts,
-                      controller: _partyController,
-                      onSelected: (val) {
-                        _partyController.text = val;
-                        _checkForPendingOrders(val);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  SizedBox(
-                    height: 40,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal.shade700, 
-                        foregroundColor: Colors.white, 
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    flex: 5,
+                    child: SizedBox(
+                      height: 42,
+                      child: Autocomplete<String>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return const Iterable<String>.empty();
+                          }
+                          return _allAccounts.where((acc) => acc.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                        },
+                        onSelected: (String selection) {
+                          _partyController.text = selection;
+                          _checkForPendingOrders(selection);
+                        },
+                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                          if (_partyController.text.isNotEmpty && controller.text.isEmpty) {
+                            controller.text = _partyController.text;
+                          }
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            decoration: InputDecoration(
+                              labelText: 'Customer / Party Name *',
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                              suffixIcon: const Icon(Icons.arrow_drop_down, size: 20),
+                            ),
+                            onChanged: (val) => _partyController.text = val,
+                          );
+                        },
+                        optionsViewBuilder: (context, onSelected, options) {
+                          return Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 4,
+                              child: SizedBox(
+                                width: 280,
+                                height: 160,
+                                child: ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: options.length + 1,
+                                  itemBuilder: (context, index) {
+                                    if (index == options.length) {
+                                      return ListTile(
+                                        tileColor: Colors.teal.shade50,
+                                        leading: const Icon(Icons.person_add, color: Colors.teal, size: 16),
+                                        title: Text('Add New: "${_partyController.text}"', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
+                                        onTap: () => _navigateToAddNewPartyWithPreFill(_partyController.text),
+                                      );
+                                    }
+                                    final opt = options.elementAt(index);
+                                    return ListTile(
+                                      dense: true,
+                                      title: Text(opt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                      onTap: () => onSelected(opt),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                      icon: const Icon(Icons.person_add, size: 14),
-                      label: const Text('New', style: TextStyle(fontSize: 11)),
-                      onPressed: _navigateToAddNewParty,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
 
-              // 3. Inline Product Search Box
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Autocomplete<InventoryItem>(
-                      optionsBuilder: (TextEditingValue textEditingValue) {
-                        if (textEditingValue.text.isEmpty) {
-                          return const Iterable<InventoryItem>.empty();
-                        }
-                        return _allInventoryItems.where((item) =>
-                          item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                          (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
-                        );
-                      },
-                      displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
-                      onSelected: (InventoryItem selection) {
-                        setState(() {
-                          _selectedInlineProduct = selection;
-                          _inlinePriceController.text = selection.priceA.toString();
-                        });
-                        Future.delayed(const Duration(milliseconds: 100), () => _qtyFocusNode.requestFocus());
-                      },
-                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                        return TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          style: const TextStyle(fontSize: 13),
-                          decoration: InputDecoration(
-                            labelText: 'Search Product Name or SKU...',
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                            prefixIcon: const Icon(Icons.search, size: 18),
-                            suffixIcon: controller.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear, size: 16),
-                                    onPressed: () {
-                                      controller.clear();
-                                      setState(() => _selectedInlineProduct = null);
-                                    },
-                                  )
-                                : null,
-                          ),
-                        );
-                      },
-                      optionsViewBuilder: (context, onSelected, options) {
-                        return Align(
-                          alignment: Alignment.topLeft,
-                          child: Material(
-                            elevation: 4,
-                            child: SizedBox(
-                              width: 300,
-                              height: 180,
-                              child: ListView.builder(
-                                padding: EdgeInsets.zero,
-                                itemCount: options.length + 1,
-                                itemBuilder: (context, index) {
-                                  if (index == options.length) {
-                                    return ListTile(
-                                      tileColor: Colors.teal.shade100,
-                                      leading: const Icon(Icons.add_circle, color: Colors.teal, size: 18),
-                                      title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
-                                      onTap: () async {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
-                                        );
-                                        await _loadDropdownDataAndSettings();
-                                      },
-                                    );
-                                  }
-                                  final item = options.elementAt(index);
-                                  return ListTile(
-                                    dense: true,
-                                    title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                    subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 10)),
-                                    onTap: () => onSelected(item),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    if (_selectedInlineProduct != null) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _inlineQtyController,
-                              focusNode: _qtyFocusNode,
-                              keyboardType: TextInputType.number,
-                              style: const TextStyle(fontSize: 13),
-                              decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(8)),
-                              onSubmitted: (_) => _priceFocusNode.requestFocus(),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: TextField(
-                              controller: _inlinePriceController,
-                              focusNode: _priceFocusNode,
-                              keyboardType: TextInputType.number,
-                              style: const TextStyle(fontSize: 13),
-                              decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(8)),
-                              onSubmitted: (_) {
-                                _addInlineItemToCart();
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-                            onPressed: _addInlineItemToCart,
-                            child: const Text('Add', style: TextStyle(fontSize: 12)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 6),
+              // 3. Items List with Dynamic Inline Search at the bottom
               const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 4),
 
-              // 4. Scrollable Single-Line Items View
               Expanded(
-                child: _cartItems.isEmpty
-                    ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 12)))
-                    : ListView.builder(
-                        itemCount: _cartItems.length,
-                        itemBuilder: (context, index) {
-                          final item = _cartItems[index];
-                          double total = (item['qty'] as int) * (item['price'] as double);
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            margin: const EdgeInsets.symmetric(vertical: 2),
-                            decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4)),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  flex: 4,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: _cartItems.isEmpty
+                          ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 12)))
+                          : ListView.builder(
+                              itemCount: _cartItems.length,
+                              itemBuilder: (context, index) {
+                                final item = _cartItems[index];
+                                double total = (item['qty'] as int) * (item['price'] as double);
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  margin: const EdgeInsets.symmetric(vertical: 2),
+                                  decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4)),
+                                  child: Row(
                                     children: [
-                                      Text('${index + 1}. ${item['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                      Text('SKU: ${item['sku']} (${item['stockType']}) | Qty: ${item['qty']} × ₹${item['price']}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                      Expanded(
+                                        flex: 3,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text('${index + 1}. ${item['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                            Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                          ],
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 50,
+                                        child: TextField(
+                                          controller: TextEditingController(text: item['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
+                                          keyboardType: TextInputType.number,
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
+                                          onChanged: (val) {
+                                            int? q = int.tryParse(val);
+                                            if (q != null && q > 0) {
+                                              setState(() => _cartItems[index]['qty'] = q);
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      SizedBox(
+                                        width: 65,
+                                        child: TextField(
+                                          controller: TextEditingController(text: item['price'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
+                                          keyboardType: TextInputType.number,
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
+                                          onChanged: (val) {
+                                            double? p = double.tryParse(val);
+                                            if (p != null && p >= 0) {
+                                              setState(() => _cartItems[index]['price'] = p);
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                        onPressed: () => setState(() => _cartItems.removeAt(index)),
+                                        constraints: const BoxConstraints(),
+                                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                                      ),
                                     ],
                                   ),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 4),
+
+                    // Inline Product Search Bar
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Autocomplete<InventoryItem>(
+                            optionsBuilder: (TextEditingValue textEditingValue) {
+                              if (textEditingValue.text.isEmpty) return const Iterable<InventoryItem>.empty();
+                              return _allInventoryItems.where((item) =>
+                                item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                                (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
+                              );
+                            },
+                            displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
+                            onSelected: (InventoryItem selection) {
+                              setState(() {
+                                _selectedInlineProduct = selection;
+                                _inlinePriceController.text = selection.priceA.toString();
+                              });
+                              Future.delayed(const Duration(milliseconds: 100), () => _qtyFocusNode.requestFocus());
+                            },
+                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                              if (_inlineSearchController.text.isNotEmpty && controller.text.isEmpty) {
+                                controller.text = _inlineSearchController.text;
+                              }
+                              return TextField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                style: const TextStyle(fontSize: 12),
+                                decoration: InputDecoration(
+                                  labelText: 'Search Product Name or SKU to add...',
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  prefixIcon: const Icon(Icons.search, size: 16),
                                 ),
-                                Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
-                                IconButton(
-                                  icon: const Icon(Icons.edit, color: Colors.orange, size: 16),
-                                  onPressed: () => _editCartItem(index),
-                                  constraints: const BoxConstraints(),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                onChanged: (val) => _inlineSearchController.text = val,
+                              );
+                            },
+                            optionsViewBuilder: (context, onSelected, options) {
+                              return Align(
+                                alignment: Alignment.topLeft,
+                                child: Material(
+                                  elevation: 4,
+                                  child: SizedBox(
+                                    width: 280,
+                                    height: 150,
+                                    child: ListView.builder(
+                                      padding: EdgeInsets.zero,
+                                      itemCount: options.length + 1,
+                                      itemBuilder: (context, index) {
+                                        if (index == options.length) {
+                                          return ListTile(
+                                            tileColor: Colors.teal.shade100,
+                                            leading: const Icon(Icons.add_circle, color: Colors.teal, size: 16),
+                                            title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
+                                            onTap: () async {
+                                              await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
+                                              await _loadDropdownDataAndSettings();
+                                            },
+                                          );
+                                        }
+                                        final item = options.elementAt(index);
+                                        return ListTile(
+                                          dense: true,
+                                          title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                          subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9)),
+                                          onTap: () => onSelected(item),
+                                        );
+                                      },
+                                    ),
+                                  ),
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red, size: 16),
-                                  onPressed: () => setState(() => _cartItems.removeAt(index)),
-                                  constraints: const BoxConstraints(),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                              );
+                            },
+                          ),
+                          if (_selectedInlineProduct != null) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _inlineQtyController,
+                                    focusNode: _qtyFocusNode,
+                                    keyboardType: TextInputType.number,
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(6)),
+                                    onSubmitted: (_) => _priceFocusNode.requestFocus(),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _inlinePriceController,
+                                    focusNode: _priceFocusNode,
+                                    keyboardType: TextInputType.number,
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(6)),
+                                    onSubmitted: (_) => _addInlineItemToCart(),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                                  onPressed: _addInlineItemToCart,
+                                  child: const Text('Add', style: TextStyle(fontSize: 11)),
                                 ),
                               ],
                             ),
-                          );
-                        },
+                          ],
+                        ],
                       ),
+                    ),
+                  ],
+                ),
               ),
               const Divider(height: 8),
               
-              // 5. Bottom Calculation & Grand Total
+              // 5. Bottom Calculation & Grand Total (Flexible Freight/Charges)
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6)),
@@ -833,6 +876,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             'name': selection['name'],
                             'type': selection['type'],
                             'mode': selection['mode'],
+                            // 🔥 Flexible default values (User can modify freely)
                             'qty': 1.0,
                             'rate': selection['value'] ?? 0.0,
                           });
@@ -931,8 +975,10 @@ class _SalesScreenState extends State<SalesScreen> {
   void dispose() {
     _partyController.dispose();
     _invoiceNoController.dispose();
+    _inlineSearchController.dispose();
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
+    _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
     super.dispose();
