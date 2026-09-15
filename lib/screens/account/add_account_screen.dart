@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../database/database_helper.dart';
-import '../models/account.dart'; // ✅ Correct Account Model
-import '../models/settings_model.dart'; // ✅ For CompanySettings (Routes & Salesmen)
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/account.dart'; // ✅ Correct Account Model
+import 'package:accounting_app/models/settings_model.dart'; // ✅ For CompanySettings (Routes & Salesmen)
 
 class AddAccountScreen extends StatefulWidget {
   const AddAccountScreen({super.key});
