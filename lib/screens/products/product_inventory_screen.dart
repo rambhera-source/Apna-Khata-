@@ -231,7 +231,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         final file = result.files.single;
         List<List<dynamic>> rows = [];
 
-        String extension = file.extension?.toLowerCase ?? '';
+        String extension = file.extension?.toLowerCase() ?? '';
         if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || extension == 'xlsx' || extension == 'xls') {
           // 📊 Handle Excel File (.xlsx / .xls)
           var bytes = file.bytes ?? await File(file.path!).readAsBytes();
@@ -413,7 +413,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      // Close dialog if open
       if (Navigator.canPop(context)) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('File import karne me error aayi: $e'), backgroundColor: Colors.red),
@@ -632,7 +631,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
                 if (isDuplicate) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है!'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle से मौजूद है!'), backgroundColor: Colors.red),
                   );
                   return;
                 }
@@ -730,7 +729,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.file_upload, color: Colors.teal),
-                  onPressed: _importFileUniversal, // 🔥 Universal Excel & CSV Import
+                  onPressed: _importFileUniversal,
                   tooltip: 'Upload Excel or CSV File',
                 ),
               ],
