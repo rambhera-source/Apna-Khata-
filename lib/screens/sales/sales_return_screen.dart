@@ -13,7 +13,7 @@ import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/transaction_model.dart';
 import 'package:accounting_app/models/settings_model.dart';
 import 'package:accounting_app/models/inventory_model.dart';
-import 'searchable_field.dart';
+import '../searchable_field.dart'; // ✅ Updated relative import path
 
 class SalesReturnScreen extends StatefulWidget {
   const SalesReturnScreen({super.key});
@@ -452,7 +452,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             ),
             const SizedBox(height: 8),
 
-            // 🔥 Professional Table List View for Sales Return Items
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               color: Colors.green.shade100,
@@ -519,7 +518,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             ),
             const Divider(),
             
-            // 🔥 Calculations Box with Freight & Discount
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
