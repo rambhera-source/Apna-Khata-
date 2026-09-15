@@ -23,6 +23,16 @@ class AccountingApp extends StatelessWidget {
       title: 'ORLIFE Accounting SaaS',
       debugShowCheckedModeBanner: false,
       
+      // 🔥 Global Text Scale Fix (Mobile ki system font size change hone par bhi design kharab nahi hoga)
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(1.0), // Standard text scale factor locked to 1.0
+          ),
+          child: child!,
+        );
+      },
+      
       // 📊 BUSY ACCOUNTING SOFTWARE STYLE GLOBAL THEME
       theme: ThemeData(
         useMaterial3: true,
@@ -74,7 +84,7 @@ class AccountingApp extends StatelessWidget {
           ),
         ),
 
-        // 4. Card Theme (Fixed from CardThemeData to CardTheme)
+        // 4. Card Theme
         cardTheme: CardTheme(
           color: Colors.white,
           elevation: 1,
