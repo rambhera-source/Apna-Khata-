@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/user_model.dart';
 import 'login_screen.dart';
-import 'dashboard_screen.dart'; // ✅ Main app dashboard import
+import 'dashboard_screen.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -95,7 +95,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               },
             ),
             const Divider(),
-            // 🔥 Direct Shortcut to Open Main App Accounting Dashboard
             ListTile(
               leading: const Icon(Icons.open_in_new, color: Colors.teal),
               title: const Text('Open Main App (Accounts)', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
@@ -149,7 +148,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     }
   }
 
-  // 1. Dashboard Overview Tab
   Widget _buildDashboardOverview() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -195,7 +193,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
   }
 
-  // 2. Registered Companies List Tab
   Widget _buildCompaniesListScreen() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -239,7 +236,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
   }
 
-  // 3. Plans Screen Tab
   Widget _buildPlansScreen() {
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -288,7 +284,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
   }
 
-  // 4. Settings Screen Tab
   Widget _buildSettingsScreen() {
     return ListView(
       padding: const EdgeInsets.all(16),
