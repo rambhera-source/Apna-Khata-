@@ -13,7 +13,7 @@ import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/transaction_model.dart';
 import 'package:accounting_app/models/settings_model.dart';
 import 'package:accounting_app/models/inventory_model.dart';
-import '../searchable_field.dart'; // ✅ Updated relative import path
+import '../searchable_field.dart';
 
 class SalesReturnScreen extends StatefulWidget {
   const SalesReturnScreen({super.key});
@@ -26,18 +26,28 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _returnNoController = TextEditingController(text: 'SRN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
-  // 🔥 Freight & Discount Controllers
-  final TextEditingController _freightController = TextEditingController(text: '0');
+  // Freight Controllers (Default rate ₹30)
+  final TextEditingController _freightQtyController = TextEditingController(text: '1');
+  final TextEditingController _freightRateController = TextEditingController(text: '30');
+
+  // Discount Controllers
   final TextEditingController _discountValueController = TextEditingController(text: '0');
   String _discountType = '₹';
 
-  // 📅 Selected Return Date Variable
+  // Dynamic Charges List loaded from Settings
+  List<Map<String, dynamic>> _presetChargesList = [];
+  Map<String, dynamic>? _selectedPresetCharge;
+  final TextEditingController _extraChargeAmountController = TextEditingController(text: '0');
+  
+  // List to hold multiple added extra charges
+  final List<Map<String, dynamic>> _extraChargesList = [];
+
+  // Selected Return Date Variable
   DateTime _selectedDate = DateTime.now();
 
   List<String> _allAccounts = [];
   List<InventoryItem> _allInventoryItems = [];
   
-  // Return cart items list: { 'name': String, 'sku': String, 'qty': int, 'price': double, 'stockType': String }
   final List<Map<String, dynamic>> _cartItems = [];
   String _refundMode = 'Cash';
   final List<String> _refundModes = ['Cash', 'Bank / UPI', 'Adjust in Ledger'];
@@ -46,8 +56,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
 
   bool _isGstActive = false;
   String _companyGstin = '';
-
-  final List<String> _priceCategories = List.generate(26, (index) => String.fromCharCode(65 + index));
 
   @override
   void initState() {
@@ -60,12 +68,33 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
 
+    List<Map<String, dynamic>> loadedCharges = [];
+    if (settings != null) {
+      try {
+        loadedCharges = List<Map<String, dynamic>>.from(settings.extraCharges.map((e) {
+          if (e is Map) {
+            return Map<String, dynamic>.from(e);
+          }
+          return {'name': e.toString(), 'type': 'Add', 'mode': 'Fixed', 'value': 0.0};
+        }));
+      } catch (_) {
+        loadedCharges = [
+          {'name': 'Packing Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 0.0},
+        ];
+      }
+    }
+
     setState(() {
       _allAccounts = accounts.map((a) => a.name).toList();
       _allInventoryItems = inventoryItems;
       if (settings != null) {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
+      }
+      _presetChargesList = loadedCharges;
+      if (_presetChargesList.isNotEmpty) {
+        _selectedPresetCharge = _presetChargesList.first;
+        _extraChargeAmountController.text = _selectedPresetCharge!['value'].toString();
       }
     });
   }
@@ -150,8 +179,10 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  double get _freightAmount {
-    return double.tryParse(_freightController.text) ?? 0.0;
+  double get _freightTotalAmount {
+    int qty = int.tryParse(_freightQtyController.text) ?? 0;
+    double rate = double.tryParse(_freightRateController.text) ?? 0.0;
+    return qty * rate;
   }
 
   double get _discountAmount {
@@ -162,15 +193,31 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     return val;
   }
 
+  double get _extraChargesTotal {
+    double totalNet = 0.0;
+    for (var item in _extraChargesList) {
+      double amt = item['amount'] as double;
+      if (item['mode'] == 'Percentage') {
+        amt = (_subTotal * amt) / 100;
+      }
+      if (item['type'] == 'Add') {
+        totalNet += amt;
+      } else {
+        totalNet -= amt;
+      }
+    }
+    return totalNet;
+  }
+
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    double taxableValue = _subTotal - _discountAmount + _freightAmount;
+    double taxableValue = _subTotal - _discountAmount + _freightTotalAmount + _extraChargesTotal;
     if (taxableValue < 0) taxableValue = 0;
     return taxableValue * 0.18;
   }
 
   double get _grandTotal {
-    double total = _subTotal - _discountAmount + _freightAmount + _taxAmount;
+    double total = _subTotal - _discountAmount + _freightTotalAmount + _extraChargesTotal + _taxAmount;
     return total < 0 ? 0 : total;
   }
 
@@ -244,7 +291,9 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                       children: [
                         pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
                         if (_discountAmount > 0) pw.Text('Discount: - ₹ ${_discountAmount.toStringAsFixed(2)}'),
-                        if (_freightAmount > 0) pw.Text('Freight: + ₹ ${_freightAmount.toStringAsFixed(2)}'),
+                        if (_freightTotalAmount > 0) pw.Text('Freight Charge: + ₹ ${_freightTotalAmount.toStringAsFixed(2)}'),
+                        for (var extra in _extraChargesList)
+                          pw.Text('${extra['name']} (${extra['type']}): ${extra['type'] == 'Add' ? '+' : '-'} ₹ ${(extra['amount'] as double).toStringAsFixed(2)}'),
                         if (_isGstActive) ...[
                           pw.SizedBox(height: 4),
                           pw.Text('CGST (9%): ₹ ${(_taxAmount / 2).toStringAsFixed(2)}'),
@@ -522,6 +571,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -531,6 +581,8 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                     ],
                   ),
                   const SizedBox(height: 6),
+                  
+                  // DISCOUNT SECTION
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -563,32 +615,116 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
+
+                  // FREIGHT CHARGE (Default ₹30)
+                  const Text('Freight Charge (Default ₹30 / unit):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
+                  const SizedBox(height: 4),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Freight / Shipping:', style: TextStyle(fontSize: 13)),
-                      SizedBox(
-                        width: 100,
+                      Expanded(
                         child: TextField(
-                          controller: _freightController,
+                          controller: _freightQtyController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                          decoration: const InputDecoration(labelText: 'No. (1, 2, 3...)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
                           onChanged: (_) => setState(() {}),
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _freightRateController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Rate (₹)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '= ₹ ${_freightTotalAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14),
+                      ),
                     ],
                   ),
-                  if (_isGstActive) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('CGST + SGST (18%):', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                        Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                      ],
+                  const SizedBox(height: 8),
+
+                  // EXTRA CHARGES DROPDOWN (Loaded from Settings Master)
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<Map<String, dynamic>>(
+                          value: _selectedPresetCharge,
+                          isExpanded: true,
+                          items: _presetChargesList.map((c) => DropdownMenuItem(
+                            value: c, 
+                            child: Text('${c['name']} (${c['type'] == 'Add' ? '+' : '-'})', style: TextStyle(fontSize: 13, color: c['type'] == 'Add' ? Colors.green.shade900 : Colors.red.shade900, fontWeight: FontWeight.bold)),
+                          )).toList(),
+                          onChanged: (val) {
+                            setState(() {
+                              _selectedPresetCharge = val;
+                              if (val != null) {
+                                _extraChargeAmountController.text = val['value'].toString();
+                              }
+                            });
+                          },
+                          decoration: const InputDecoration(labelText: 'Select Charge / Discount', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        flex: 1,
+                        child: TextField(
+                          controller: _extraChargeAmountController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Value', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle, color: Colors.green, size: 30),
+                        onPressed: () {
+                          if (_selectedPresetCharge != null) {
+                            setState(() {
+                              _extraChargesList.add({
+                                'name': _selectedPresetCharge!['name'],
+                                'type': _selectedPresetCharge!['type'],
+                                'mode': _selectedPresetCharge!['mode'],
+                                'amount': double.tryParse(_extraChargeAmountController.text) ?? 0.0,
+                              });
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+
+                  // LIST OF ADDED EXTRA CHARGES
+                  if (_extraChargesList.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Column(
+                      children: List.generate(_extraChargesList.length, (i) {
+                        final ex = _extraChargesList[i];
+                        bool isAdd = ex['type'] == 'Add';
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('• ${ex['name']} (${ex['mode']})', style: TextStyle(fontSize: 12, color: isAdd ? Colors.green.shade800 : Colors.red.shade800, fontWeight: FontWeight.bold)),
+                            Row(
+                              children: [
+                                Text('${isAdd ? "+" : "-"} ${ex['amount']}${ex['mode'] == 'Percentage' ? '%' : '₹'}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isAdd ? Colors.green : Colors.red)),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 14, color: Colors.red),
+                                  onPressed: () => setState(() => _extraChargesList.removeAt(i)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      }),
                     ),
                   ],
+
                   const Divider(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
