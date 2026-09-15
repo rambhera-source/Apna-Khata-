@@ -4,19 +4,20 @@ import 'package:intl/intl.dart';
 
 import '../../database/database_helper.dart';
 import '../../models/transaction_model.dart';
-import '../sales/sales_screen.dart';
-import '../purchase/purchase_screen.dart';
-import '../sales/sales_return_screen.dart';
-import '../purchase/purchase_return_screen.dart';
-import '../setting/settings_screen.dart';
 
-// 🔥 Agar aapke project mein in screens ke naam ya folders alag hain, 
-// toh aap inhe apne project ke hisab se import kar sakte hain. 
-// Yahan humne standard relative paths ka use kiya hai:
-import '../accounts/accounts_screen.dart'; 
-import '../inventory/inventory_screen.dart';
-import '../daybook/daybook_screen.dart';
-import '../reports/reports_screen.dart';
+// 🔥 Your Exact Original Screen Files Imports
+import '../sales/sales_screen.dart';
+import '../sales/sales_return_screen.dart';
+import '../purchase/purchase_screen.dart';
+import '../purchase/purchase_return_screen.dart';
+import '../daybook_screen.dart';
+import '../ledger_screen.dart';
+import '../financial_reports_screen.dart';
+import '../product_inventory_screen.dart';
+import '../parties_master_screen.dart';
+import '../orders_management_screen.dart';
+import '../voucher_entry_screen.dart';
+import '../setting/settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final dynamic currentUser;
@@ -129,6 +130,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // 🔥 TOP SUMMARY CARDS
                     Row(
                       children: [
                         Expanded(
@@ -175,8 +177,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
+
+                    // 🔥 MODULES GRID (Using your actual screen classes)
                     const Text('Quick Operations & Masters', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
                     const SizedBox(height: 8),
+
                     GridView.count(
                       crossAxisCount: 3,
                       shrinkWrap: true,
@@ -189,11 +194,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _buildMenuCard(context, 'Purchase', Icons.shopping_cart, Colors.blue, const PurchaseScreen()),
                         _buildMenuCard(context, 'Sales Return', Icons.assignment_return, Colors.orange, const SalesReturnScreen()),
                         _buildMenuCard(context, 'Purchase Ret.', Icons.remove_shopping_cart, Colors.deepOrange, const PurchaseReturnScreen()),
-                        _buildMenuCard(context, 'Accounts', Icons.people, Colors.indigo, const AccountsScreen()),
-                        _buildMenuCard(context, 'Inventory', Icons.inventory_2, Colors.purple, const InventoryScreen()),
+                        _buildMenuCard(context, 'Parties', Icons.people, Colors.indigo, const PartiesMasterScreen()),
+                        _buildMenuCard(context, 'Inventory', Icons.inventory_2, Colors.purple, const ProductInventoryScreen()),
                         _buildMenuCard(context, 'Day Book', Icons.book, Colors.brown, const DayBookScreen()),
-                        _buildMenuCard(context, 'Reports', Icons.bar_chart, Colors.cyan.shade800, const ReportsScreen()),
-                        _buildMenuCard(context, 'Settings', Icons.settings_applications, Colors.blueGrey, const SettingsScreen()),
+                        _buildMenuCard(context, 'Ledger', Icons.account_balance_wallet, Colors.amber.shade900, const LedgerScreen()),
+                        _buildMenuCard(context, 'Reports', Icons.bar_chart, Colors.cyan.shade800, const FinancialReportsScreen()),
+                        _buildMenuCard(context, 'Orders', Icons.shopping_bag, Colors.pink.shade700, const OrdersManagementScreen()),
+                        _buildMenuCard(context, 'Voucher', Icons.receipt_long, Colors.blueGrey, const VoucherEntryScreen()),
+                        _buildMenuCard(context, 'Settings', Icons.settings_applications, Colors.grey.shade800, const SettingsScreen()),
                       ],
                     ),
                   ],
