@@ -1,34 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
-import 'package:accounting_app/database/database_helper.dart';
-import 'package:accounting_app/models/user_model.dart';
-import 'package:accounting_app/screens/voucher_entry_screen.dart';
-import 'package:accounting_app/screens/sales/sales_screen.dart';
-import 'package:accounting_app/screens/purchase/purchase_screen.dart';
-import 'package:accounting_app/screens/sales/sales_return_screen.dart';
-import 'package:accounting_app/screens/purchase/purchase_return_screen.dart';
-import 'package:accounting_app/screens/reports/ledger_screen.dart';
-import 'package:accounting_app/screens/order/orders_management_screen.dart';
-import 'package:accounting_app/screens/reports/financial_reports_screen.dart';
-import 'package:accounting_app/screens/reports/daybook_screen.dart';
-import 'package:accounting_app/screens/account/parties_master_screen.dart';
-import 'package:accounting_app/screens/products/product_inventory_screen.dart';
-import 'package:accounting_app/screens/setting/settings_screen.dart';
-import 'package:accounting_app/screens/manufacturing_screen.dart';
-import 'package:accounting_app/screens/login_screen.dart';
+import 'package:intl/intl.dart';
+
+import '../../database/database_helper.dart';
+import '../../models/transaction_model.dart';
+import '../sales/sales_screen.dart';
+import '../purchase/purchase_screen.dart';
+import '../sales/sales_return_screen.dart';
+import '../purchase/purchase_return_screen.dart';
+import '../accounts/accounts_screen.dart';
+import '../inventory/inventory_screen.dart';
+import '../daybook/daybook_screen.dart';
+import '../reports/reports_screen.dart';
+import '../setting/settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final UserAccount currentUser;
-  const DashboardScreen({super.key, required this.currentUser});
+  const DashboardScreen({super.key});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  double _totalSales = 0.0;
-  double _totalPurchases = 0.0;
-  double _cashBalance = 50000.0;
+  double _todaySales = 0.0;
+  double _todayPurchases = 0.0;
+  double _cashInHand = 0.0;
+  double _bankBalance = 0.0;
   bool _isLoading = true;
 
   @override
@@ -38,336 +35,232 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadDashboardData() async {
-    setState(() => _isLoading = true);
+    try {
+      final now = DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
 
-    double sales = 0.0;
-    double purchases = 0.0;
-    double cash = 50000.0;
+      // Fetch today's transactions
+      final todayTxns = await DatabaseHelper.isar.accountingTransactions
+          .filter()
+          .dateBetween(startOfDay, endOfDay)
+          .findAll();
 
-    setState(() {
-      _totalSales = sales;
-      _totalPurchases = purchases;
-      _cashBalance = cash;
-      _isLoading = false;
-    });
+      double sales = 0.0;
+      double purchases = 0.0;
+
+      for (var txn in todayTxns) {
+        if (txn.voucherType == 'Sales') {
+          sales += txn.amount;
+        } else if (txn.voucherType == 'Purchase') {
+          purchases += txn.amount;
+        }
+      }
+
+      // Fetch all transactions for Cash/Bank calculations
+      final allTxns = await DatabaseHelper.isar.accountingTransactions.where().findAll();
+      double cash = 0.0;
+      double bank = 0.0;
+
+      for (var txn in allTxns) {
+        if (txn.cashOrBank.toLowerCase().contains('cash')) {
+          if (txn.voucherType == 'Sales' || txn.voucherType == 'Receipt') {
+            cash += txn.amount;
+          } else {
+            cash -= txn.amount;
+          }
+        } else {
+          if (txn.voucherType == 'Sales' || txn.voucherType == 'Receipt') {
+            bank += txn.amount;
+          } else {
+            bank -= txn.amount;
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _todaySales = sales;
+          _todayPurchases = purchases;
+          _cashInHand = cash;
+          _bankBalance = bank;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isManufacturing = widget.currentUser.businessType == 'Manufacturing';
-
     return Scaffold(
       appBar: AppBar(
-        title: Text('ORLIFE ERP - ${widget.currentUser.name} (${widget.currentUser.role})'),
-        backgroundColor: Colors.teal,
+        title: const Text('ORLIFE ERP Dashboard', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.teal.shade800,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 20),
+            onPressed: () {
+              setState(() => _isLoading = true);
+              _loadDashboardData();
+            },
+            tooltip: 'Refresh Data',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings, size: 20),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
+            tooltip: 'Settings',
+          ),
+        ],
       ),
-
-      // 📱 CLEAN SIDEBAR (DRAWER) WITHOUT NUMBERS
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: const BoxDecoration(color: Colors.teal),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const CircleAvatar(
-                    backgroundColor: Colors.white,
-                    radius: 26,
-                    child: Icon(Icons.store, color: Colors.teal, size: 30),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'ORLIFE ERP Menu',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.currentUser.name,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-
-            // SALES
-            ExpansionTile(
-              leading: const Icon(Icons.point_of_sale, color: Colors.teal),
-              title: const Text('Sales', style: TextStyle(fontWeight: FontWeight.bold)),
-              children: [
-                ListTile(
-                  leading: const SizedBox(width: 24),
-                  title: const Text('Sales Bill'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesScreen()));
-                  },
-                ),
-                ListTile(
-                  leading: const SizedBox(width: 24),
-                  title: const Text('Sales Return'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReturnScreen()));
-                  },
-                ),
-                ListTile(
-                  leading: const SizedBox(width: 24),
-                  title: const Text('Sales & Return History'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen()));
-                  },
-                ),
-              ],
-            ),
-
-            // PURCHASE
-            ExpansionTile(
-              leading: const Icon(Icons.shopping_cart, color: Colors.blue),
-              title: const Text('Purchase', style: TextStyle(fontWeight: FontWeight.bold)),
-              children: [
-                ListTile(
-                  leading: const SizedBox(width: 24),
-                  title: const Text('Purchase Bill'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseScreen()));
-                  },
-                ),
-                ListTile(
-                  leading: const SizedBox(width: 24),
-                  title: const Text('Purchase Return'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseReturnScreen()));
-                  },
-                ),
-                ListTile(
-                  leading: const SizedBox(width: 24),
-                  title: const Text('Purchase History'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen()));
-                  },
-                ),
-              ],
-            ),
-
-            // ACCOUNTS
-            ListTile(
-              leading: const Icon(Icons.people, color: Colors.indigo),
-              title: const Text('Accounts'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const PartiesMasterScreen()));
-              },
-            ),
-
-            // ORDERS MANAGEMENT
-            ListTile(
-              leading: const Icon(Icons.list_alt, color: Colors.amber),
-              title: const Text('Orders Management'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersManagementScreen()));
-              },
-            ),
-
-            // PRODUCT INVENTORY
-            ListTile(
-              leading: const Icon(Icons.inventory, color: Colors.orange),
-              title: const Text('Product Inventory'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
-              },
-            ),
-
-            // VOUCHER ENTRY
-            ListTile(
-              leading: const Icon(Icons.payment, color: Colors.red),
-              title: const Text('Voucher Entry'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const VoucherEntryScreen()));
-              },
-            ),
-
-            // REPORTS
-            ExpansionTile(
-              leading: const Icon(Icons.analytics, color: Colors.deepPurple),
-              title: const Text('Reports', style: TextStyle(fontWeight: FontWeight.bold)),
-              children: [
-                ListTile(
-                  leading: const SizedBox(width: 24),
-                  title: const Text('Day Book'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen()));
-                  },
-                ),
-                ListTile(
-                  leading: const SizedBox(width: 24),
-                  title: const Text('Financial Reports'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const FinancialReportsScreen()));
-                  },
-                ),
-                ListTile(
-                  leading: const SizedBox(width: 24),
-                  title: const Text('Ledger'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const LedgerScreen()));
-                  },
-                ),
-              ],
-            ),
-
-            // SETTINGS & BACKUP
-            ListTile(
-              leading: const Icon(Icons.settings, color: Colors.blueGrey),
-              title: const Text('Settings (Backup & Master)'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
-              },
-            ),
-
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ListView(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const DayBookScreen()),
-                            );
-                          },
-                          child: Card(
-                            color: Colors.teal.shade50,
-                            elevation: 2,
-                            child: Padding(
-                              padding: const EdgeInsets.all(14.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Total Sales', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                  const SizedBox(height: 4),
-                                  Text('₹ ${_totalSales.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal)),
-                                ],
-                              ),
-                            ),
+          : RefreshIndicator(
+              onRefresh: _loadDashboardData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(10.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 🔥 TOP SUMMARY CARDS (Clickable Total Sales / Purchases & Balances)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildSummaryCard(
+                            title: "Today's Sales",
+                            amount: _todaySales,
+                            color: Colors.teal.shade700,
+                            icon: Icons.trending_up,
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen())),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const DayBookScreen()),
-                            );
-                          },
-                          child: Card(
-                            color: Colors.blue.shade50,
-                            elevation: 2,
-                            child: Padding(
-                              padding: const EdgeInsets.all(14.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Total Purchases', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                  const SizedBox(height: 4),
-                                  Text('₹ ${_totalPurchases.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),
-                                ],
-                              ),
-                            ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildSummaryCard(
+                            title: "Today's Purchase",
+                            amount: _todayPurchases,
+                            color: Colors.blue.shade700,
+                            icon: Icons.trending_down,
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen())),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Quick Shortcuts & Modules', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  GridView.count(
-                    crossAxisCount: 3,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                    children: [
-                      _buildMenuCard(context, 'Sales Bill', Icons.point_of_sale, Colors.teal, const SalesScreen()),
-                      _buildMenuCard(context, 'Purchase Bill', Icons.shopping_cart, Colors.blue, const PurchaseScreen()),
-                      _buildMenuCard(context, 'Parties Master', Icons.people, Colors.indigo, const PartiesMasterScreen()),
-                      _buildMenuCard(context, 'Inventory', Icons.inventory, Colors.orange, const ProductInventoryScreen()),
-                      _buildMenuCard(context, 'Day Book', Icons.book, Colors.brown, const DayBookScreen()),
-                      _buildMenuCard(context, 'Ledger', Icons.account_balance_wallet, Colors.purple, const LedgerScreen()),
-                      _buildMenuCard(context, 'Orders', Icons.list_alt, Colors.amber.shade800, const OrdersManagementScreen()),
-                      _buildMenuCard(context, 'Reports', Icons.analytics, Colors.deepPurple, const FinancialReportsScreen()),
-                      if (isManufacturing)
-                        _buildMenuCard(context, 'Manufacturing', Icons.precision_manufacturing, Colors.indigo.shade900, const ManufacturingScreen()),
-                      _buildMenuCard(context, 'Payment', Icons.payment, Colors.red.shade700, const VoucherEntryScreen()),
-                      _buildMenuCard(context, 'Receipt', Icons.receipt, Colors.green.shade700, const VoucherEntryScreen()),
-                      _buildMenuCard(context, 'Settings', Icons.settings, Colors.blueGrey, const SettingsScreen()),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildSummaryCard(
+                            title: "Cash in Hand",
+                            amount: _cashInHand,
+                            color: Colors.green.shade700,
+                            icon: Icons.account_balance_wallet,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildSummaryCard(
+                            title: "Bank / UPI Balance",
+                            amount: _bankBalance,
+                            color: Colors.indigo.shade700,
+                            icon: Icons.account_balance,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 🔥 MODULES GRID (9 Professional Categories)
+                    const Text('Quick Operations & Masters', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const SizedBox(height: 8),
+
+                    GridView.count(
+                      crossAxisCount: 3,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                      childAspectRatio: 1.05,
+                      children: [
+                        _buildMenuCard(context, 'Sales Bill', Icons.point_of_sale, Colors.teal, const SalesScreen()),
+                        _buildMenuCard(context, 'Purchase', Icons.shopping_cart, Colors.blue, const PurchaseScreen()),
+                        _buildMenuCard(context, 'Sales Return', Icons.assignment_return, Colors.orange, const SalesReturnScreen()),
+                        _buildMenuCard(context, 'Purchase Ret.', Icons.remove_shopping_cart, Colors.deepOrange, const PurchaseReturnScreen()),
+                        _buildMenuCard(context, 'Accounts', Icons.people, Colors.indigo, const AccountsScreen()),
+                        _buildMenuCard(context, 'Inventory', Icons.inventory_2, Colors.purple, const InventoryScreen()),
+                        _buildMenuCard(context, 'Day Book', Icons.book, Colors.brown, const DayBookScreen()),
+                        _buildMenuCard(context, 'Reports', Icons.bar_chart, Colors.cyan.shade800, const ReportsScreen()),
+                        _buildMenuCard(context, 'Settings', Icons.settings_applications, Colors.blueGrey, const SettingsScreen()),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
     );
   }
 
-  Widget _buildMenuCard(BuildContext context, String title, IconData icon, Color color, Widget screen) {
+  Widget _buildSummaryCard({required String title, required double amount, required Color color, required IconData icon, VoidCallback? onTap}) {
     return InkWell(
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => screen)).then((_) => _loadDashboardData());
-      },
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          border: Border.all(color: color.withOpacity(0.4), width: 1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(title, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)),
+                Icon(icon, size: 16, color: color),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '₹ ${amount.toStringAsFixed(2)}',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuCard(BuildContext context, String title, IconData icon, Color color, Widget targetScreen) {
+    return InkWell(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => targetScreen)),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(color: Colors.grey.withOpacity(0.15), blurRadius: 4, offset: const Offset(0, 2)),
+          ],
+          border: Border.all(color: Colors.grey.shade200),
+        ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircleAvatar(
+              radius: 18,
               backgroundColor: color.withOpacity(0.15),
-              radius: 22,
-              child: Icon(icon, color: color, size: 24),
+              child: Icon(icon, size: 20, color: color),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               title,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
             ),
           ],
         ),
