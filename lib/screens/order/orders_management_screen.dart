@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
-import '../database/database_helper.dart';
-import '../models/account.dart';
-import '../models/product.dart';
-import '../models/order_model.dart';
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/account.dart';
+import 'package:accounting_app/models/product.dart';
+import 'package:accounting_app/models/order_model.dart';
 import 'searchable_field.dart';
-import 'product_inventory_screen.dart'; // 🔥 Product Inventory Screen Imported
+import '../products/product_inventory_screen.dart'; // 🔥 Product Inventory Screen Imported
 
 class OrdersManagementScreen extends StatefulWidget {
   const OrdersManagementScreen({super.key});
