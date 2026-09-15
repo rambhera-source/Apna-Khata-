@@ -1,433 +1,188 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
 import 'package:accounting_app/database/database_helper.dart';
-import 'package:accounting_app/models/account.dart';
-import 'package:accounting_app/models/product.dart';
-import 'package:accounting_app/models/order_model.dart';
 import 'package:accounting_app/models/user_model.dart';
-
-// Sub-folder screens import
-import '../sales/sales_screen.dart';
-import '../sales/sales_return_screen.dart';
-import '../purchase/purchase_screen.dart';
-import '../purchase/purchase_return_screen.dart';
-import '../reports/ledger_screen.dart';
-import '../order/orders_management_screen.dart';
-import '../products/product_inventory_screen.dart';
-import '../manufacturing_screen.dart';
-import '../voucher/voucher_entry_screen.dart';
-import '../setting/settings_screen.dart';
+import 'package:accounting_app/screens/voucher_entry_screen.dart'; // ✅ Correct package import
+import 'package:accounting_app/screens/sales/sales_screen.dart';
+import 'package:accounting_app/screens/purchase/purchase_screen.dart';
+import 'package:accounting_app/screens/sales/sales_return_screen.dart';
+import 'package:accounting_app/screens/purchase/purchase_return_screen.dart';
+import 'package:accounting_app/screens/reports/ledger_screen.dart';
+import 'package:accounting_app/screens/order/orders_management_screen.dart';
+import 'package:accounting_app/screens/reports/financial_reports_screen.dart';
+import 'package:accounting_app/screens/reports/day_book_screen.dart';
+import 'package:accounting_app/screens/account/parties_master_screen.dart';
+import 'package:accounting_app/screens/products/product_inventory_screen.dart';
+import 'package:accounting_app/screens/setting/company_settings_screen.dart';
+import 'package:accounting_app/screens/manufacturing_screen.dart';
 import 'package:accounting_app/screens/login_screen.dart';
-import '../account/add_account_screen.dart';
-import '../account/parties_master_screen.dart';
-import '../setting/backup_settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final UserAccount? currentUser;
-  const DashboardScreen({super.key, this.currentUser});
+  final UserAccount currentUser;
+  const DashboardScreen({super.key, required this.currentUser});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _totalParties = 0;
-  int _totalProducts = 0;
-  int _pendingOrdersCount = 0;
+  double _totalSales = 0.0;
+  double _totalPurchases = 0.0;
+  double _cashBalance = 0.0;
   bool _isLoading = true;
-  bool _isGridView = false; 
-  String _businessType = 'Wholesaler / Retailer';
-  String _userName = 'ORLIFE ERP User';
-
-  final Map<String, bool> _visibleModules = {
-    'accounts_master': true, 
-    'sale_billing': true,
-    'sales_return': true,
-    'purchase': true,
-    'purchase_return': true,
-    'ledger': true,
-    'orders': true,
-    'inventory': true,
-    'manufacturing': true,
-    'payment': true,
-    'receipt': true,
-    'general_voucher': true,
-    'settings': true,
-  };
-
-  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    if (widget.currentUser != null) {
-      _businessType = widget.currentUser!.businessType;
-      _userName = widget.currentUser!.name.isNotEmpty ? widget.currentUser!.name : 'ORLIFE ERP';
-    }
     _loadDashboardData();
-  }
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
   }
 
   Future<void> _loadDashboardData() async {
     setState(() => _isLoading = true);
 
-    try {
-      final parties = await DatabaseHelper.isar.accounts.where().findAll();
-      final products = await DatabaseHelper.isar.products.where().findAll();
-      final orders = await DatabaseHelper.isar.salesOrders.where().findAll();
+    final txns = await DatabaseHelper.isar.accountingTransactions.where().findAll();
+    double sales = 0.0;
+    double purchases = 0.0;
+    double cash = 50000.0; // Default opening cash
 
-      int pendingCount = orders.where((o) => o.status == 'Pending' || o.status.contains('Pending')).length;
-
-      setState(() {
-        _totalParties = parties.length;
-        _totalProducts = products.length;
-        _pendingOrdersCount = pendingCount;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
+    for (var t in txns) {
+      if (t.voucherType == 'Sales') sales += t.amount;
+      if (t.voucherType == 'Purchase') purchases += t.amount;
+      if (t.voucherType == 'Receipt') cash += t.amount;
+      if (t.voucherType == 'Payment') cash -= t.amount;
     }
-  }
 
-  void _showCustomizeDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Customize Home Icons', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: _visibleModules.keys.map((key) {
-                    String title = key.replaceAll('_', ' ').toUpperCase();
-                    return CheckboxListTile(
-                      title: Text(title, style: const TextStyle(fontSize: 14)),
-                      value: _visibleModules[key],
-                      activeColor: Colors.amber.shade900,
-                      onChanged: (bool? value) {
-                        setDialogState(() {
-                          _visibleModules[key] = value ?? true;
-                        });
-                        setState(() {});
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _openAccountsMaster() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const PartiesMasterScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openLedger() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const LedgerScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openOrders() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersManagementScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openSalesHistory() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sales History Screen abhi banani baaki hai!'), backgroundColor: Colors.orange),
-    );
-  }
-
-  void _openPurchaseHistory() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Purchase History Screen abhi banani baaki hai!'), backgroundColor: Colors.orange),
-    );
-  }
-
-  void _openSaleBilling() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openSalesReturn() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesReturnScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openPurchase() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openPurchaseReturn() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseReturnScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openInventory() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openManufacturing(bool isMfg) {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    if (isMfg) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const ManufacturingScreen())).then((_) => _loadDashboardData());
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yeh module sirf Manufacturing users ke liye hai!'), backgroundColor: Colors.red));
-    }
-  }
-
-  void _openPayment() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const VoucherEntryScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openReceipt() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const VoucherEntryScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openGeneralVoucher() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const VoucherEntryScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openSettings() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _openBackupSettings() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const BackupSettingsScreen())).then((_) => _loadDashboardData());
-  }
-
-  void _handleLogout() {
-    if (Navigator.canPop(context)) Navigator.pop(context);
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-    );
+    setState(() {
+      _totalSales = sales;
+      _totalPurchases = purchases;
+      _cashBalance = cash;
+      _isLoading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isManufacturing = _businessType.toLowerCase().contains('manufactur');
+    bool isManufacturing = widget.currentUser.businessType == 'Manufacturing';
 
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: true,
-      child: CallbackShortcuts(
-        bindings: <ShortcutActivator, VoidCallback>{
-          const SingleActivator(LogicalKeyboardKey.keyL, control: true): _openLedger,
-          const SingleActivator(LogicalKeyboardKey.keyO, control: true): _openOrders,
-          const SingleActivator(LogicalKeyboardKey.f8): _openSaleBilling,
-          const SingleActivator(LogicalKeyboardKey.f5): _openPayment,
-          const SingleActivator(LogicalKeyboardKey.f6): _openReceipt,
-          const SingleActivator(LogicalKeyboardKey.f7): _openGeneralVoucher,
-          const SingleActivator(LogicalKeyboardKey.keyI, control: true): _openInventory,
-          const SingleActivator(LogicalKeyboardKey.keyP, control: true): _openPurchase,
-          const SingleActivator(LogicalKeyboardKey.keyM, control: true): () => _openManufacturing(isManufacturing),
-        },
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text(
-              isManufacturing ? 'ORLIFE / Factory Dashboard' : 'ORLIFE / Accounting Dashboard', 
-              style: const TextStyle(fontWeight: FontWeight.bold)
-            ),
-            backgroundColor: Colors.amber.shade900,
-            foregroundColor: Colors.white,
-            actions: [
-              IconButton(icon: const Icon(Icons.dashboard_customize), tooltip: 'Customize Home Icons', onPressed: _showCustomizeDialog),
-              IconButton(icon: const Icon(Icons.backup), tooltip: 'Backup & Restore', onPressed: _openBackupSettings),
-              IconButton(icon: const Icon(Icons.settings), tooltip: 'Settings', onPressed: _openSettings),
-              IconButton(icon: const Icon(Icons.refresh), tooltip: 'Refresh Data', onPressed: _loadDashboardData),
-            ],
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('ORLIFE ERP - ${widget.currentUser.name} (${widget.currentUser.role})'),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+              );
+            },
           ),
-          drawer: Drawer(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                DrawerHeader(
-                  decoration: BoxDecoration(color: Colors.amber.shade900),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ListView(
+                children: [
+                  // Summary Cards Row
+                  Row(
                     children: [
-                      const CircleAvatar(backgroundColor: Colors.white, radius: 24, child: Icon(Icons.business, color: Colors.brown, size: 28)),
-                      const SizedBox(height: 10),
-                      Text(_userName, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 2),
-                      Text('Category: $_businessType', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                    ],
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.people, color: Colors.teal),
-                  title: const Text('Accounts (All Parties)'),
-                  onTap: _openAccountsMaster,
-                ),
-                ExpansionTile(
-                  leading: const Icon(Icons.point_of_sale, color: Colors.green),
-                  title: const Text('Sales', style: TextStyle(fontWeight: FontWeight.bold)),
-                  childrenPadding: const EdgeInsets.only(left: 16.0),
-                  children: [
-                    ListTile(leading: const Icon(Icons.history, color: Colors.teal), title: const Text('Sales History'), onTap: _openSalesHistory),
-                    ListTile(leading: const Icon(Icons.receipt, color: Colors.green), title: const Text('Sale Invoice'), onTap: _openSaleBilling),
-                    ListTile(leading: const Icon(Icons.assignment_return, color: Colors.greenAccent), title: const Text('Sale Return'), onTap: _openSalesReturn),
-                  ],
-                ),
-                ExpansionTile(
-                  leading: const Icon(Icons.shopping_bag, color: Colors.blue),
-                  title: const Text('Purchase', style: TextStyle(fontWeight: FontWeight.bold)),
-                  childrenPadding: const EdgeInsets.only(left: 16.0),
-                  children: [
-                    ListTile(leading: const Icon(Icons.history, color: Colors.indigo), title: const Text('Purchase History'), onTap: _openPurchaseHistory),
-                    ListTile(leading: const Icon(Icons.receipt_long, color: Colors.blue), title: const Text('Purchase Invoice'), onTap: _openPurchase),
-                    ListTile(leading: const Icon(Icons.keyboard_return, color: Colors.blueAccent), title: const Text('Purchase Return'), onTap: _openPurchaseReturn),
-                  ],
-                ),
-                ListTile(leading: const Icon(Icons.account_balance_wallet, color: Colors.indigo), title: const Text('Ledger & Parties'), onTap: _openLedger),
-                ListTile(leading: const Icon(Icons.shopping_cart, color: Colors.amber), title: const Text('Orders & Sales'), onTap: _openOrders),
-                ListTile(leading: const Icon(Icons.inventory_2, color: Colors.orange), title: const Text('Inventory & Products'), onTap: _openInventory),
-                if (isManufacturing)
-                  ListTile(leading: const Icon(Icons.precision_manufacturing, color: Colors.deepPurple), title: const Text('BOM & Production'), onTap: () => _openManufacturing(true)),
-                ListTile(leading: const Icon(Icons.payment, color: Colors.red), title: const Text('Payment Voucher'), onTap: _openPayment),
-                ListTile(leading: const Icon(Icons.request_quote, color: Colors.teal), title: const Text('Receipt Voucher'), onTap: _openReceipt),
-                ListTile(leading: const Icon(Icons.note_alt, color: Colors.brown), title: const Text('General Voucher'), onTap: _openGeneralVoucher),
-                ListTile(leading: const Icon(Icons.settings, color: Colors.blueGrey), title: const Text('Settings'), onTap: _openBackupSettings),
-                const Divider(),
-                ListTile(leading: const Icon(Icons.logout, color: Colors.red), title: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)), onTap: _handleLogout),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
-          body: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSummaryCard(isManufacturing),
-                      const SizedBox(height: 20),
-                      const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 10),
                       Expanded(
-                        child: ListView(
-                          children: [_buildMainActionsList(isManufacturing)],
+                        child: Card(
+                          color: Colors.teal.shade50,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Total Sales', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                const SizedBox(height: 4),
+                                Text('₹ ${_totalSales.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Card(
+                          color: Colors.blue.shade50,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Total Purchases', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                const SizedBox(height: 4),
+                                Text('₹ ${_totalPurchases.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-        ),
-      ),
+                  const SizedBox(height: 16),
+
+                  const Text('Quick Shortcuts & Modules', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+
+                  GridView.count(
+                    crossAxisCount: 3,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    children: [
+                      _buildMenuCard(context, 'Sales Bill', Icons.point_of_sale, Colors.teal, const SalesScreen()),
+                      _buildMenuCard(context, 'Purchase Bill', Icons.shopping_cart, Colors.blue, const PurchaseScreen()),
+                      _buildMenuCard(context, 'Parties Master', Icons.people, Colors.indigo, const PartiesMasterScreen()),
+                      _buildMenuCard(context, 'Inventory', Icons.inventory, Colors.orange, const ProductInventoryScreen()),
+                      _buildMenuCard(context, 'Day Book', Icons.book, Colors.brown, const DayBookScreen()),
+                      _buildMenuCard(context, 'Ledger', Icons.account_balance_wallet, Colors.purple, const LedgerScreen()),
+                      _buildMenuCard(context, 'Orders', Icons.list_alt, Colors.amber.shade800, const OrdersManagementScreen()),
+                      _buildMenuCard(context, 'Reports', Icons.analytics, Colors.deepPurple, const FinancialReportsScreen()),
+                      if (isManufacturing)
+                        _buildMenuCard(context, 'Manufacturing', Icons.precision_manufacturing, Colors.indigo.shade900, const ManufacturingScreen()),
+                      _buildMenuCard(context, 'Payment', Icons.payment, Colors.red.shade700, const VoucherEntryScreen()),
+                      _buildMenuCard(context, 'Receipt', Icons.receipt, Colors.green.shade700, const VoucherEntryScreen()),
+                      _buildMenuCard(context, 'Settings', Icons.settings, Colors.blueGrey, const CompanySettingsScreen()),
+                    ],
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
-  Widget _buildSummaryCard(bool isManufacturing) {
-    return Card(
-      elevation: 3,
-      color: Colors.amber.shade50,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
+  Widget _buildMenuCard(BuildContext context, String title, IconData icon, Color color, Widget screen) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => screen)).then((_) => _loadDashboardData());
+      },
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(isManufacturing ? 'Overview Summary (Factory Mode)' : 'Overview Summary', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.brown)),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildInfoItem('Parties', '$_totalParties', Colors.blue),
-                _buildInfoItem('Products', '$_totalProducts', Colors.green),
-                _buildInfoItem('Pending', '$_pendingOrdersCount', Colors.orange),
-              ],
+            CircleAvatar(
+              backgroundColor: color.withOpacity(0.15),
+              radius: 22,
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildMainActionsList(bool isManufacturing) {
-    List<Widget> tiles = [];
-    if (_visibleModules['accounts_master']!) tiles.add(_buildActionTile(icon: Icons.people, iconColor: Colors.teal, title: 'Accounts (All Parties)', subtitle: 'View all parties, edit, delete & bulk import', onTap: _openAccountsMaster));
-    if (_visibleModules['sale_billing']!) tiles.add(_buildActionTile(icon: Icons.receipt, iconColor: Colors.green, title: 'Sale Billing', subtitle: 'Create sale invoices & billing', onTap: _openSaleBilling));
-    if (_visibleModules['sales_return']!) tiles.add(_buildActionTile(icon: Icons.assignment_return, iconColor: Colors.greenAccent, title: 'Sales Return', subtitle: 'Manage customer product returns / credit notes', onTap: _openSalesReturn));
-    if (_visibleModules['purchase']!) tiles.add(_buildActionTile(icon: Icons.shopping_bag, iconColor: Colors.blue, title: 'Purchase Entry', subtitle: 'Manage supplier purchases & stock in', onTap: _openPurchase));
-    if (_visibleModules['purchase_return']!) tiles.add(_buildActionTile(icon: Icons.keyboard_return, iconColor: Colors.blueAccent, title: 'Purchase Return', subtitle: 'Manage returns to suppliers / debit notes', onTap: _openPurchaseReturn));
-    if (_visibleModules['ledger']!) tiles.add(_buildActionTile(icon: Icons.account_balance_wallet, iconColor: Colors.indigo, title: 'Ledger & Parties', subtitle: 'Manage customer/supplier ledger balances', onTap: _openLedger));
-    if (_visibleModules['orders']!) tiles.add(_buildActionTile(icon: Icons.shopping_cart, iconColor: Colors.amber, title: 'Orders & Sales', subtitle: 'Book new orders, view history', onTap: _openOrders));
-    if (_visibleModules['inventory']!) tiles.add(_buildActionTile(icon: Icons.inventory_2, iconColor: Colors.orange, title: 'Inventory & Products', subtitle: 'Manage chargers, batteries, accessories stock', onTap: _openInventory));
-    if (isManufacturing && _visibleModules['manufacturing']!) tiles.add(_buildActionTile(icon: Icons.precision_manufacturing, iconColor: Colors.deepPurple, title: 'BOM & Production', subtitle: 'Manage bill of materials & production batches', onTap: () => _openManufacturing(true)));
-    if (_visibleModules['payment']!) tiles.add(_buildActionTile(icon: Icons.payment, iconColor: Colors.red, title: 'Payment Voucher', subtitle: 'Record payments made', onTap: _openPayment));
-    if (_visibleModules['receipt']!) tiles.add(_buildActionTile(icon: Icons.request_quote, iconColor: Colors.teal, title: 'Receipt Voucher', subtitle: 'Record money received', onTap: _openReceipt));
-    if (_visibleModules['general_voucher']!) tiles.add(_buildActionTile(icon: Icons.note_alt, iconColor: Colors.brown, title: 'General Voucher', subtitle: 'Journal & general accounting entries', onTap: _openGeneralVoucher));
-    if (_visibleModules['settings']!) tiles.add(_buildActionTile(icon: Icons.settings, iconColor: Colors.blueGrey, title: 'Settings', subtitle: 'Configure software & data backup', onTap: _openBackupSettings));
-
-    List<Widget> spacedTiles = [];
-    for (int i = 0; i < tiles.length; i++) {
-      spacedTiles.add(tiles[i]);
-      if (i < tiles.length - 1) spacedTiles.add(const SizedBox(height: 10));
-    }
-    return Column(children: spacedTiles);
-  }
-
-  Widget _buildInfoItem(String title, String count, Color color) {
-    return Column(
-      children: [
-        Text(count, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-        const SizedBox(height: 4),
-        Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-      ],
-    );
-  }
-
-  Widget _buildActionTile({required IconData icon, required Color iconColor, required String title, required String subtitle, required VoidCallback onTap}) {
-    return ListTile(
-      leading: Icon(icon, color: iconColor, size: 28),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-      tileColor: Colors.grey.shade100,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      onTap: onTap,
-    );
-  }
-  
-  Widget _buildShortcutButton(String title, IconData icon, Color color, VoidCallback onTap) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black87, elevation: 1, alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-        icon: Icon(icon, color: color, size: 16),
-        label: Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-        onPressed: onTap,
       ),
     );
   }
