@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import '../../database/database_helper.dart';
@@ -15,11 +16,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _gstinController = TextEditingController();
   bool _isGstEnabled = false;
 
-  // Local lists
   List<String> _routes = [];
   List<String> _salesmen = [];
   
-  // Advanced Extra Charges List (Storing name, type [Add/Less], mode [Fixed/Percentage], value)
+  // Advanced Extra Charges List (Map structure)
   List<Map<String, dynamic>> _extraCharges = [];
 
   @override
@@ -38,15 +38,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _routes = List.from(settings.routes);
         _salesmen = List.from(settings.salesmen);
         
-        try {
-          // If extraCharges is stored as dynamic or list in model
-          _extraCharges = List<Map<String, dynamic>>.from(settings.extraCharges.map((e) {
-            if (e is Map) {
-              return Map<String, dynamic>.from(e);
-            }
-            return {'name': e.toString(), 'type': 'Add', 'mode': 'Fixed', 'value': 0.0};
-          }));
-        } catch (_) {
+        // Safely decode JSON strings back to Maps
+        _extraCharges = settings.extraCharges.map((itemStr) {
+          try {
+            return Map<String, dynamic>.from(jsonDecode(itemStr));
+          } catch (_) {
+            return {'name': itemStr, 'type': 'Add', 'mode': 'Fixed', 'value': 0.0};
+          }
+        }).toList();
+
+        if (_extraCharges.isEmpty) {
           _extraCharges = [
             {'name': 'Packing Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 0.0},
             {'name': 'Special Discount', 'type': 'Less', 'mode': 'Fixed', 'value': 0.0},
@@ -67,6 +68,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
+    // Convert Map list to JSON String list for Isar DB storage
+    List<String> encodedCharges = _extraCharges.map((map) => jsonEncode(map)).toList();
+
     final existing = await DatabaseHelper.isar.companySettings.where().findFirst();
 
     await DatabaseHelper.isar.writeTxn(() async {
@@ -76,9 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         existing.isGstEnabled = _isGstEnabled;
         existing.routes = _routes;
         existing.salesmen = _salesmen;
-        try {
-          existing.extraCharges = _extraCharges;
-        } catch (_) {}
+        existing.extraCharges = encodedCharges;
         await DatabaseHelper.isar.companySettings.put(existing);
       } else {
         final newSettings = CompanySettings()
@@ -86,10 +88,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ..gstin = gstin
           ..isGstEnabled = _isGstEnabled
           ..routes = _routes
-          ..salesmen = _salesmen;
-        try {
-          newSettings.extraCharges = _extraCharges;
-        } catch (_) {}
+          ..salesmen = _salesmen
+          ..extraCharges = encodedCharges;
         await DatabaseHelper.isar.companySettings.put(newSettings);
       }
     });
@@ -172,13 +172,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ➕ Advanced Extra Charge Dialog with Add/Less & Fixed/Percentage support
   void _showExtraChargeDialog({Map<String, dynamic>? chargeToEdit, int? index}) {
     final nameController = TextEditingController(text: chargeToEdit != null ? chargeToEdit['name'] : '');
     final valueController = TextEditingController(text: chargeToEdit != null ? chargeToEdit['value'].toString() : '0');
     
-    String selectedType = chargeToEdit != null ? chargeToEdit['type'] : 'Add'; // Add (+) or Less (-)
-    String selectedMode = chargeToEdit != null ? chargeToEdit['mode'] : 'Fixed'; // Fixed (₹) or Percentage (%)
+    String selectedType = chargeToEdit != null ? chargeToEdit['type'] : 'Add'; 
+    String selectedMode = chargeToEdit != null ? chargeToEdit['mode'] : 'Fixed'; 
 
     showDialog(
       context: context,
@@ -354,7 +353,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 8),
               _salesmen.isEmpty
-                  ? const Text('Koi salesman add nahi nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 13))
+                  ? const Text('Koi salesman add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 13))
                   : ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
