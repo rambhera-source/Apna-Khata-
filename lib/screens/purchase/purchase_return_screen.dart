@@ -831,7 +831,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                   Expanded(
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade900, foregroundColor: Colors.white),
-                      onPressed: _saveSalesReturnTransaction,
+                      onPressed: _savePurchaseReturnTransaction,
                       child: const Text('Save Return', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                     ),
                   ),
