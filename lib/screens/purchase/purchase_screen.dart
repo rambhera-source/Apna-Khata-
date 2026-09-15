@@ -31,6 +31,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
+  final FocusNode _qtyFocusNode = FocusNode();
+  final FocusNode _priceFocusNode = FocusNode();
 
   List<Map<String, dynamic>> _presetChargesList = [];
   final List<Map<String, dynamic>> _billChargesList = [];
@@ -42,8 +44,10 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   InventoryItem? _selectedInlineProduct;
   
   final List<Map<String, dynamic>> _cartItems = [];
-  String _paymentMode = 'Cash';
-  final List<String> _paymentModes = ['Cash', 'Bank / UPI', 'Credit'];
+  
+  // 🔥 Default Payment Mode set to 'Credit' for Purchase
+  String _paymentMode = 'Credit';
+  final List<String> _paymentModes = ['Credit', 'Cash', 'Bank / UPI'];
 
   String _globalStockType = 'Fresh';
   final List<String> _stockTypes = ['Fresh', 'Replacement', 'Damaged'];
@@ -118,12 +122,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   }
 
   void _addInlineItemToCart() {
-    if (_selectedInlineProduct == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya valid product select karein!'), backgroundColor: Colors.red),
-      );
-      return;
-    }
+    if (_selectedInlineProduct == null) return;
 
     int q = int.tryParse(_inlineQtyController.text) ?? 1;
     double pr = double.tryParse(_inlinePriceController.text) ?? _selectedInlineProduct!.purchasePrice;
@@ -279,14 +278,12 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       pw.Text(_isGstActive ? 'PURCHASE INVOICE (GST)' : 'PURCHASE BILL', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
                       pw.Text('Bill No: ${_billNoController.text}'),
                       pw.Text('Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}'),
-                      pw.Text('Stock Type: $_globalStockType', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ],
                   ),
                 ],
               ),
               pw.Divider(thickness: 1.5, color: PdfColors.blue),
               pw.SizedBox(height: 10),
-              pw.Text('Supplier Details:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
               pw.Text('Supplier Name: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.Text('Payment Mode: $_paymentMode'),
               pw.SizedBox(height: 15),
@@ -322,8 +319,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           pw.Text('${charge['name']} (${charge['qty']} x ₹${charge['rate']}): ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
                         if (_isGstActive) pw.Text('GST (${_gstRate.toStringAsFixed(1)}%): + ₹ ${_taxAmount.toStringAsFixed(2)}'),
                         pw.Divider(),
-                        pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
+                        pw.Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
                       ],
                     ),
                   ),
@@ -359,7 +355,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         ..partyName = _partyController.text.trim()
         ..cashOrBank = _paymentMode
         ..amount = _grandTotal
-        ..notes = _isGstActive ? 'GST Purchase Entry ([$_globalStockType Stock])' : 'Purchase Entry ([$_globalStockType Stock])';
+        ..notes = 'Purchase Entry';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
       for (var cartItem in _cartItems) {
@@ -381,7 +377,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     });
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Purchase Entry Successfully Saved & Stock Updated!'), backgroundColor: Colors.green));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Purchase Entry Successfully Saved!'), backgroundColor: Colors.green));
     _generateAndPrintOrShareBill(isShare: false);
     _clearBill();
   }
@@ -396,21 +392,16 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   }
 
   Future<bool> _onWillPop() async {
-    if (_cartItems.isEmpty) {
-      return true;
-    }
+    if (_cartItems.isEmpty) return true;
 
     final shouldPop = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Discard Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Kya aap waqai is purchase bill ko exit karna chahte hain? Aapke add kiye gaye items hat jayenge.', style: TextStyle(fontSize: 13)),
+        content: const Text('Kya aap waqai is purchase bill ko exit karna chahte hain?', style: TextStyle(fontSize: 13)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, elevation: 0),
             onPressed: () => Navigator.pop(context, true),
@@ -419,7 +410,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         ],
       ),
     );
-
     return shouldPop ?? false;
   }
 
@@ -429,7 +419,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       onWillPop: _onWillPop,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_isGstActive ? 'Purchase Entry (GST Mode)' : 'Purchase Entry (Simple Mode)'),
+          title: Text(_isGstActive ? 'Purchase Entry (GST)' : 'Purchase Entry'),
           backgroundColor: Colors.blue.shade800,
           foregroundColor: Colors.white,
           actions: [
@@ -451,35 +441,51 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
           ],
         ),
         body: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 1. Bill No, Stock Type & Payment Mode Row
               Row(
                 children: [
                   Expanded(
+                    flex: 2,
                     child: TextField(
                       controller: _billNoController,
+                      style: const TextStyle(fontSize: 13),
                       decoration: const InputDecoration(
-                        labelText: 'Bill Number (Editable)',
+                        labelText: 'Bill No',
                         border: OutlineInputBorder(),
                         isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 140,
+                  const SizedBox(width: 6),
+                  Expanded(
+                    flex: 2,
                     child: DropdownButtonFormField<String>(
                       value: _globalStockType,
-                      items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
+                      items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type, style: const TextStyle(fontSize: 12)))).toList(),
                       onChanged: (val) => setState(() => _globalStockType = val!),
-                      decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder(), isDense: true),
+                      decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10)),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<String>(
+                      value: _paymentMode,
+                      items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
+                      onChanged: (val) => setState(() => _paymentMode = val!),
+                      decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10)),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+
+              // 2. Supplier Row
               Row(
                 children: [
                   Expanded(
@@ -487,39 +493,30 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       label: 'Supplier / Party Name *',
                       items: _allAccounts,
                       controller: _partyController,
-                      onSelected: (val) {
-                        _partyController.text = val;
-                      },
+                      onSelected: (val) => _partyController.text = val,
                     ),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                    ),
-                    icon: const Icon(Icons.person_add, size: 18),
-                    label: const Text('New'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10)),
+                    icon: const Icon(Icons.person_add, size: 16),
+                    label: const Text('New', style: TextStyle(fontSize: 12)),
                     onPressed: _navigateToAddNewParty,
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
 
+              // 3. Inline Product Search Box
               Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Add Product to Purchase:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue)),
-                    const SizedBox(height: 6),
                     Autocomplete<InventoryItem>(
                       optionsBuilder: (TextEditingValue textEditingValue) {
-                        if (textEditingValue.text.isEmpty) {
-                          return const Iterable<InventoryItem>.empty();
-                        }
+                        if (textEditingValue.text.isEmpty) return const Iterable<InventoryItem>.empty();
                         return _allInventoryItems.where((item) =>
                           item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
                           (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
@@ -531,19 +528,22 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           _selectedInlineProduct = selection;
                           _inlinePriceController.text = selection.purchasePrice.toString();
                         });
+                        Future.delayed(const Duration(milliseconds: 100), () => _qtyFocusNode.requestFocus());
                       },
                       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                         return TextField(
                           controller: controller,
                           focusNode: focusNode,
+                          style: const TextStyle(fontSize: 13),
                           decoration: InputDecoration(
                             labelText: 'Search Product Name or SKU...',
                             border: const OutlineInputBorder(),
                             isDense: true,
-                            prefixIcon: const Icon(Icons.search, size: 20),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                            prefixIcon: const Icon(Icons.search, size: 18),
                             suffixIcon: controller.text.isNotEmpty
                                 ? IconButton(
-                                    icon: const Icon(Icons.clear, size: 18),
+                                    icon: const Icon(Icons.clear, size: 16),
                                     onPressed: () {
                                       controller.clear();
                                       setState(() => _selectedInlineProduct = null);
@@ -559,8 +559,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           child: Material(
                             elevation: 4,
                             child: SizedBox(
-                              width: 320,
-                              height: 200,
+                              width: 300,
+                              height: 180,
                               child: ListView.builder(
                                 padding: EdgeInsets.zero,
                                 itemCount: options.length + 1,
@@ -568,21 +568,19 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                   if (index == options.length) {
                                     return ListTile(
                                       tileColor: Colors.blue.shade100,
-                                      leading: const Icon(Icons.add_circle, color: Colors.blue),
-                                      title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                                      leading: const Icon(Icons.add_circle, color: Colors.blue, size: 18),
+                                      title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue)),
                                       onTap: () async {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
-                                        );
+                                        await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
                                         await _loadDropdownDataAndSettings();
                                       },
                                     );
                                   }
                                   final item = options.elementAt(index);
                                   return ListTile(
-                                    title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                    subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 11)),
+                                    dense: true,
+                                    title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 10)),
                                     onTap: () => onSelected(item),
                                   );
                                 },
@@ -593,29 +591,37 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       },
                     ),
                     if (_selectedInlineProduct != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Row(
                         children: [
                           Expanded(
                             child: TextField(
                               controller: _inlineQtyController,
+                              focusNode: _qtyFocusNode,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true),
+                              style: const TextStyle(fontSize: 13),
+                              decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(8)),
+                              onSubmitted: (_) => _priceFocusNode.requestFocus(),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: TextField(
                               controller: _inlinePriceController,
+                              focusNode: _priceFocusNode,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder(), isDense: true),
+                              style: const TextStyle(fontSize: 13),
+                              decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(8)),
+                              onSubmitted: (_) {
+                                _addInlineItemToCart();
+                              },
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
                             onPressed: _addInlineItemToCart,
-                            child: const Text('Add'),
+                            child: const Text('Add', style: TextStyle(fontSize: 12)),
                           ),
                         ],
                       ),
@@ -623,117 +629,124 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
-              const Text('Items Purchased:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 6),
+              const Text('Items Purchased:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 4),
+
+              // 4. Scrollable Single-Line Items View
               Expanded(
                 child: _cartItems.isEmpty
-                    ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
+                    ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 12)))
                     : ListView.builder(
                         itemCount: _cartItems.length,
                         itemBuilder: (context, index) {
                           final item = _cartItems[index];
                           double total = (item['qty'] as int) * (item['price'] as double);
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 3),
-                            child: ListTile(
-                              dense: true,
-                              title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('SKU: ${item['sku']} | Type: ${item['stockType']} | Qty: ${item['qty']} x ₹${item['price']}'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.orange, size: 16),
-                                    onPressed: () => _editCartItem(index),
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            margin: const EdgeInsets.symmetric(vertical: 2),
+                            decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4)),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 4,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('${index + 1}. ${item['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                      Text('SKU: ${item['sku']} (${item['stockType']}) | Qty: ${item['qty']} × ₹${item['price']}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                    ],
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red, size: 16),
-                                    onPressed: () => setState(() => _cartItems.removeAt(index)),
-                                  ),
-                                ],
-                              ),
+                                ),
+                                Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue)),
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.orange, size: 16),
+                                  onPressed: () => _editCartItem(index),
+                                  constraints: const BoxConstraints(),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                  onPressed: () => setState(() => _cartItems.removeAt(index)),
+                                  constraints: const BoxConstraints(),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                ),
+                              ],
                             ),
                           );
                         },
                       ),
               ),
-              const Divider(),
+              const Divider(height: 8),
               
+              // 5. Bottom Calculation & Grand Total
               Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold)),
-                        Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                       ],
                     ),
-                    const SizedBox(height: 8),
-
-                    const Text('Freight & Additional Charges:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue)),
                     const SizedBox(height: 4),
 
                     ...List.generate(_billChargesList.length, (index) {
                       final charge = _billChargesList[index];
                       return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Row(
                           children: [
-                            Expanded(
-                              flex: 3,
-                              child: Text(charge['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            ),
+                            Expanded(flex: 3, child: Text(charge['name'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
                             SizedBox(
-                              width: 60,
+                              width: 50,
                               child: TextField(
                                 controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'No.', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(6)),
+                                style: const TextStyle(fontSize: 11),
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
                                 onChanged: (val) {
                                   charge['qty'] = double.tryParse(val) ?? 1.0;
                                   setState(() {});
                                 },
                               ),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             SizedBox(
-                              width: 75,
+                              width: 60,
                               child: TextField(
                                 controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'Rate(₹)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(6)),
+                                style: const TextStyle(fontSize: 11),
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
                                 onChanged: (val) {
                                   charge['rate'] = double.tryParse(val) ?? 0.0;
                                   setState(() {});
                                 },
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            const SizedBox(width: 4),
+                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                             IconButton(
-                              icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                              icon: const Icon(Icons.close, size: 14, color: Colors.red),
                               onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
                             ),
                           ],
                         ),
                       );
                     }),
 
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Autocomplete<Map<String, dynamic>>(
                       optionsBuilder: (TextEditingValue textEditingValue) {
-                        if (textEditingValue.text.isEmpty) {
-                          return const Iterable<Map<String, dynamic>>.empty();
-                        }
-                        return _presetChargesList.where((c) =>
-                          c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase())
-                        );
+                        if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
+                        return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
                       },
                       displayStringForOption: (option) => option['name'],
                       onSelected: (selection) {
@@ -751,11 +764,13 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                         return TextField(
                           controller: controller,
                           focusNode: focusNode,
+                          style: const TextStyle(fontSize: 12),
                           decoration: const InputDecoration(
-                            labelText: 'Search Freight or Charge to add...',
+                            labelText: 'Add Freight / Charge...',
                             border: OutlineInputBorder(),
                             isDense: true,
-                            prefixIcon: Icon(Icons.add_circle_outline, size: 18, color: Colors.blue),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            prefixIcon: Icon(Icons.add_circle_outline, size: 16),
                           ),
                         );
                       },
@@ -765,8 +780,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           child: Material(
                             elevation: 4,
                             child: SizedBox(
-                              width: 280,
-                              height: 150,
+                              width: 240,
+                              height: 120,
                               child: ListView.builder(
                                 padding: EdgeInsets.zero,
                                 itemCount: options.length,
@@ -774,8 +789,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                   final opt = options.elementAt(index);
                                   return ListTile(
                                     dense: true,
-                                    title: Text(opt['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    subtitle: Text('Default: ₹${opt['value']}'),
+                                    title: Text(opt['name'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                     onTap: () => onSelected(opt),
                                   );
                                 },
@@ -786,51 +800,44 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       },
                     ),
 
-                    const Divider(),
+                    const SizedBox(height: 6),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        SizedBox(
-                          width: 140,
-                          child: DropdownButtonFormField<String>(
-                            value: _paymentMode,
-                            items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                            onChanged: (val) => setState(() => _paymentMode = val!),
-                            decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
-                          ),
-                        ),
                         Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue)),
                       ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
+
+              // Action Buttons
               Row(
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade600, foregroundColor: Colors.white),
-                      icon: const Icon(Icons.preview, size: 16),
-                      label: const Text('Preview'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade600, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8)),
+                      icon: const Icon(Icons.preview, size: 14),
+                      label: const Text('Preview', style: TextStyle(fontSize: 12)),
                       onPressed: () => _generateAndPrintOrShareBill(isShare: false),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                      icon: const Icon(Icons.share, size: 16),
-                      label: const Text('Share'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8)),
+                      icon: const Icon(Icons.share, size: 14),
+                      label: const Text('Share', style: TextStyle(fontSize: 12)),
                       onPressed: () => _generateAndPrintOrShareBill(isShare: true),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8)),
                       onPressed: _savePurchaseTransaction,
-                      child: const Text('Save Bill', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      child: const Text('Save Bill', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -848,6 +855,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     _billNoController.dispose();
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
+    _qtyFocusNode.dispose();
+    _priceFocusNode.dispose();
     super.dispose();
   }
 }
