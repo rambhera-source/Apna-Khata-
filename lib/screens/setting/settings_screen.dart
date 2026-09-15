@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
-import '../database/database_helper.dart';
-import '../models/settings_model.dart';
+import '../../database/database_helper.dart'; // 👈 Updated path
+import '../../models/settings_model.dart'; // 👈 Updated path
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
