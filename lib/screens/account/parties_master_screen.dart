@@ -7,9 +7,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:csv/csv.dart';
 import 'package:http/http.dart' as http;
-import '../database/database_helper.dart';
-import '../models/account.dart';
-import 'add_account_screen.dart';
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/account.dart';
+import 'add_account_screen.dart'; // चूंकि यह भी 'account/' फोल्डर के अंदर है, इसलिए यह ऐसे ही रहेगा
 
 class PartiesMasterScreen extends StatefulWidget {
   const PartiesMasterScreen({super.key});
@@ -212,7 +212,7 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
                 Text('❌ Failed / Skipped: ${failedRows.length > 1 ? failedRows.length - 1 : 0} parties', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                 if (errorFilePath != null) ...[
                   const SizedBox(height: 12),
-                  const Text('Kuch records duplicate ya invalid hone ki wajah se fail ho gaye hain. Aap failure report file download kar sakte hain.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Text('Kuch records duplicate ya invalid hone ki wajah से fail ho gaye hain. Aap failure report file download kar sakte hain.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ],
             ),
