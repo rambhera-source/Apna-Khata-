@@ -50,6 +50,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   final List<String> _refundModes = ['Cash', 'Bank / UPI', 'Adjust in Ledger'];
 
   String _globalStockType = 'Replacement';
+  final List<String> _stockTypes = ['Fresh', 'Replacement', 'Damaged'];
 
   bool _isGstActive = false;
   String _companyGstin = '';
@@ -359,445 +360,488 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sales Return Saved & Stock Restored!'), backgroundColor: Colors.green));
-    
-    showDialog(
+    _generateAndPrintOrShareReturn(isShare: false);
+    _clearBill();
+  }
+
+  void _clearBill() {
+    setState(() {
+      _cartItems.clear();
+      _partyController.clear();
+      _returnNoController.text = 'SRN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+      _billChargesList.clear();
+    });
+  }
+
+  // 🛡️ Smart Exit Warning Dialog
+  Future<bool> _onWillPop() async {
+    if (_cartItems.isEmpty) {
+      return true;
+    }
+
+    final shouldPop = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Sales Return Saved!'),
-        content: const Text('Kya aap is return का print / PDF लेना चाहते हैं?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('Discard Return Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: const Text('Kya aap waqai is sales return bill ko exit karna chahte hain? Aapke add kiye gaye items hat jayenge.', style: TextStyle(fontSize: 13)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
-            icon: const Icon(Icons.print, size: 16),
-            label: const Text('Print / PDF'),
-            onPressed: () {
-              Navigator.pop(context);
-              _generateAndPrintOrShareReturn(isShare: false);
-            },
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, elevation: 0),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes, Exit'),
           ),
         ],
       ),
     );
+
+    return shouldPop ?? false;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_isGstActive ? 'Sales Return (GST Mode)' : 'Sales Return (Simple Mode)'),
-        backgroundColor: Colors.green.shade800,
-        foregroundColor: Colors.white,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(color: Colors.grey.shade400),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                    ),
-                    icon: const Icon(Icons.calendar_today, size: 16, color: Colors.green),
-                    label: Text(
-                      'Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}',
-                      style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
-                    ),
-                    onPressed: () async {
-                      final DateTime? picked = await showDatePicker(
-                        context: context,
-                        initialDate: _selectedDate,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2035),
-                      );
-                      if (picked != null && picked != _selectedDate) {
-                        setState(() => _selectedDate = picked);
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 130,
-                  child: TextField(
-                    controller: _returnNoController,
-                    readOnly: true, // 🔥 Fixed Return Number
-                    decoration: const InputDecoration(
-                      labelText: 'Return No', 
-                      border: OutlineInputBorder(),
-                      filled: true,
-                      fillColor: Colors.grey200,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _globalStockType = _globalStockType == 'Replacement' ? 'Fresh' : 'Replacement';
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: _globalStockType == 'Replacement' ? Colors.orange.shade50 : Colors.green.shade50,
-                      border: Border.all(
-                        color: _globalStockType == 'Replacement' ? Colors.orange : Colors.green,
-                        width: 1.5,
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          _globalStockType == 'Replacement' ? Icons.swap_horiz : Icons.check_circle,
-                          size: 18,
-                          color: _globalStockType == 'Replacement' ? Colors.orange.shade900 : Colors.green.shade800,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _globalStockType,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: _globalStockType == 'Replacement' ? Colors.orange.shade900 : Colors.green.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            SearchableField(
-              label: 'Customer / Party Name *',
-              items: _allAccounts,
-              controller: _partyController,
-              onSelected: (val) {
-                _partyController.text = val;
-              },
-            ),
-            const SizedBox(height: 12),
-
-            // 🔥 INLINE PRODUCT SEARCH SECTION
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_isGstActive ? 'Sales Return (GST Mode)' : 'Sales Return (Simple Mode)'),
+          backgroundColor: Colors.green.shade800,
+          foregroundColor: Colors.white,
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  const Text('Add Return Product:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
-                  const SizedBox(height: 6),
-                  Autocomplete<InventoryItem>(
-                    optionsBuilder: (TextEditingValue textEditingValue) {
-                      if (textEditingValue.text.isEmpty) {
-                        return const Iterable<InventoryItem>.empty();
-                      }
-                      return _allInventoryItems.where((item) =>
-                        item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                        (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
-                      );
-                    },
-                    displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
-                    onSelected: (InventoryItem selection) {
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: Colors.grey.shade400),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                      icon: const Icon(Icons.calendar_today, size: 16, color: Colors.green),
+                      label: Text(
+                        'Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}',
+                        style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () async {
+                        final DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: _selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2035),
+                        );
+                        if (picked != null && picked != _selectedDate) {
+                          setState(() => _selectedDate = picked);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 130,
+                    child: TextField(
+                      controller: _returnNoController,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Return No', 
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.grey200,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () {
                       setState(() {
-                        _selectedInlineProduct = selection;
-                        _inlinePriceController.text = selection.priceA.toString();
+                        _globalStockType = _globalStockType == 'Replacement' ? 'Fresh' : 'Replacement';
                       });
                     },
-                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                      return TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: InputDecoration(
-                          labelText: 'Search Product Name or SKU...',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                          prefixIcon: const Icon(Icons.search, size: 20),
-                          suffixIcon: controller.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 18),
-                                  onPressed: () {
-                                    controller.clear();
-                                    setState(() => _selectedInlineProduct = null);
-                                  },
-                                )
-                              : null,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _globalStockType == 'Replacement' ? Colors.orange.shade50 : Colors.green.shade50,
+                        border: Border.all(
+                          color: _globalStockType == 'Replacement' ? Colors.orange : Colors.green,
+                          width: 1.5,
                         ),
-                      );
-                    },
-                    optionsViewBuilder: (context, onSelected, options) {
-                      return Align(
-                        alignment: Alignment.topLeft,
-                        child: Material(
-                          elevation: 4,
-                          child: SizedBox(
-                            width: 320,
-                            height: 200,
-                            child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: options.length + 1,
-                              itemBuilder: (context, index) {
-                                if (index == options.length) {
-                                  return ListTile(
-                                    tileColor: Colors.green.shade100,
-                                    leading: const Icon(Icons.add_circle, color: Colors.green),
-                                    title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                                    onTap: () async {
-                                      await Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
-                                      );
-                                      await _loadDropdownDataAndSettings();
-                                    },
-                                  );
-                                }
-                                final item = options.elementAt(index);
-                                return ListTile(
-                                  title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                  subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 11)),
-                                  onTap: () => onSelected(item),
-                                );
-                              },
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _globalStockType == 'Replacement' ? Icons.swap_horiz : Icons.check_circle,
+                            size: 18,
+                            color: _globalStockType == 'Replacement' ? Colors.orange.shade900 : Colors.green.shade800,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _globalStockType,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: _globalStockType == 'Replacement' ? Colors.orange.shade900 : Colors.green.shade800,
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                  if (_selectedInlineProduct != null) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _inlineQtyController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: _inlinePriceController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
-                          onPressed: _addInlineItemToReturnCart,
-                          child: const Text('Add'),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ],
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(height: 10),
-            const Text('Returned Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 6),
-            Expanded(
-              child: _cartItems.isEmpty
-                  ? const Center(child: Text('Koi return item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
-                  : ListView.builder(
-                      itemCount: _cartItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _cartItems[index];
-                        double total = (item['qty'] as int) * (item['price'] as double);
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 3),
-                          child: ListTile(
-                            dense: true,
-                            title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('SKU: ${item['sku']} | Type: ${item['stockType']} | Qty: ${item['qty']} x ₹${item['price']}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                                IconButton(
-                                  icon: const Icon(Icons.edit, color: Colors.orange, size: 16),
-                                  onPressed: () => _editCartItem(index),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red, size: 16),
-                                  onPressed: () => setState(() => _cartItems.removeAt(index)),
-                                ),
-                              ],
+              const SizedBox(height: 12),
+
+              SearchableField(
+                label: 'Customer / Party Name *',
+                items: _allAccounts,
+                controller: _partyController,
+                onSelected: (val) {
+                  _partyController.text = val;
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // 🔥 INLINE PRODUCT SEARCH SECTION
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Add Return Product:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
+                    const SizedBox(height: 6),
+                    Autocomplete<InventoryItem>(
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        if (textEditingValue.text.isEmpty) {
+                          return const Iterable<InventoryItem>.empty();
+                        }
+                        return _allInventoryItems.where((item) =>
+                          item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                          (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
+                        );
+                      },
+                      displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
+                      onSelected: (InventoryItem selection) {
+                        setState(() {
+                          _selectedInlineProduct = selection;
+                          _inlinePriceController.text = selection.priceA.toString();
+                        });
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            labelText: 'Search Product Name or SKU...',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            suffixIcon: controller.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: () {
+                                      controller.clear();
+                                      setState(() => _selectedInlineProduct = null);
+                                    },
+                                  )
+                                : null,
+                          ),
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4,
+                            child: SizedBox(
+                              width: 320,
+                              height: 200,
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                itemCount: options.length + 1,
+                                itemBuilder: (context, index) {
+                                  if (index == options.length) {
+                                    return ListTile(
+                                      tileColor: Colors.green.shade100,
+                                      leading: const Icon(Icons.add_circle, color: Colors.green),
+                                      title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                                      onTap: () async {
+                                        await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
+                                        );
+                                        await _loadDropdownDataAndSettings();
+                                      },
+                                    );
+                                  }
+                                  final item = options.elementAt(index);
+                                  return ListTile(
+                                    title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 11)),
+                                    onTap: () => onSelected(item),
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         );
                       },
                     ),
-            ),
-            const Divider(),
-            
-            // 🔥 BOTTOM CALCULATION & DYNAMIC CHARGES SECTION
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  const Text('Freight & Additional Charges:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
-                  const SizedBox(height: 4),
-
-                  ...List.generate(_billChargesList.length, (index) {
-                    final charge = _billChargesList[index];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
+                    if (_selectedInlineProduct != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
                         children: [
                           Expanded(
-                            flex: 3,
-                            child: Text(charge['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          ),
-                          SizedBox(
-                            width: 60,
                             child: TextField(
-                              controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
+                              controller: _inlineQtyController,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(labelText: 'No.', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(6)),
-                              onChanged: (val) {
-                                charge['qty'] = double.tryParse(val) ?? 1.0;
-                                setState(() {});
-                              },
+                              decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          SizedBox(
-                            width: 75,
+                          const SizedBox(width: 8),
+                          Expanded(
                             child: TextField(
-                              controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
+                              controller: _inlinePriceController,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(labelText: 'Rate(₹)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(6)),
-                              onChanged: (val) {
-                                charge['rate'] = double.tryParse(val) ?? 0.0;
-                                setState(() {});
-                              },
+                              decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                          IconButton(
-                            icon: const Icon(Icons.close, size: 18, color: Colors.red),
-                            onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
+                            onPressed: _addInlineItemToReturnCart,
+                            child: const Text('Add'),
                           ),
                         ],
                       ),
-                    );
-                  }),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text('Returned Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 6),
+              Expanded(
+                child: _cartItems.isEmpty
+                    ? const Center(child: Text('Koi return item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
+                    : ListView.builder(
+                        itemCount: _cartItems.length,
+                        itemBuilder: (context, index) {
+                          final item = _cartItems[index];
+                          double total = (item['qty'] as int) * (item['price'] as double);
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 3),
+                            child: ListTile(
+                              dense: true,
+                              title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('SKU: ${item['sku']} | Type: ${item['stockType']} | Qty: ${item['qty']} x ₹${item['price']}'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Colors.orange, size: 16),
+                                    onPressed: () => _editCartItem(index),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                    onPressed: () => setState(() => _cartItems.removeAt(index)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              const Divider(),
+              
+              // 🔥 BOTTOM CALCULATION & DYNAMIC CHARGES SECTION
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
 
-                  const SizedBox(height: 6),
-                  Autocomplete<Map<String, dynamic>>(
-                    optionsBuilder: (TextEditingValue textEditingValue) {
-                      if (textEditingValue.text.isEmpty) {
-                        return const Iterable<Map<String, dynamic>>.empty();
-                      }
-                      return _presetChargesList.where((c) =>
-                        c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase())
-                      );
-                    },
-                    displayStringForOption: (option) => option['name'],
-                    onSelected: (selection) {
-                      setState(() {
-                        _billChargesList.add({
-                          'name': selection['name'],
-                          'type': selection['type'],
-                          'mode': selection['mode'],
-                          'qty': 1.0,
-                          'rate': selection['value'] ?? 0.0,
-                        });
-                      });
-                    },
-                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                      return TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: const InputDecoration(
-                          labelText: 'Search Freight or Charge to add...',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          prefixIcon: Icon(Icons.add_circle_outline, size: 18, color: Colors.green),
+                    const Text('Freight & Additional Charges:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
+                    const SizedBox(height: 4),
+
+                    ...List.generate(_billChargesList.length, (index) {
+                      final charge = _billChargesList[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(charge['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                            SizedBox(
+                              width: 60,
+                              child: TextField(
+                                controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(labelText: 'No.', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(6)),
+                                onChanged: (val) {
+                                  charge['qty'] = double.tryParse(val) ?? 1.0;
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            SizedBox(
+                              width: 75,
+                              child: TextField(
+                                controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(labelText: 'Rate(₹)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(6)),
+                                onChanged: (val) {
+                                  charge['rate'] = double.tryParse(val) ?? 0.0;
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                              onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                            ),
+                          ],
                         ),
                       );
-                    },
-                    optionsViewBuilder: (context, onSelected, options) {
-                      return Align(
-                        alignment: Alignment.topLeft,
-                        child: Material(
-                          elevation: 4,
-                          child: SizedBox(
-                            width: 280,
-                            height: 150,
-                            child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: options.length,
-                              itemBuilder: (context, index) {
-                                final opt = options.elementAt(index);
-                                return ListTile(
-                                  dense: true,
-                                  title: Text(opt['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text('Default: ₹${opt['value']}'),
-                                  onTap: () => onSelected(opt),
-                                );
-                              },
+                    }),
+
+                    const SizedBox(height: 6),
+                    Autocomplete<Map<String, dynamic>>(
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        if (textEditingValue.text.isEmpty) {
+                          return const Iterable<Map<String, dynamic>>.empty();
+                        }
+                        return _presetChargesList.where((c) =>
+                          c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase())
+                        );
+                      },
+                      displayStringForOption: (option) => option['name'],
+                      onSelected: (selection) {
+                        setState(() {
+                          _billChargesList.add({
+                            'name': selection['name'],
+                            'type': selection['type'],
+                            'mode': selection['mode'],
+                            'qty': 1.0,
+                            'rate': selection['value'] ?? 0.0,
+                          });
+                        });
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'Search Freight or Charge to add...',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            prefixIcon: Icon(Icons.add_circle_outline, size: 18, color: Colors.green),
+                          ),
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4,
+                            child: SizedBox(
+                              width: 280,
+                              height: 150,
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                itemCount: options.length,
+                                itemBuilder: (context, index) {
+                                  final opt = options.elementAt(index);
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(opt['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    subtitle: Text('Default: ₹${opt['value']}'),
+                                    onTap: () => onSelected(opt),
+                                  );
+                                },
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
+                        );
+                      },
+                    ),
 
-                  const Divider(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      SizedBox(
-                        width: 140,
-                        child: DropdownButtonFormField<String>(
-                          value: _refundMode,
-                          items: _refundModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                          onChanged: (val) => setState(() => _refundMode = val!),
-                          decoration: const InputDecoration(labelText: 'Refund Mode', border: OutlineInputBorder(), isDense: true),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        SizedBox(
+                          width: 140,
+                          child: DropdownButtonFormField<String>(
+                            value: _refundMode,
+                            items: _refundModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                            onChanged: (val) => setState(() => _refundMode = val!),
+                            decoration: const InputDecoration(labelText: 'Refund Mode', border: OutlineInputBorder(), isDense: true),
+                          ),
                         ),
-                      ),
-                      Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green)),
-                    ],
+                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                      icon: const Icon(Icons.preview, size: 16),
+                      label: const Text('Preview'),
+                      onPressed: () => _generateAndPrintOrShareReturn(isShare: false),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                      icon: const Icon(Icons.share, size: 16),
+                      label: const Text('WhatsApp'),
+                      onPressed: () => _generateAndPrintOrShareReturn(isShare: true),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
+                      onPressed: _saveSalesReturnTransaction,
+                      child: const Text('Save Return', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white),
-                onPressed: _saveSalesReturnTransaction,
-                child: const Text('Save Return & Restore Stock', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
