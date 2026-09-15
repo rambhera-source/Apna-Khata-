@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
-import '../../database/database_helper.dart'; // 👈 Updated path
-import '../../models/settings_model.dart'; // 👈 Updated path
+import '../../database/database_helper.dart';
+import '../../models/settings_model.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,9 +15,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _gstinController = TextEditingController();
   bool _isGstEnabled = false;
 
-  // 🔥 Routes aur Salesmen ki list local state ke liye
+  // Local lists
   List<String> _routes = [];
   List<String> _salesmen = [];
+  
+  // Advanced Extra Charges List (Storing name, type [Add/Less], mode [Fixed/Percentage], value)
+  List<Map<String, dynamic>> _extraCharges = [];
 
   @override
   void initState() {
@@ -25,7 +28,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadSettings();
   }
 
-  // Database se purani settings aur lists load karna
   Future<void> _loadSettings() async {
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
     if (settings != null) {
@@ -35,11 +37,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isGstEnabled = settings.isGstEnabled;
         _routes = List.from(settings.routes);
         _salesmen = List.from(settings.salesmen);
+        
+        try {
+          // If extraCharges is stored as dynamic or list in model
+          _extraCharges = List<Map<String, dynamic>>.from(settings.extraCharges.map((e) {
+            if (e is Map) {
+              return Map<String, dynamic>.from(e);
+            }
+            return {'name': e.toString(), 'type': 'Add', 'mode': 'Fixed', 'value': 0.0};
+          }));
+        } catch (_) {
+          _extraCharges = [
+            {'name': 'Packing Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 0.0},
+            {'name': 'Special Discount', 'type': 'Less', 'mode': 'Fixed', 'value': 0.0},
+          ];
+        }
       });
     }
   }
 
-  // Settings save ya update karna (Routes aur Salesmen ke saath)
   Future<void> _saveSettings() async {
     final businessName = _businessNameController.text.trim();
     final gstin = _gstinController.text.trim();
@@ -60,6 +76,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         existing.isGstEnabled = _isGstEnabled;
         existing.routes = _routes;
         existing.salesmen = _salesmen;
+        try {
+          existing.extraCharges = _extraCharges;
+        } catch (_) {}
         await DatabaseHelper.isar.companySettings.put(existing);
       } else {
         final newSettings = CompanySettings()
@@ -68,6 +87,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ..isGstEnabled = _isGstEnabled
           ..routes = _routes
           ..salesmen = _salesmen;
+        try {
+          newSettings.extraCharges = _extraCharges;
+        } catch (_) {}
         await DatabaseHelper.isar.companySettings.put(newSettings);
       }
     });
@@ -78,7 +100,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // 🚚 Route Add ya Edit karne ka Dialog
   void _showRouteDialog({String? routeToEdit, int? index}) {
     final controller = TextEditingController(text: routeToEdit ?? '');
 
@@ -104,7 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _routes[index!] = name;
                   }
                 });
-                _saveSettings(); // Auto save to DB
+                _saveSettings();
               }
               Navigator.pop(context);
             },
@@ -115,7 +136,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // 👨‍💼 Salesman Add ya Edit karne ka Dialog
   void _showSalesmanDialog({String? salesmanToEdit, int? index}) {
     final controller = TextEditingController(text: salesmanToEdit ?? '');
 
@@ -141,13 +161,101 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _salesmen[index!] = name;
                   }
                 });
-                _saveSettings(); // Auto save to DB
+                _saveSettings();
               }
               Navigator.pop(context);
             },
             child: const Text('Save'),
           ),
         ],
+      ),
+    );
+  }
+
+  // ➕ Advanced Extra Charge Dialog with Add/Less & Fixed/Percentage support
+  void _showExtraChargeDialog({Map<String, dynamic>? chargeToEdit, int? index}) {
+    final nameController = TextEditingController(text: chargeToEdit != null ? chargeToEdit['name'] : '');
+    final valueController = TextEditingController(text: chargeToEdit != null ? chargeToEdit['value'].toString() : '0');
+    
+    String selectedType = chargeToEdit != null ? chargeToEdit['type'] : 'Add'; // Add (+) or Less (-)
+    String selectedMode = chargeToEdit != null ? chargeToEdit['mode'] : 'Fixed'; // Fixed (₹) or Percentage (%)
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(chargeToEdit == null ? 'Add Extra Charge / Discount' : 'Edit Charge'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'Charge / Discount Name', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedType,
+                    items: const [
+                      DropdownMenuItem(value: 'Add', child: Text('Add (+) [Bill mein Jhudega]', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
+                      DropdownMenuItem(value: 'Less', child: Text('Less (-) [Bill se Ghatega]', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
+                    ],
+                    onChanged: (val) => setDialogState(() => selectedType = val!),
+                    decoration: const InputDecoration(labelText: 'Calculation Type', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedMode,
+                    items: const [
+                      DropdownMenuItem(value: 'Fixed', child: Text('Fixed Amount (₹)')),
+                      DropdownMenuItem(value: 'Percentage', child: Text('Percentage (%)')),
+                    ],
+                    onChanged: (val) => setDialogState(() => selectedMode = val!),
+                    decoration: const InputDecoration(labelText: 'Mode', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: valueController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: selectedMode == 'Fixed' ? 'Default Amount (₹)' : 'Default Percentage (%)',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                onPressed: () {
+                  String name = nameController.text.trim();
+                  double val = double.tryParse(valueController.text) ?? 0.0;
+                  if (name.isNotEmpty) {
+                    setState(() {
+                      final newItem = {
+                        'name': name,
+                        'type': selectedType,
+                        'mode': selectedMode,
+                        'value': val,
+                      };
+                      if (chargeToEdit == null) {
+                        _extraCharges.add(newItem);
+                      } else {
+                        _extraCharges[index!] = newItem;
+                      }
+                    });
+                    _saveSettings();
+                  }
+                  Navigator.pop(context);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -180,15 +288,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('Enable GST Billing Mode', style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: const Text('ON rakhne par tax calculate hoga, OFF par simple bill banega'),
                 value: _isGstEnabled,
-                onChanged: (bool value) {
-                  setState(() {
-                    _isGstEnabled = value;
-                  });
-                },
+                onChanged: (bool value) => setState(() => _isGstEnabled = value),
               ),
               const Divider(height: 32, thickness: 1),
 
-              // 🚚 Routes Management Section
+              // Routes Section
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -222,9 +326,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 IconButton(
                                   icon: const Icon(Icons.delete, size: 18, color: Colors.red),
                                   onPressed: () {
-                                    setState(() {
-                                      _routes.removeAt(index);
-                                    });
+                                    setState(() => _routes.removeAt(index));
                                     _saveSettings();
                                   },
                                 ),
@@ -237,7 +339,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const Divider(height: 32, thickness: 1),
 
-              // 👨‍💼 Salesmen Management Section
+              // Salesmen Section
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -252,7 +354,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 8),
               _salesmen.isEmpty
-                  ? const Text('Koi salesman add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 13))
+                  ? const Text('Koi salesman add nahi nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 13))
                   : ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -271,9 +373,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 IconButton(
                                   icon: const Icon(Icons.delete, size: 18, color: Colors.red),
                                   onPressed: () {
-                                    setState(() {
-                                      _salesmen.removeAt(index);
-                                    });
+                                    setState(() => _salesmen.removeAt(index));
+                                    _saveSettings();
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+              const Divider(height: 32, thickness: 1),
+
+              // Extra Charges & Discounts Master Section
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Manage Extra Charges & Discounts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add Charge'),
+                    onPressed: () => _showExtraChargeDialog(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _extraCharges.isEmpty
+                  ? const Text('Koi extra charge add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 13))
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _extraCharges.length,
+                      itemBuilder: (context, index) {
+                        final charge = _extraCharges[index];
+                        bool isAdd = charge['type'] == 'Add';
+                        return Card(
+                          child: ListTile(
+                            title: Text(charge['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text('Type: ${charge['type']} | Mode: ${charge['mode']} | Value: ${charge['value']}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Chip(
+                                  label: Text(isAdd ? '+ Add' : '- Less', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                                  backgroundColor: isAdd ? Colors.green : Colors.red,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit, size: 18, color: Colors.teal),
+                                  onPressed: () => _showExtraChargeDialog(chargeToEdit: charge, index: index),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                                  onPressed: () {
+                                    setState(() => _extraCharges.removeAt(index));
                                     _saveSettings();
                                   },
                                 ),
