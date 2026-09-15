@@ -10,9 +10,9 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../database/database_helper.dart';
-import '../models/account.dart';
-import '../models/transaction_model.dart';
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/account.dart';
+import 'package:accounting_app/models/transaction_model.dart';
 import 'searchable_field.dart';
 
 class LedgerScreen extends StatefulWidget {
