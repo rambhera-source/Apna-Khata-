@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:isar/isar.dart';
-import '../database/database_helper.dart';
-import '../models/user_model.dart';
-import 'dashboard/dashboard_screen.dart';                 // ✅ Updated path inside dashboard folder
-import 'dashboard/super_admin_dashboard_screen.dart'; // ✅ Updated path inside dashboard folder
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/user_model.dart';
+import 'package:accounting_app/screens/dashboard/dashboard_screen.dart';                 // ✅ Updated package import for dashboard
+import 'package:accounting_app/screens/dashboard/super_admin_dashboard_screen.dart'; // ✅ Updated package import for super admin dashboard
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
