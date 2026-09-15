@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
-import '../database/database_helper.dart';
-import '../models/inventory_model.dart';
-import '../models/bom_model.dart';
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/inventory_model.dart';
+import 'package:accounting_app/models/bom_model.dart';
 import 'searchable_field.dart';
 
 class ManufacturingScreen extends StatefulWidget {
