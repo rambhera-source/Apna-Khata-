@@ -10,13 +10,13 @@ import 'sales/sales_screen.dart';
 import 'sales/sales_return_screen.dart';
 import 'purchase/purchase_screen.dart';
 import 'purchase/purchase_return_screen.dart';
-import 'daybook_screen.dart';
-import 'ledger_screen.dart';
-import 'financial_reports_screen.dart';
-import 'product_inventory_screen.dart';
-import 'parties_master_screen.dart';
-import 'orders_management_screen.dart';
-import 'voucher_entry_screen.dart';
+import 'reports/daybook_screen.dart';
+import 'reports/ledger_screen.dart';
+import 'reports/financial_reports_screen.dart';
+import 'products/product_inventory_screen.dart';
+import 'account/parties_master_screen.dart';
+import 'order/orders_management_screen.dart';
+import 'Voucher/voucher_entry_screen.dart';
 import 'setting/settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
