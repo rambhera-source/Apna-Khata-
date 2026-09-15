@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
+import 'package:excel/excel.dart' as excel_pkg; // Excel reading support
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
@@ -217,28 +218,46 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  Future<void> _importCsvFile() async {
+  // 📥 Universal Excel & CSV Import with Error Report Generator
+  Future<void> _importFileUniversal() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'txt', 'xlsx', 'xls'],
         withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.single;
-        List<List<dynamic>> fields = [];
+        List<List<dynamic>> rows = [];
 
-        if (file.bytes != null) {
-          // 🔥 Fixed: allowMalformed: true prevents decoding crashes on special characters
-          final csvString = utf8.decode(file.bytes!, allowMalformed: true);
-          fields = const CsvToListConverter().convert(csvString);
-        } else if (file.path != null) {
-          final bytes = await File(file.path!).readAsBytes();
-          final csvString = utf8.decode(bytes, allowMalformed: true);
-          fields = const CsvToListConverter().convert(csvString);
+        String extension = file.extension?.toLowerCase ?? '';
+        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || extension == 'xlsx' || extension == 'xls') {
+          // 📊 Handle Excel File (.xlsx / .xls)
+          var bytes = file.bytes ?? await File(file.path!).readAsBytes();
+          var excelFile = excel_pkg.Excel.decodeBytes(bytes);
+          for (var table in excelFile.tables.keys) {
+            var sheet = excelFile.tables[table];
+            if (sheet != null) {
+              for (var row in sheet.rows) {
+                rows.add(row.map((cell) => cell?.value ?? '').toList());
+              }
+            }
+            break; // First sheet only
+          }
+        } else {
+          // 📄 Handle CSV / Text File
+          String csvString = '';
+          if (file.bytes != null) {
+            csvString = utf8.decode(file.bytes!, allowMalformed: true);
+          } else if (file.path != null) {
+            final bytes = await File(file.path!).readAsBytes();
+            csvString = utf8.decode(bytes, allowMalformed: true);
+          }
+          rows = const CsvToListConverter().convert(csvString);
         }
 
-        if (fields.isEmpty) {
+        if (rows.isEmpty) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Selected file is empty or invalid!'), backgroundColor: Colors.orange),
@@ -246,76 +265,158 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
           return;
         }
 
+        // 🔄 Show Processing Dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Text('Processing & Importing Inventory...'),
+              ],
+            ),
+          ),
+        );
+
         int successCount = 0;
-        int duplicateCount = 0;
+        List<List<dynamic>> failedRows = [];
+        if (rows.isNotEmpty) {
+          List<dynamic> header = List.from(rows[0]);
+          header.add('Failure Reason');
+          failedRows.add(header);
+        }
 
         await DatabaseHelper.isar.writeTxn(() async {
-          for (int i = 1; i < fields.length; i++) {
-            var row = fields[i];
-            if (row.isNotEmpty && row[0].toString().trim().isNotEmpty) {
-              String name = row[0].toString().trim();
-              String sku = row.length > 1 ? row[1].toString().trim() : '';
+          for (int i = 1; i < rows.length; i++) {
+            var row = rows[i];
+            if (row.length < 2 || row[0].toString().trim().isEmpty) {
+              var failedRow = List.from(row);
+              while (failedRow.length < rows[0].length) failedRow.add('');
+              failedRow.add('Insufficient columns or empty Product Name');
+              failedRows.add(failedRow);
+              continue;
+            }
 
-              bool exists = _allInventoryItems.any((item) => 
-                item.itemName.toLowerCase() == name.toLowerCase() || 
-                (sku.isNotEmpty && item.sku != null && item.sku!.toLowerCase() == sku.toLowerCase())
-              );
+            String name = row[0].toString().trim();
+            String sku = row.length > 1 ? row[1].toString().trim() : '';
 
-              if (exists) {
-                duplicateCount++;
-                continue;
-              }
+            // Mandatory Check
+            if (name.isEmpty || sku.isEmpty) {
+              var failedRow = List.from(row);
+              while (failedRow.length < rows[0].length) failedRow.add('');
+              failedRow.add('Product Name or SKU ID is missing');
+              failedRows.add(failedRow);
+              continue;
+            }
 
-              String category = row.length > 2 ? row[2].toString().trim() : 'General';
-              double purchasePrice = row.length > 3 ? double.tryParse(row[3].toString()) ?? 0.0 : 0.0;
-              double openingStock = row.length > 4 ? double.tryParse(row[4].toString()) ?? 0.0 : 0.0;
-              double closingStock = row.length > 5 ? double.tryParse(row[5].toString()) ?? 0.0 : 0.0;
+            // Duplicate Check
+            bool exists = _allInventoryItems.any((item) => 
+              item.itemName.toLowerCase() == name.toLowerCase() || 
+              (sku.isNotEmpty && item.sku != null && item.sku!.toLowerCase() == sku.toLowerCase())
+            );
 
-              double priceA = row.length > 6 ? double.tryParse(row[6].toString()) ?? 0.0 : 0.0;
-              String selectedTier = 'A';
+            if (exists) {
+              var failedRow = List.from(row);
+              while (failedRow.length < rows[0].length) failedRow.add('');
+              failedRow.add('Duplicate Product Name or SKU already exists');
+              failedRows.add(failedRow);
+              continue;
+            }
 
-              for (int t = 0; t < _priceCategories.length; t++) {
-                int colIdx = 6 + t;
-                if (row.length > colIdx) {
-                  double tierVal = double.tryParse(row[colIdx].toString()) ?? 0.0;
-                  if (tierVal > 0) {
-                    priceA = tierVal;
-                    selectedTier = _priceCategories[t];
-                    break;
-                  }
+            String category = row.length > 2 && row[2].toString().trim().isNotEmpty ? row[2].toString().trim() : 'General';
+            double purchasePrice = row.length > 3 ? double.tryParse(row[3].toString()) ?? 0.0 : 0.0;
+            double openingStock = row.length > 4 ? double.tryParse(row[4].toString()) ?? 0.0 : 0.0;
+            double closingStock = row.length > 5 ? double.tryParse(row[5].toString()) ?? 0.0 : 0.0;
+
+            double priceA = row.length > 6 ? double.tryParse(row[6].toString()) ?? 0.0 : 0.0;
+            String selectedTier = 'A';
+
+            for (int t = 0; t < _priceCategories.length; t++) {
+              int colIdx = 6 + t;
+              if (row.length > colIdx) {
+                double tierVal = double.tryParse(row[colIdx].toString()) ?? 0.0;
+                if (tierVal > 0) {
+                  priceA = tierVal;
+                  selectedTier = _priceCategories[t];
+                  break;
                 }
               }
-
-              InventoryItem item = InventoryItem()
-                ..itemName = name
-                ..sku = sku
-                ..category = category.isEmpty ? 'General' : category
-                ..purchasePrice = purchasePrice
-                ..openingStock = openingStock
-                ..stockQuantity = closingStock
-                ..priceA = priceA
-                ..priceCategory = selectedTier
-                ..stockType = 'Fresh';
-
-              await DatabaseHelper.isar.inventoryItems.put(item);
-              successCount++;
             }
+
+            InventoryItem item = InventoryItem()
+              ..itemName = name
+              ..sku = sku
+              ..category = category
+              ..purchasePrice = purchasePrice
+              ..openingStock = openingStock
+              ..stockQuantity = closingStock
+              ..priceA = priceA
+              ..priceCategory = selectedTier
+              ..stockType = 'Fresh';
+
+            await DatabaseHelper.isar.inventoryItems.put(item);
+            successCount++;
           }
         });
 
         if (!mounted) return;
+        Navigator.pop(context); // Close progress dialog
         _loadInventory();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('सफलतापूर्वक $successCount प्रोडक्ट्स इम्पोर्ट हो गए! (Duplicate skipped: $duplicateCount)'), 
-            backgroundColor: Colors.green,
+
+        // Generate Error CSV File if any rows failed
+        String? errorFilePath;
+        if (failedRows.length > 1) {
+          String errorCsvData = const ListToCsvConverter().convert(failedRows);
+          final output = await getTemporaryDirectory();
+          final errFile = File('${output.path}/Failed_Inventory_Report.csv');
+          await errFile.writeAsString(errorCsvData);
+          errorFilePath = errFile.path;
+        }
+
+        // Show Detailed Import Summary Dialog
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Bulk Import Summary'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('✅ Successfully Imported: $successCount items', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text('❌ Failed / Skipped: ${failedRows.length > 1 ? failedRows.length - 1 : 0} items', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                if (errorFilePath != null) ...[
+                  const SizedBox(height: 12),
+                  const Text('Kuch records duplicate ya invalid hone ki wajah se fail ho gaye hain. Aap failure report download kar sakte hain.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ],
+            ),
+            actions: [
+              if (errorFilePath != null)
+                TextButton.icon(
+                  icon: const Icon(Icons.download, color: Colors.blue),
+                  label: const Text('Download Error Report'),
+                  onPressed: () {
+                    Share.shareXFiles([XFile(errorFilePath!)], text: 'Yeh Inventory Bulk Import ki Failed Report hai.');
+                  },
+                ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
           ),
         );
       }
     } catch (e) {
       if (!mounted) return;
+      // Close dialog if open
+      if (Navigator.canPop(context)) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('इम्पोर्ट करने में एरर आया: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('File import karne me error aayi: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -389,12 +490,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                               title: Text('${txn.voucherType} - ${txn.partyName}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('Bill No: ${txn.voucherNumber} | Date: ${DateFormat('dd-MM-yyyy').format(txn.date)}'),
                               trailing: Text('₹${txn.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
-                              onTap: () {
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Opening Voucher: ${txn.voucherNumber}')),
-                                );
-                              },
                             ),
                           );
                         },
@@ -537,7 +632,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
                 if (isDuplicate) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle से मौजूद है!'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है!'), backgroundColor: Colors.red),
                   );
                   return;
                 }
@@ -631,12 +726,12 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 IconButton(
                   icon: const Icon(Icons.download, color: Colors.teal),
                   onPressed: _downloadTemplateFile,
-                  tooltip: 'Download Advanced CSV Template',
+                  tooltip: 'Download Template',
                 ),
                 IconButton(
                   icon: const Icon(Icons.file_upload, color: Colors.teal),
-                  onPressed: _importCsvFile,
-                  tooltip: 'Upload CSV File (Bulk Update)',
+                  onPressed: _importFileUniversal, // 🔥 Universal Excel & CSV Import
+                  tooltip: 'Upload Excel or CSV File',
                 ),
               ],
             ),
