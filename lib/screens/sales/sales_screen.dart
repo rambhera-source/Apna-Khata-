@@ -429,18 +429,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ],
             ),
             const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add Item'),
-                  onPressed: _addItemToCart,
-                ),
-              ],
-            ),
+            const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 8),
             Expanded(
               child: _cartItems.isEmpty
@@ -561,7 +550,7 @@ class _SalesScreenState extends State<SalesScreen> {
                           isExpanded: true,
                           items: _presetChargesList.map((c) => DropdownMenuItem(
                             value: c, 
-                            child: Text('${c['name']} (${c['type'] == 'Add' ? '+' : '-'})', style: TextStyle(fontSize: 13, color: c['type'] == 'Add' ? Colors.green.shade900 : Colors.red.shade900, fontWeight: FontWeight.bold)),
+                            child: Text('${c['name']} (${c['type'] == 'Add' ? '+' : '-'})', style: TextStyle(fontSize: 13, color: c['type'] == 'Add' ? Colors.green.shade900 : Colors.red.shade900)),
                           )).toList(),
                           onChanged: (val) {
                             setState(() {
@@ -615,7 +604,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             Text('• ${ex['name']} (${ex['mode']})', style: TextStyle(fontSize: 12, color: isAdd ? Colors.green.shade800 : Colors.red.shade800, fontWeight: FontWeight.bold)),
                             Row(
                               children: [
-                                Text('${isAdd ? "+" : "-"} ${ex['amount']}${ex['mode'] == 'Percentage' ? '%' : '₹'}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isAdd ? Colors.green : Colors.red)),
+                                Text('${isAdd ? "+" : "-"} ${ex['amount']}${ex['mode'] == 'Percentage' ? '%' : '₹'}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isAdd ? Colors.green.shade800 : Colors.red.shade800)),
                                 IconButton(
                                   icon: const Icon(Icons.close, size: 14, color: Colors.red),
                                   onPressed: () => setState(() => _extraChargesList.removeAt(i)),
