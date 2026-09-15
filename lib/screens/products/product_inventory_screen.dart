@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
-import 'package:excel/excel.dart' as excel_pkg; // Excel reading support
+import 'package:excel/excel.dart' as excel_pkg;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
@@ -218,7 +218,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  // 📥 Universal Excel & CSV Import with Error Report Generator
   Future<void> _importFileUniversal() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -233,7 +232,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
         String extension = file.extension?.toLowerCase() ?? '';
         if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || extension == 'xlsx' || extension == 'xls') {
-          // 📊 Handle Excel File (.xlsx / .xls)
           var bytes = file.bytes ?? await File(file.path!).readAsBytes();
           var excelFile = excel_pkg.Excel.decodeBytes(bytes);
           for (var table in excelFile.tables.keys) {
@@ -243,10 +241,9 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 rows.add(row.map((cell) => cell?.value ?? '').toList());
               }
             }
-            break; // First sheet only
+            break;
           }
         } else {
-          // 📄 Handle CSV / Text File
           String csvString = '';
           if (file.bytes != null) {
             csvString = utf8.decode(file.bytes!, allowMalformed: true);
@@ -265,7 +262,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
           return;
         }
 
-        // 🔄 Show Processing Dialog
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -302,7 +298,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
             String name = row[0].toString().trim();
             String sku = row.length > 1 ? row[1].toString().trim() : '';
 
-            // Mandatory Check
             if (name.isEmpty || sku.isEmpty) {
               var failedRow = List.from(row);
               while (failedRow.length < rows[0].length) failedRow.add('');
@@ -311,7 +306,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               continue;
             }
 
-            // Duplicate Check
             bool exists = _allInventoryItems.any((item) => 
               item.itemName.toLowerCase() == name.toLowerCase() || 
               (sku.isNotEmpty && item.sku != null && item.sku!.toLowerCase() == sku.toLowerCase())
@@ -362,10 +356,9 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         });
 
         if (!mounted) return;
-        Navigator.pop(context); // Close progress dialog
+        Navigator.pop(context);
         _loadInventory();
 
-        // Generate Error CSV File if any rows failed
         String? errorFilePath;
         if (failedRows.length > 1) {
           String errorCsvData = const ListToCsvConverter().convert(failedRows);
@@ -375,7 +368,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
           errorFilePath = errFile.path;
         }
 
-        // Show Detailed Import Summary Dialog
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -631,7 +623,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
                 if (isDuplicate) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle से मौजूद है!'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है!'), backgroundColor: Colors.red),
                   );
                   return;
                 }
@@ -797,6 +789,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               color: Colors.teal.shade100,
               child: Row(
                 children: [
+                  const SizedBox(width: 35, child: Text('#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal))),
                   const Expanded(flex: 3, child: Text('Product Name / SKU', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
                   Expanded(
                     flex: 2,
@@ -823,7 +816,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                       ),
                     ),
                   ),
-                  const Expanded(flex: 1, child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.right)),
                 ],
               ),
             ),
@@ -843,6 +835,10 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                               child: Row(
                                 children: [
+                                  SizedBox(
+                                    width: 35,
+                                    child: Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                                  ),
                                   Expanded(
                                     flex: 3,
                                     child: Column(
@@ -875,34 +871,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                                       '${item.stockQuantity}',
                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueGrey),
                                       textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 1,
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
-                                          onPressed: () => _showAddEditProductDialog(itemToEdit: item),
-                                          tooltip: 'Edit Item',
-                                          constraints: const BoxConstraints(),
-                                          padding: EdgeInsets.zero,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                                          onPressed: () async {
-                                            await DatabaseHelper.isar.writeTxn(() async {
-                                              await DatabaseHelper.isar.inventoryItems.delete(item.id);
-                                            });
-                                            _loadInventory();
-                                          },
-                                          tooltip: 'Delete Item',
-                                          constraints: const BoxConstraints(),
-                                          padding: EdgeInsets.zero,
-                                        ),
-                                      ],
                                     ),
                                   ),
                                 ],
