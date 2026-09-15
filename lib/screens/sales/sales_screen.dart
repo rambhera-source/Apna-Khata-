@@ -32,14 +32,17 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _freightQtyController = TextEditingController(text: '1');
   final TextEditingController _freightRateController = TextEditingController(text: '30');
 
-  // Discount & Manual Extra Charge Controllers
+  // Discount & Manual/Dropdown Extra Charge Controllers
   final TextEditingController _discountValueController = TextEditingController(text: '0');
   String _discountType = '₹';
 
-  final TextEditingController _extraChargeNameController = TextEditingController();
+  // Master/Preset list for charges (Aap ise database ya settings se bhi fetch kar sakte hain)
+  final List<String> _presetChargesList = ['Packing Charge', 'Loading Charge', 'Delivery Fee', 'Handling Charge', 'Other Charges'];
+  String? _selectedPresetCharge;
+  
   final TextEditingController _extraChargeAmountController = TextEditingController(text: '0');
   
-  // List to hold multiple manual extra charges if added
+  // List to hold multiple added extra charges in current bill
   final List<Map<String, dynamic>> _extraChargesList = [];
 
   DateTime _selectedDate = DateTime.now();
@@ -58,12 +61,12 @@ class _SalesScreenState extends State<SalesScreen> {
 
   List<SalesOrder> _pendingOrdersList = [];
   SalesOrder? _selectedPendingOrder;
-  bool _isLoadingOrder = false;
 
   @override
   void initState() {
     super.initState();
     _loadDropdownDataAndSettings();
+    _selectedPresetCharge = _presetChargesList.first;
   }
 
   Future<void> _loadDropdownDataAndSettings() async {
@@ -100,8 +103,6 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _checkForPendingOrders(String partyName) async {
     if (partyName.isEmpty) return;
 
-    setState(() => _isLoadingOrder = true);
-
     final orders = await DatabaseHelper.isar.salesOrders
         .filter()
         .partyNameEqualTo(partyName, caseSensitive: false)
@@ -112,11 +113,9 @@ class _SalesScreenState extends State<SalesScreen> {
     setState(() {
       _pendingOrdersList = orders;
       _selectedPendingOrder = orders.isNotEmpty ? orders.first : null;
-      _isLoadingOrder = false;
     });
 
-    if (orders.isNotEmpty) {
-      if (!mounted) return;
+    if (orders.isNotEmpty && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('⚠️ ${orders.length} Pending Order(s) found for $partyName!'),
@@ -148,7 +147,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Order ${order.orderNo} successfully loaded into bill!'), backgroundColor: Colors.green),
+      const SnackBar(content: Text('Order successfully loaded into bill!'), backgroundColor: Colors.green),
     );
   }
 
@@ -322,16 +321,13 @@ class _SalesScreenState extends State<SalesScreen> {
                       pw.Text(_isGstActive ? 'TAX INVOICE (GST)' : 'BILL / ESTIMATE', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
                       pw.Text('Invoice No: ${_invoiceNoController.text}'),
                       pw.Text('Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}'),
-                      pw.Text('Stock Type: $_globalStockType', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ],
                   ),
                 ],
               ),
               pw.Divider(thickness: 1.5, color: PdfColors.teal),
               pw.SizedBox(height: 10),
-              pw.Text('Bill To:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-              pw.Text('Party Name: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-              pw.Text('Payment Mode: $_paymentMode'),
+              pw.Text('Bill To: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 15),
               pw.Table.fromTextArray(
                 headers: ['S.No', 'Item Description (SKU)', 'Qty', 'Price (₹)', 'Total (₹)'],
@@ -362,17 +358,11 @@ class _SalesScreenState extends State<SalesScreen> {
                       children: [
                         pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
                         if (_discountAmount > 0) pw.Text('Discount: - ₹ ${_discountAmount.toStringAsFixed(2)}'),
-                        if (_freightTotalAmount > 0) pw.Text('Freight Charge (${_freightQtyController.text} x ₹${_freightRateController.text}): + ₹ ${_freightTotalAmount.toStringAsFixed(2)}'),
+                        if (_freightTotalAmount > 0) pw.Text('Freight Charge: + ₹ ${_freightTotalAmount.toStringAsFixed(2)}'),
                         for (var extra in _extraChargesList)
                           pw.Text('${extra['name']}: + ₹ ${(extra['amount'] as double).toStringAsFixed(2)}'),
-                        if (_isGstActive) ...[
-                          pw.SizedBox(height: 4),
-                          pw.Text('CGST (9%): ₹ ${(_taxAmount / 2).toStringAsFixed(2)}'),
-                          pw.Text('SGST (9%): ₹ ${(_taxAmount / 2).toStringAsFixed(2)}'),
-                        ],
                         pw.Divider(),
-                        pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
+                        pw.Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
                       ],
                     ),
                   ),
@@ -408,88 +398,31 @@ class _SalesScreenState extends State<SalesScreen> {
         ..partyName = _partyController.text.trim()
         ..cashOrBank = _paymentMode
         ..amount = _grandTotal
-        ..notes = _isGstActive ? 'GST Sales Invoice ([$_globalStockType Stock])' : 'Sales Invoice ([$_globalStockType Stock])';
+        ..notes = 'Sales Invoice';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
       for (var cartItem in _cartItems) {
         String prodName = cartItem['name'];
         double soldQty = (cartItem['qty'] as int).toDouble();
-        String itemStockType = cartItem['stockType'] ?? 'Fresh';
-
-        final invItem = await DatabaseHelper.isar.inventoryItems
-            .filter()
-            .itemNameEqualTo(prodName, caseSensitive: false)
-            .findFirst();
-
+        final invItem = await DatabaseHelper.isar.inventoryItems.filter().itemNameEqualTo(prodName, caseSensitive: false).findFirst();
         if (invItem != null) {
           invItem.stockQuantity -= soldQty;
           if (invItem.stockQuantity < 0) invItem.stockQuantity = 0;
-          invItem.stockType = itemStockType;
           await DatabaseHelper.isar.inventoryItems.put(invItem);
         }
-      }
-
-      if (_selectedPendingOrder != null) {
-        await _selectedPendingOrder!.items.load();
-        
-        bool allDelivered = true;
-        for (var orderItem in _selectedPendingOrder!.items) {
-          var cartMatch = _cartItems.any((c) => c['name'] == orderItem.productName && c['qty'] >= orderItem.qty);
-          if (cartMatch) {
-            orderItem.isDelivered = true;
-          } else {
-            allDelivered = false;
-          }
-          await DatabaseHelper.isar.orderItemModels.put(orderItem);
-        }
-
-        if (allDelivered) {
-          _selectedPendingOrder!.status = 'Converted to Bill';
-        } else {
-          _selectedPendingOrder!.status = 'Pending (Partial)';
-        }
-        await DatabaseHelper.isar.salesOrders.put(_selectedPendingOrder!);
       }
     });
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sales Bill Successfully Saved & Stock Updated!'), backgroundColor: Colors.green));
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Bill Saved Successfully!'),
-        content: const Text('Kya aap is bill ka print lena chahte hain ya WhatsApp par share karna chahte hain?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white),
-            icon: const Icon(Icons.print, size: 16),
-            label: const Text('Print'),
-            onPressed: () {
-              Navigator.pop(context);
-              _generateAndPrintOrShareInvoice(isWhatsApp: false);
-            },
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            icon: const Icon(Icons.share, size: 16),
-            label: const Text('WhatsApp'),
-            onPressed: () {
-              Navigator.pop(context);
-              _generateAndPrintOrShareInvoice(isWhatsApp: true);
-            },
-          ),
-        ],
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sales Bill Successfully Saved!'), backgroundColor: Colors.green));
+    _generateAndPrintOrShareInvoice(isWhatsApp: false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isGstActive ? 'Sales Invoice (GST Mode)' : 'Sales Invoice (Simple Mode)'),
+        title: const Text('Sales Invoice'),
         backgroundColor: Colors.teal.shade800,
         foregroundColor: Colors.white,
       ),
@@ -498,90 +431,6 @@ class _SalesScreenState extends State<SalesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(color: Colors.grey.shade400),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                    ),
-                    icon: const Icon(Icons.calendar_today, size: 16, color: Colors.teal),
-                    label: Text(
-                      'Date: ${DateFormat('dd-MM-yyyy').format(_selectedDate)}',
-                      style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
-                    ),
-                    onPressed: () async {
-                      final DateTime? picked = await showDatePicker(
-                        context: context,
-                        initialDate: _selectedDate,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2035),
-                      );
-                      if (picked != null && picked != _selectedDate) {
-                        setState(() => _selectedDate = picked);
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 130,
-                  child: TextField(
-                    controller: _invoiceNoController,
-                    decoration: const InputDecoration(labelText: 'Invoice No', border: OutlineInputBorder()),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _globalStockType = _globalStockType == 'Fresh' ? 'Replacement' : 'Fresh';
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Stock Source switched to: $_globalStockType'),
-                        duration: const Duration(milliseconds: 800),
-                        backgroundColor: _globalStockType == 'Fresh' ? Colors.green.shade700 : Colors.orange.shade800,
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: _globalStockType == 'Fresh' ? Colors.green.shade50 : Colors.orange.shade50,
-                      border: Border.all(
-                        color: _globalStockType == 'Fresh' ? Colors.green : Colors.orange,
-                        width: 1.5,
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          _globalStockType == 'Fresh' ? Icons.check_circle : Icons.swap_horiz,
-                          size: 18,
-                          color: _globalStockType == 'Fresh' ? Colors.green.shade800 : Colors.orange.shade900,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _globalStockType,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: _globalStockType == 'Fresh' ? Colors.green.shade800 : Colors.orange.shade900,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
             Row(
               children: [
                 Expanded(
@@ -597,65 +446,13 @@ class _SalesScreenState extends State<SalesScreen> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade700, foregroundColor: Colors.white),
                   icon: const Icon(Icons.person_add, size: 18),
                   label: const Text('New'),
                   onPressed: _navigateToAddNewParty,
                 ),
               ],
             ),
-
-            if (_pendingOrdersList.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade400),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.notifications_active, color: Colors.amber, size: 22),
-                        const SizedBox(width: 8),
-                        Text(
-                          _pendingOrdersList.length == 1
-                              ? 'Pending Order: ${_pendingOrdersList.first.orderNo}'
-                              : '${_pendingOrdersList.length} Pending Orders Found!',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade900, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        if (_pendingOrdersList.length > 1) ...[
-                          OutlinedButton(
-                            style: OutlinedButton.styleFrom(foregroundColor: Colors.amber.shade900, side: BorderSide(color: Colors.amber.shade800)),
-                            onPressed: _showSelectOrderDialog,
-                            child: const Text('View All'),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800, foregroundColor: Colors.white),
-                          icon: const Icon(Icons.download, size: 16),
-                          label: Text(_pendingOrdersList.length == 1 ? 'Load Order' : 'Load Latest'),
-                          onPressed: () => _loadSpecificOrderIntoBill(_pendingOrdersList.first),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
             const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -670,21 +467,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ],
             ),
             const SizedBox(height: 8),
-
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              color: Colors.teal.shade100,
-              child: const Row(
-                children: [
-                  Expanded(flex: 1, child: Text('No.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                  Expanded(flex: 4, child: Text('Product Name / SKU', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                  Expanded(flex: 1, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
-                  Expanded(flex: 2, child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
-                  Expanded(flex: 2, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.right)),
-                  SizedBox(width: 30),
-                ],
-              ),
-            ),
             Expanded(
               child: _cartItems.isEmpty
                   ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
@@ -693,41 +475,16 @@ class _SalesScreenState extends State<SalesScreen> {
                       itemBuilder: (context, index) {
                         final item = _cartItems[index];
                         double total = (item['qty'] as int) * (item['price'] as double);
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                          decoration: BoxDecoration(
-                            border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
-                          ),
-                          child: Row(
+                        return ListTile(
+                          title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('Qty: ${item['qty']} x ₹${item['price']}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Expanded(flex: 1, child: Text('${index + 1}', style: const TextStyle(fontSize: 12))),
-                              Expanded(
-                                flex: 4,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                    Text('SKU: ${item['sku']} (${item['stockType']})', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                flex: 1,
-                                child: Text('${item['qty']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Text('₹${item['price']}', style: const TextStyle(fontSize: 12), textAlign: TextAlign.center),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.teal), textAlign: TextAlign.right),
-                              ),
+                              Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
                               IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                                onPressed: () {
-                                  setState(() => _cartItems.removeAt(index));
-                                },
+                                onPressed: () => setState(() => _cartItems.removeAt(index)),
                               ),
                             ],
                           ),
@@ -737,7 +494,7 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const Divider(),
             
-            // BOTTOM CALCULATION & FREIGHT WITH DEFAULT ₹30 + MANUAL EXTRA CHARGES BOX
+            // BOTTOM CALCULATION & DROPDOWN CHARGES CONTAINER
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8)),
@@ -788,7 +545,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                   const SizedBox(height: 8),
 
-                  // FREIGHT CHARGE (Default Rate ₹30 with manual quantity/numbers 1, 2, 3...)
+                  // FREIGHT CHARGE (Default ₹30)
                   const Text('Freight Charge (Default ₹30 / unit):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
                   const SizedBox(height: 4),
                   Row(
@@ -819,14 +576,17 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                   const SizedBox(height: 8),
 
-                  // MANUAL EXTRA CHARGE INPUT (For any other custom charges)
+                  // EXTRA CHARGES DROPDOWN & AMOUNT SELECTION
                   Row(
                     children: [
                       Expanded(
                         flex: 2,
-                        child: TextField(
-                          controller: _extraChargeNameController,
-                          decoration: const InputDecoration(labelText: 'Other Charge Name', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedPresetCharge,
+                          isExpanded: true,
+                          items: _presetChargesList.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13)))).toList(),
+                          onChanged: (val) => setState(() => _selectedPresetCharge = val),
+                          decoration: const InputDecoration(labelText: 'Select Charge', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -842,13 +602,12 @@ class _SalesScreenState extends State<SalesScreen> {
                       IconButton(
                         icon: const Icon(Icons.add_circle, color: Colors.teal, size: 30),
                         onPressed: () {
-                          if (_extraChargeNameController.text.isNotEmpty) {
+                          if (_selectedPresetCharge != null) {
                             setState(() {
                               _extraChargesList.add({
-                                'name': _extraChargeNameController.text,
+                                'name': _selectedPresetCharge!,
                                 'amount': double.tryParse(_extraChargeAmountController.text) ?? 0.0,
                               });
-                              _extraChargeNameController.clear();
                               _extraChargeAmountController.text = '0';
                             });
                           }
@@ -857,7 +616,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     ],
                   ),
 
-                  // Display added extra charges if any
+                  // LIST OF ADDED EXTRA CHARGES
                   if (_extraChargesList.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Column(
@@ -882,16 +641,6 @@ class _SalesScreenState extends State<SalesScreen> {
                     ),
                   ],
 
-                  if (_isGstActive) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('CGST + SGST (18%):', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                        Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                      ],
-                    ),
-                  ],
                   const Divider(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
