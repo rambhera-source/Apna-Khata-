@@ -8,13 +8,13 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../database/database_helper.dart';
-import '../models/account.dart';
-import '../models/transaction_model.dart';
-import '../models/settings_model.dart'; 
-import '../models/inventory_model.dart'; 
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/account.dart';
+import 'package:accounting_app/models/transaction_model.dart';
+import 'package:accounting_app/models/settings_model.dart'; 
+import 'package:accounting_app/models/inventory_model.dart'; 
 import 'searchable_field.dart';
-import 'add_account_screen.dart';
+import '../account/add_account_screen.dart'; // ✅ Updated relative path for add_account_screen inside account folder
 
 class PurchaseScreen extends StatefulWidget {
   const PurchaseScreen({super.key});
@@ -295,7 +295,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
                 if (isDuplicate) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle से मौजूद है!'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('Yeh Product Name ya SKU ID पहले से मौजूद है!'), backgroundColor: Colors.red),
                   );
                   return;
                 }
