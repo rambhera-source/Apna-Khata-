@@ -8,11 +8,11 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../database/database_helper.dart';
-import '../models/account.dart';
-import '../models/transaction_model.dart';
-import '../models/settings_model.dart';
-import '../models/inventory_model.dart';
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/account.dart';
+import 'package:accounting_app/models/transaction_model.dart';
+import 'package:accounting_app/models/settings_model.dart';
+import 'package:accounting_app/models/inventory_model.dart';
 import 'searchable_field.dart';
 
 class PurchaseReturnScreen extends StatefulWidget {
@@ -315,7 +315,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Purchase Return Saved!'),
-        content: const Text('Kya aap is return का print / PDF लेना चाहते हैं?'),
+        content: const Text('Kya aap is return ka print / PDF lena chahte hain?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
           ElevatedButton.icon(
