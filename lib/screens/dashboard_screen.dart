@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import '../models/transaction_model.dart';
 
-// 🔥 Updated import paths since dashboard_screen.dart is now directly in lib/screens/
+// 🔥 Your Exact Original Screen Files Imports with Correct Folder Paths
 import 'sales/sales_screen.dart';
 import 'sales/sales_return_screen.dart';
 import 'purchase/purchase_screen.dart';
@@ -18,6 +18,8 @@ import 'account/parties_master_screen.dart';
 import 'order/orders_management_screen.dart';
 import 'Voucher/voucher_entry_screen.dart';
 import 'setting/settings_screen.dart';
+import 'manufacturing_screen.dart';
+import 'login_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final dynamic currentUser;
@@ -101,7 +103,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ORLIFE ERP Dashboard', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+        title: Text(
+          widget.currentUser != null ? 'Welcome, ${widget.currentUser.name ?? "User"}' : 'ORLIFE ERP Dashboard',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: const Color(0xFF1B365D),
         foregroundColor: Colors.white,
         actions: [
@@ -120,6 +125,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            UserAccountsDrawerHeader(
+              decoration: const BoxDecoration(color: Color(0xFF1B365D)),
+              accountName: Text(widget.currentUser?.name ?? 'ORLIFE User', style: const TextStyle(fontWeight: FontWeight.bold)),
+              accountEmail: Text(widget.currentUser?.username ?? 'ERP System'),
+              currentAccountPicture: const CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Icon(Icons.store, size: 35, color: Color(0xFF1B365D)),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.dashboard),
+              title: const Text('Dashboard'),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.point_of_sale),
+              title: const Text('Sales Bill'),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.shopping_cart),
+              title: const Text('Purchase'),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.people),
+              title: const Text('Parties Master'),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PartiesMasterScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.inventory_2),
+              title: const Text('Product Inventory'),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.book),
+              title: const Text('Day Book'),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.factory),
+              title: const Text('Manufacturing / BOM'),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ManufacturingScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.bar_chart),
+              title: const Text('Financial Reports'),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FinancialReportsScreen())),
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings'),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -130,6 +207,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // 🔥 TOP SUMMARY CARDS
                     Row(
                       children: [
                         Expanded(
@@ -176,8 +254,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
+
+                    // 🔥 MODULES GRID
                     const Text('Quick Operations & Masters', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
                     const SizedBox(height: 8),
+
                     GridView.count(
                       crossAxisCount: 3,
                       shrinkWrap: true,
@@ -197,6 +278,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _buildMenuCard(context, 'Reports', Icons.bar_chart, Colors.cyan.shade800, const FinancialReportsScreen()),
                         _buildMenuCard(context, 'Orders', Icons.shopping_bag, Colors.pink.shade700, const OrdersManagementScreen()),
                         _buildMenuCard(context, 'Voucher', Icons.receipt_long, Colors.blueGrey, const VoucherEntryScreen()),
+                        _buildMenuCard(context, 'Manufacturing', Icons.factory, Colors.deepPurple, const ManufacturingScreen()),
                         _buildMenuCard(context, 'Settings', Icons.settings_applications, Colors.grey.shade800, const SettingsScreen()),
                       ],
                     ),
