@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/user_model.dart';
-import 'dashboard_screen.dart'; // ✅ Imported to navigate back to Main Dashboard
-import 'login_screen.dart'; // ✅ Imported for logout redirection
+import 'dashboard_screen.dart'; // चूंकि यह फाइल खुद 'dashboard/' फोल्डर के अंदर है, इसलिए यह ऐसे ही रहेगा
+import '../login_screen.dart'; // ✅ Updated path for login screen in root screens folder
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   final UserAccount? currentUser;
