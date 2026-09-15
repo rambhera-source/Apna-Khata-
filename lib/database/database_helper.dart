@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/account.dart';
@@ -8,6 +10,7 @@ import '../models/settings_model.dart';
 import '../models/user_model.dart';
 import '../models/order_model.dart';
 import '../models/transaction_model.dart';
+import '../models/inventory_model.dart'; // 🔥 1. Inventory Model Import Add कर दिया गया है
 
 class DatabaseHelper {
   static late Isar isar;
@@ -27,8 +30,10 @@ class DatabaseHelper {
           SalesOrderSchema,
           OrderItemModelSchema,
           AccountingTransactionSchema,
+          InventoryItemSchema, // 🔥 2. Isar Schemas की लिस्ट में इसे जोड़ दिया गया है
         ],
         directory: dir.path,
+        inspector: true, // Debugging के लिए सहायक
       );
     } else {
       isar = Isar.getInstance()!;
@@ -66,7 +71,7 @@ class DatabaseHelper {
       ..gstin = gstin
       ..priceCategory = priceCategory
       ..creditLimitAmount = creditLimitAmount
-      ..creditDaysLimit = creditDaysLimit // ✅ Fixed typo here
+      ..creditDaysLimit = creditDaysLimit
       ..isCreditControlEnabled = isCreditControlEnabled
       ..openingBalance = openingBalance
       ..balanceType = balanceType
@@ -93,7 +98,7 @@ class DatabaseHelper {
     });
   }
 
-    static Future<UserProfile?> loginUser(String username, String password) async {
+  static Future<UserProfile?> loginUser(String username, String password) async {
     return await isar.userProfiles
         .filter()
         .usernameEqualTo(username)
