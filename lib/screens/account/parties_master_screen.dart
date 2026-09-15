@@ -101,15 +101,22 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv', 'txt'],
+        withData: true,
       );
 
-      if (result != null && result.files.single.path != null) {
-        final filePath = result.files.single.path!;
-        final input = File(filePath).openRead();
-        final fields = await input
-            .transform(utf8.decoder)
-            .transform(const CsvToListConverter())
-            .toList();
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.single;
+        List<List<dynamic>> fields = [];
+
+        if (file.bytes != null) {
+          // 🔥 Fixed: added allowMalformed: true to prevent decoding crashes on special characters
+          final csvString = utf8.decode(file.bytes!, allowMalformed: true);
+          fields = const CsvToListConverter().convert(csvString);
+        } else if (file.path != null) {
+          final bytes = await File(file.path!).readAsBytes();
+          final csvString = utf8.decode(bytes, allowMalformed: true);
+          fields = const CsvToListConverter().convert(csvString);
+        }
 
         int successCount = 0;
         List<List<dynamic>> failedRows = [];
@@ -212,7 +219,7 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
                 Text('❌ Failed / Skipped: ${failedRows.length > 1 ? failedRows.length - 1 : 0} parties', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                 if (errorFilePath != null) ...[
                   const SizedBox(height: 12),
-                  const Text('Kuch records duplicate ya invalid hone ki wajah से fail ho gaye hain. Aap failure report file download kar sakte hain.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Text('Kuch records duplicate ya invalid hone ki wajah से fail ho gaye हैं. Aap failure report file download kar sakte hain.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ],
             ),
