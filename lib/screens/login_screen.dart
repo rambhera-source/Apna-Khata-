@@ -4,8 +4,8 @@ import 'dart:convert';
 import 'package:isar/isar.dart';
 import '../database/database_helper.dart';
 import '../models/user_model.dart';
-import 'dashboard_screen.dart';
-import 'super_admin_dashboard_screen.dart';
+import 'dashboard/dashboard_screen.dart';                 // ✅ Updated path inside dashboard folder
+import 'dashboard/super_admin_dashboard_screen.dart'; // ✅ Updated path inside dashboard folder
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -91,7 +91,6 @@ class _LoginScreenState extends State<LoginScreen> {
     // 2. 🔥 Manufacturing Company Check (ID: admin, PIN: 4995) [Factory & BOM Unit]
     if (enteredId.toLowerCase() == _factoryAdminId.toLowerCase() && enteredPin == _factoryPin) {
       if (!mounted) return;
-      // You can pass or handle manufacturing specific session or route here if needed
       final factoryUser = UserAccount()
         ..name = 'Factory Admin'
         ..username = 'admin'
