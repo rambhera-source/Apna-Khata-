@@ -4,8 +4,8 @@ import 'dart:convert';
 import 'package:isar/isar.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/user_model.dart';
-import 'package:accounting_app/screens/dashboard/dashboard_screen.dart';                 // ✅ Updated package import for dashboard
-import 'package:accounting_app/screens/dashboard/super_admin_dashboard_screen.dart'; // ✅ Updated package import for super admin dashboard
+import 'package:accounting_app/screens/dashboard_screen.dart';                 // ✅ Updated package import for dashboard
+import 'package:accounting_app/screens/super_admin_dashboard_screen.dart'; // ✅ Updated package import for super admin dashboard
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
