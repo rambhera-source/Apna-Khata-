@@ -16,7 +16,6 @@ import 'package:accounting_app/screens/products/product_inventory_screen.dart';
 import 'package:accounting_app/screens/setting/settings_screen.dart';
 import 'package:accounting_app/screens/manufacturing_screen.dart';
 import 'package:accounting_app/screens/login_screen.dart';
-import 'package:accounting_app/screens/reports/all_history_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final UserAccount currentUser;
@@ -62,7 +61,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: Text('ORLIFE ERP - ${widget.currentUser.name} (${widget.currentUser.role})'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
-        // Top right logout icon removed as requested
       ),
 
       // 📱 CLEAN SIDEBAR (DRAWER) WITHOUT NUMBERS
@@ -95,7 +93,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
 
-            // 1. SALES
+            // SALES
             ExpansionTile(
               leading: const Icon(Icons.point_of_sale, color: Colors.teal),
               title: const Text('Sales', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -121,13 +119,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: const Text('Sales & Return History'),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AllHistoryScreen(initialType: 'Sales')));
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen()));
                   },
                 ),
               ],
             ),
 
-            // 2. PURCHASE
+            // PURCHASE
             ExpansionTile(
               leading: const Icon(Icons.shopping_cart, color: Colors.blue),
               title: const Text('Purchase', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -153,13 +151,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: const Text('Purchase History'),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AllHistoryScreen(initialType: 'Purchase')));
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen()));
                   },
                 ),
               ],
             ),
 
-            // 3. ACCOUNTS
+            // ACCOUNTS
             ListTile(
               leading: const Icon(Icons.people, color: Colors.indigo),
               title: const Text('Accounts'),
@@ -169,7 +167,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               },
             ),
 
-            // 4. ORDERS MANAGEMENT
+            // ORDERS MANAGEMENT
             ListTile(
               leading: const Icon(Icons.list_alt, color: Colors.amber),
               title: const Text('Orders Management'),
@@ -179,7 +177,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               },
             ),
 
-            // 5. PRODUCT INVENTORY
+            // PRODUCT INVENTORY
             ListTile(
               leading: const Icon(Icons.inventory, color: Colors.orange),
               title: const Text('Product Inventory'),
@@ -189,7 +187,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               },
             ),
 
-            // 6. VOUCHER ENTRY
+            // VOUCHER ENTRY
             ListTile(
               leading: const Icon(Icons.payment, color: Colors.red),
               title: const Text('Voucher Entry'),
@@ -199,7 +197,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               },
             ),
 
-            // 7. REPORTS (Daybook, Financial Reports, Ledger)
+            // REPORTS
             ExpansionTile(
               leading: const Icon(Icons.analytics, color: Colors.deepPurple),
               title: const Text('Reports', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -231,7 +229,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
 
-            // 8. SETTINGS & BACKUP
+            // SETTINGS & BACKUP
             ListTile(
               leading: const Icon(Icons.settings, color: Colors.blueGrey),
               title: const Text('Settings (Backup & Master)'),
@@ -263,7 +261,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(16.0),
               child: ListView(
                 children: [
-                  // WORKABLE TOTAL SALES & TOTAL PURCHASES CARDS
                   Row(
                     children: [
                       Expanded(
@@ -271,7 +268,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const AllHistoryScreen(initialType: 'Sales')),
+                              MaterialPageRoute(builder: (context) => const DayBookScreen()),
                             );
                           },
                           child: Card(
@@ -297,7 +294,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const AllHistoryScreen(initialType: 'Purchase')),
+                              MaterialPageRoute(builder: (context) => const DayBookScreen()),
                             );
                           },
                           child: Card(
