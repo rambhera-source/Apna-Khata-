@@ -10,10 +10,10 @@ import 'package:accounting_app/screens/purchase/purchase_return_screen.dart';
 import 'package:accounting_app/screens/reports/ledger_screen.dart';
 import 'package:accounting_app/screens/order/orders_management_screen.dart';
 import 'package:accounting_app/screens/reports/financial_reports_screen.dart';
-import 'package:accounting_app/screens/reports/day_book_screen.dart';
+import 'package:accounting_app/screens/day_book_screen.dart'; // ✅ Correct path
 import 'package:accounting_app/screens/account/parties_master_screen.dart';
 import 'package:accounting_app/screens/products/product_inventory_screen.dart';
-import 'package:accounting_app/screens/setting/company_settings_screen.dart';
+import 'package:accounting_app/screens/company_settings_screen.dart'; // ✅ Correct path
 import 'package:accounting_app/screens/manufacturing_screen.dart';
 import 'package:accounting_app/screens/login_screen.dart';
 
