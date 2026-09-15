@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
-import '../database/database_helper.dart';
-import '../models/transaction_model.dart';
-import '../models/account.dart';
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/transaction_model.dart';
+import 'package:accounting_app/models/account.dart';
 
 class FinancialReportsScreen extends StatefulWidget {
   const FinancialReportsScreen({super.key});
