@@ -219,17 +219,31 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
   Future<void> _importCsvFile() async {
     try {
+      // 🔥 Updated to FileType.any and withData: true for reliable file picking across devices
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv', 'txt'],
+        type: FileType.any,
+        withData: true,
       );
 
-      if (result != null && result.files.single.path != null) {
-        final filePath = result.files.single.path!;
-        final input = File(filePath).openRead();
-        final fields = await input.transform(utf8.decoder).transform(const CsvToListConverter()).toList();
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.single;
+        List<List<dynamic>> fields = [];
 
-        if (fields.isEmpty) return;
+        if (file.bytes != null) {
+          final csvString = utf8.decode(file.bytes!);
+          fields = const CsvToListConverter().convert(csvString);
+        } else if (file.path != null) {
+          final input = File(file.path!).openRead();
+          fields = await input.transform(utf8.decoder).transform(const CsvToListConverter()).toList();
+        }
+
+        if (fields.isEmpty) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Selected file is empty or invalid!'), backgroundColor: Colors.orange),
+          );
+          return;
+        }
 
         int successCount = 0;
         int duplicateCount = 0;
@@ -291,10 +305,14 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         if (!mounted) return;
         _loadInventory();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('सफलतापूर्वक $successCount प्रोडक्ट्स इम्पोर्ट हो गए!'), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text('सफलतापूर्वक $successCount प्रोडक्ट्स इम्पोर्ट हो गए! (Duplicate skipped: $duplicateCount)'), 
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('इम्पोर्ट करने में एरर आया: $e'), backgroundColor: Colors.red),
       );
@@ -518,7 +536,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
                 if (isDuplicate) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle से मौजूद है!'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है!'), backgroundColor: Colors.red),
                   );
                   return;
                 }
