@@ -21,6 +21,7 @@ import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'add_account_screen.dart';
 import 'parties_master_screen.dart';
+import 'backup_settings_screen.dart'; // 🔥 Backup & Restore Screen Imported
 
 class DashboardScreen extends StatefulWidget {
   final UserAccount? currentUser;
@@ -41,7 +42,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // 📌 Module Visibility Map
   final Map<String, bool> _visibleModules = {
-    'accounts_master': true, // 🔥 Master List Visibility
+    'accounts_master': true, 
     'sale_billing': true,
     'sales_return': true,
     'purchase': true,
@@ -143,7 +144,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (context) => const AddAccountScreen())).then((_) => _loadDashboardData());
   }
 
-  // 🔥 Open All Parties / Accounts Master Screen
   void _openAccountsMaster() {
     if (Navigator.canPop(context)) Navigator.pop(context);
     Navigator.push(context, MaterialPageRoute(builder: (context) => const PartiesMasterScreen())).then((_) => _loadDashboardData());
@@ -213,6 +213,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())).then((_) => _loadDashboardData());
   }
 
+  // 📂 Open Backup & Restore Screen
+  void _openBackupSettings() {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const BackupSettingsScreen())).then((_) => _loadDashboardData());
+  }
+
   void _handleLogout() {
     if (Navigator.canPop(context)) Navigator.pop(context);
     Navigator.pushReplacement(
@@ -253,6 +259,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 icon: const Icon(Icons.dashboard_customize),
                 tooltip: 'Customize Home Icons',
                 onPressed: _showCustomizeDialog,
+              ),
+              IconButton(
+                icon: const Icon(Icons.backup),
+                tooltip: 'Backup & Restore',
+                onPressed: _openBackupSettings,
               ),
               IconButton(
                 icon: const Icon(Icons.settings),
@@ -357,10 +368,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: const Text('General Voucher'),
                   onTap: _openGeneralVoucher,
                 ),
+                // 🔥 Renamed to 'Settings' and linked to Backup & Restore Manager
                 ListTile(
                   leading: const Icon(Icons.settings, color: Colors.blueGrey),
-                  title: const Text('Settings & Backup'),
-                  onTap: _openSettings,
+                  title: const Text('Settings'),
+                  onTap: _openBackupSettings, 
                 ),
                 const Divider(),
                 ListTile(
@@ -380,7 +392,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     bool isDesktop = constraints.maxWidth > 850;
 
                     if (isDesktop) {
-                      // ================= PC / DESKTOP LAYOUT =================
                       return Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Row(
@@ -399,7 +410,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                             ),
                             const SizedBox(width: 16),
-                            // Right Side: PC Quick Shortcuts Panel
                             Expanded(
                               flex: 1,
                               child: Card(
@@ -440,7 +450,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         _buildShortcutButton('BOM/Mfg [Ctrl+M]', Icons.precision_manufacturing, Colors.deepPurple, () => _openManufacturing(true)),
                                       ],
                                       const SizedBox(height: 6),
-                                      _buildShortcutButton('Settings', Icons.settings, Colors.blueGrey, _openSettings),
+                                      _buildShortcutButton('Settings', Icons.settings, Colors.blueGrey, _openBackupSettings),
                                       const Divider(),
                                       _buildShortcutButton('Logout', Icons.logout, Colors.red, _handleLogout),
                                     ],
@@ -452,7 +462,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       );
                     } else {
-                      // ================= MOBILE LAYOUT =================
                       return Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Column(
@@ -581,7 +590,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       tiles.add(_buildActionTile(icon: Icons.note_alt, iconColor: Colors.brown, title: 'General Voucher', subtitle: 'Journal & general accounting entries', onTap: _openGeneralVoucher));
     }
     if (_visibleModules['settings']!) {
-      tiles.add(_buildActionTile(icon: Icons.settings, iconColor: Colors.blueGrey, title: 'Settings & Backup', subtitle: 'Configure software & data backup', onTap: _openSettings));
+      tiles.add(_buildActionTile(icon: Icons.settings, iconColor: Colors.blueGrey, title: 'Settings', subtitle: 'Configure software & data backup', onTap: _openBackupSettings));
     }
 
     List<Widget> spacedTiles = [];
@@ -607,7 +616,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       {'key': 'payment', 'icon': Icons.payment, 'color': Colors.red, 'title': 'Payment', 'onTap': _openPayment},
       {'key': 'receipt', 'icon': Icons.request_quote, 'color': Colors.teal, 'title': 'Receipt', 'onTap': _openReceipt},
       {'key': 'general_voucher', 'icon': Icons.note_alt, 'color': Colors.brown, 'title': 'Gen Voucher', 'onTap': _openGeneralVoucher},
-      {'key': 'settings', 'icon': Icons.settings, 'color': Colors.blueGrey, 'title': 'Settings', 'onTap': _openSettings},
+      {'key': 'settings', 'icon': Icons.settings, 'color': Colors.blueGrey, 'title': 'Settings', 'onTap': _openBackupSettings},
     ];
 
     final List<Map<String, dynamic>> filteredItems = allItems.where((item) {
