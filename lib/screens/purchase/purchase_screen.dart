@@ -16,6 +16,7 @@ import 'package:accounting_app/models/settings_model.dart';
 import 'package:accounting_app/models/inventory_model.dart';
 import '../searchable_field.dart';
 import '../account/add_account_screen.dart';
+import 'product_inventory_screen.dart';
 
 class PurchaseScreen extends StatefulWidget {
   const PurchaseScreen({super.key});
@@ -28,27 +29,22 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _billNoController = TextEditingController(text: 'PUR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
-  // Freight Controllers (Default rate ₹30)
-  final TextEditingController _freightQtyController = TextEditingController(text: '1');
-  final TextEditingController _freightRateController = TextEditingController(text: '30');
-
-  // Discount Controllers
-  final TextEditingController _discountValueController = TextEditingController(text: '0');
-  String _discountType = '₹';
+  // Inline Product Search & Input Controllers
+  final TextEditingController _inlineQtyController = TextEditingController(text: '1');
+  final TextEditingController _inlinePriceController = TextEditingController(text: '0');
 
   // Dynamic Charges List loaded from Settings
   List<Map<String, dynamic>> _presetChargesList = [];
-  Map<String, dynamic>? _selectedPresetCharge;
-  final TextEditingController _extraChargeAmountController = TextEditingController(text: '0');
   
-  // List to hold multiple added extra charges
-  final List<Map<String, dynamic>> _extraChargesList = [];
+  // Dynamic Bill Level Charges / Freight / Discounts rows
+  final List<Map<String, dynamic>> _billChargesList = [];
 
   // Selected Bill Date Variable
   DateTime _selectedDate = DateTime.now();
 
   List<String> _allAccounts = [];
   List<InventoryItem> _allInventoryItems = [];
+  InventoryItem? _selectedInlineProduct;
   
   final List<Map<String, dynamic>> _cartItems = [];
   String _paymentMode = 'Cash';
@@ -60,8 +56,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   bool _isGstActive = false;
   String _companyGstin = '';
   double _gstRate = 18.0;
-
-  final List<String> _priceCategories = List.generate(26, (index) => String.fromCharCode(65 + index));
 
   @override
   void initState() {
@@ -75,20 +69,17 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
 
     List<Map<String, dynamic>> loadedCharges = [];
+    loadedCharges.add({'name': 'Freight Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 30.0});
+    loadedCharges.add({'name': 'Discount', 'type': 'Less', 'mode': 'Fixed', 'value': 0.0});
+
     if (settings != null) {
       try {
-        loadedCharges = settings.extraCharges.map((e) {
+        for (var e in settings.extraCharges) {
           try {
-            return Map<String, dynamic>.from(jsonDecode(e));
-          } catch (_) {
-            return {'name': e.toString(), 'type': 'Add', 'mode': 'Fixed', 'value': 0.0};
-          }
-        }).toList();
-      } catch (_) {
-        loadedCharges = [
-          {'name': 'Packing Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 0.0},
-        ];
-      }
+            loadedCharges.add(Map<String, dynamic>.from(jsonDecode(e)));
+          } catch (_) {}
+        }
+      } catch (_) {}
     }
 
     setState(() {
@@ -99,10 +90,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         _companyGstin = settings.gstin ?? '';
       }
       _presetChargesList = loadedCharges;
-      if (_presetChargesList.isNotEmpty) {
-        _selectedPresetCharge = _presetChargesList.first;
-        _extraChargeAmountController.text = _selectedPresetCharge!['value'].toString();
-      }
     });
   }
 
@@ -121,7 +108,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     }
   }
 
-  // 🆕 Date Picker
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -136,116 +122,40 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     }
   }
 
-  // 🛒 Add Purchase Item Popup
-  void _addItemToCart() {
-    if (_allInventoryItems.isEmpty) {
-      _showAddEditProductDialogForPurchase();
+  // ➕ Add item directly from inline row
+  void _addInlineItemToCart() {
+    if (_selectedInlineProduct == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kripya valid product select karein!'), backgroundColor: Colors.red),
+      );
       return;
     }
 
-    InventoryItem selectedItem = _allInventoryItems.first;
-    final TextEditingController qtyController = TextEditingController(text: '1');
-    final TextEditingController priceController = TextEditingController(text: selectedItem.purchasePrice.toString());
-    String selectedStockType = _globalStockType;
+    int q = int.tryParse(_inlineQtyController.text) ?? 1;
+    double pr = double.tryParse(_inlinePriceController.text) ?? _selectedInlineProduct!.purchasePrice;
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Add Purchase Item'),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(foregroundColor: Colors.blue.shade800),
-                    icon: const Icon(Icons.add_box, size: 18),
-                    label: const Text('Add New Product'),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _showAddEditProductDialogForPurchase();
-                    },
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<InventoryItem>(
-                    value: selectedItem,
-                    items: _allInventoryItems.map((p) => DropdownMenuItem(value: p, child: Text('${p.itemName} (SKU: ${p.sku ?? "-"})'))).toList(),
-                    onChanged: (val) {
-                      setDialogState(() {
-                        selectedItem = val!;
-                        priceController.text = selectedItem.purchasePrice.toString();
-                      });
-                    },
-                    decoration: const InputDecoration(labelText: 'Select Product', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: qtyController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: priceController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  // 🆕 Stock Type Selection
-                  DropdownButtonFormField<String>(
-                    value: selectedStockType,
-                    items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
-                    onChanged: (val) {
-                      setDialogState(() {
-                        selectedStockType = val!;
-                      });
-                    },
-                    decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder()),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
-                  onPressed: () {
-                    int q = int.tryParse(qtyController.text) ?? 1;
-                    double pr = double.tryParse(priceController.text) ?? selectedItem.purchasePrice;
-                    
-                    if (q <= 0 || pr <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Quantity aur Price > 0 honi chahiye!'), backgroundColor: Colors.red),
-                      );
-                      return;
-                    }
+    if (q <= 0 || pr <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Quantity aur Price > 0 honi chahiye!'), backgroundColor: Colors.red),
+      );
+      return;
+    }
 
-                    setState(() {
-                      _cartItems.add({
-                        'name': selectedItem.itemName,
-                        'sku': selectedItem.sku ?? '-',
-                        'qty': q,
-                        'price': pr,
-                        'stockType': selectedStockType,
-                      });
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Add to Bill'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+    setState(() {
+      _cartItems.add({
+        'name': _selectedInlineProduct!.itemName,
+        'sku': _selectedInlineProduct!.sku ?? '-',
+        'qty': q,
+        'price': pr,
+        'stockType': _globalStockType,
+      });
+
+      _selectedInlineProduct = null;
+      _inlineQtyController.text = '1';
+      _inlinePriceController.text = '0';
+    });
   }
 
-  // 🆕 Edit Item in Cart
   void _editCartItem(int index) {
     final item = _cartItems[index];
     final qtyController = TextEditingController(text: item['qty'].toString());
@@ -296,13 +206,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     int q = int.tryParse(qtyController.text) ?? 1;
                     double pr = double.tryParse(priceController.text) ?? item['price'];
                     
-                    if (q <= 0 || pr <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Invalid values!'), backgroundColor: Colors.red),
-                      );
-                      return;
-                    }
-
                     setState(() {
                       _cartItems[index]['qty'] = q;
                       _cartItems[index]['price'] = pr;
@@ -320,204 +223,36 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     );
   }
 
-  void _showAddEditProductDialogForPurchase() {
-    final TextEditingController nameController = TextEditingController();
-    final TextEditingController skuController = TextEditingController();
-    final TextEditingController openingStockController = TextEditingController(text: '0');
-    final TextEditingController qtyController = TextEditingController(text: '0');
-    final TextEditingController purchasePriceController = TextEditingController(text: '0');
-    final TextEditingController tierPriceController = TextEditingController(text: '0');
-    
-    Set<String> uniqueCategories = _allInventoryItems
-        .map((item) => item.category ?? '')
-        .where((cat) => cat.trim().isNotEmpty)
-        .toSet();
-    if (uniqueCategories.isEmpty) uniqueCategories = {'General', 'Charger', 'Power Bank'};
-
-    String selectedCategory = uniqueCategories.first;
-    String priceCategory = 'A';
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add New Inventory Item'),
-          content: SizedBox(
-            width: 400,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(labelText: 'Product Name (Mandatory & Unique) *', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: skuController,
-                    decoration: const InputDecoration(labelText: 'SKU ID (Mandatory & Unique) *', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: selectedCategory,
-                    items: uniqueCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                    onChanged: (val) => setDialogState(() => selectedCategory = val ?? 'General'),
-                    decoration: const InputDecoration(labelText: 'Product Category', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: openingStockController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Opening Stock', border: OutlineInputBorder()),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: qtyController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Closing Qty *', border: OutlineInputBorder()),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: purchasePriceController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: DropdownButtonFormField<String>(
-                          value: priceCategory,
-                          items: _priceCategories.map((cat) => DropdownMenuItem(value: cat, child: Text('Tier $cat'))).toList(),
-                          onChanged: (val) => setDialogState(() => priceCategory = val ?? 'A'),
-                          decoration: const InputDecoration(labelText: 'Price Tier', border: OutlineInputBorder()),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 3,
-                        child: TextField(
-                          controller: tierPriceController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(labelText: 'Tier $priceCategory Price (₹) *', border: const OutlineInputBorder()),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
-              onPressed: () async {
-                String name = nameController.text.trim();
-                String sku = skuController.text.trim();
-
-                if (name.isEmpty || sku.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Product Name aur SKU ID dono mandatory hain!'), backgroundColor: Colors.red),
-                  );
-                  return;
-                }
-
-                bool isDuplicate = _allInventoryItems.any((item) => 
-                  item.itemName.toLowerCase() == name.toLowerCase() || 
-                  (sku.isNotEmpty && item.sku != null && item.sku!.toLowerCase() == sku.toLowerCase())
-                );
-
-                if (isDuplicate) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID पहले से मौजूद है!'), backgroundColor: Colors.red),
-                  );
-                  return;
-                }
-
-                await DatabaseHelper.isar.writeTxn(() async {
-                  InventoryItem newItem = InventoryItem()
-                    ..itemName = name
-                    ..sku = sku
-                    ..category = selectedCategory
-                    ..openingStock = double.tryParse(openingStockController.text) ?? 0.0
-                    ..stockQuantity = double.tryParse(qtyController.text) ?? 0.0
-                    ..purchasePrice = double.tryParse(purchasePriceController.text) ?? 0.0
-                    ..priceA = double.tryParse(tierPriceController.text) ?? 0.0
-                    ..priceCategory = priceCategory
-                    ..stockType = 'Fresh';
-
-                  await DatabaseHelper.isar.inventoryItems.put(newItem);
-                });
-
-                if (!mounted) return;
-                Navigator.pop(context);
-                await _loadDropdownDataAndSettings();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('New Product Added Successfully!'), backgroundColor: Colors.green),
-                );
-              },
-              child: const Text('Save & Continue'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // 🧮 Calculations
   double get _subTotal {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  double get _freightTotalAmount {
-    int qty = int.tryParse(_freightQtyController.text) ?? 0;
-    double rate = double.tryParse(_freightRateController.text) ?? 0.0;
-    return qty * rate;
-  }
+  double get _billChargesTotal {
+    double total = 0.0;
+    for (var charge in _billChargesList) {
+      double qty = charge['qty'] is double ? charge['qty'] : double.tryParse(charge['qty'].toString()) ?? 1.0;
+      double rate = charge['rate'] is double ? charge['rate'] : double.tryParse(charge['rate'].toString()) ?? 0.0;
+      double amt = qty * rate;
 
-  double get _discountAmount {
-    double val = double.tryParse(_discountValueController.text) ?? 0.0;
-    if (_discountType == '%') {
-      return (_subTotal * val) / 100;
-    }
-    return val;
-  }
-
-  double get _extraChargesTotal {
-    double totalNet = 0.0;
-    for (var item in _extraChargesList) {
-      double amt = item['amount'] as double;
-      if (item['mode'] == 'Percentage') {
-        amt = (_subTotal * amt) / 100;
-      }
-      if (item['type'] == 'Add') {
-        totalNet += amt;
+      if (charge['type'] == 'Less' || charge['name'].toString().toLowerCase().contains('discount')) {
+        total -= amt;
       } else {
-        totalNet -= amt;
+        total += amt;
       }
     }
-    return totalNet;
+    return total;
   }
 
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    double taxableValue = _subTotal - _discountAmount + _freightTotalAmount + _extraChargesTotal;
+    double taxableValue = _subTotal + _billChargesTotal;
     if (taxableValue < 0) taxableValue = 0;
     return taxableValue * (_gstRate / 100);
   }
 
   double get _grandTotal {
-    double total = _subTotal - _discountAmount + _freightTotalAmount + _extraChargesTotal + _taxAmount;
+    double total = _subTotal + _billChargesTotal + _taxAmount;
     return total < 0 ? 0 : total;
   }
 
@@ -590,10 +325,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
-                        if (_discountAmount > 0) pw.Text('Discount: - ₹ ${_discountAmount.toStringAsFixed(2)}'),
-                        if (_freightTotalAmount > 0) pw.Text('Freight Charge: + ₹ ${_freightTotalAmount.toStringAsFixed(2)}'),
-                        for (var extra in _extraChargesList)
-                          pw.Text('${extra['name']} (${extra['type']}): ${extra['type'] == 'Add' ? '+' : '-'} ₹ ${(extra['amount'] as double).toStringAsFixed(2)}'),
+                        for (var charge in _billChargesList)
+                          pw.Text('${charge['name']} (${charge['qty']} x ₹${charge['rate']}): ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
                         if (_isGstActive) pw.Text('GST (${_gstRate.toStringAsFixed(1)}%): + ₹ ${_taxAmount.toStringAsFixed(2)}'),
                         pw.Divider(),
                         pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
@@ -657,373 +390,465 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Purchase Entry Successfully Saved & Stock Updated!'), backgroundColor: Colors.green));
     _generateAndPrintOrShareBill(isShare: false);
-    
-    // Clear for next purchase
     _clearBill();
   }
 
-  // 🆕 Clear Bill
   void _clearBill() {
     setState(() {
       _cartItems.clear();
       _partyController.clear();
       _billNoController.text = 'PUR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-      _discountValueController.text = '0';
-      _extraChargesList.clear();
-      _freightQtyController.text = '1';
-      _freightRateController.text = '30';
+      _billChargesList.clear();
     });
+  }
+
+  // 🛡️ Smart Exit Warning Dialog
+  Future<bool> _onWillPop() async {
+    if (_cartItems.isEmpty && _partyController.text.isEmpty) {
+      return true;
+    }
+
+    final shouldPop = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('Discard Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: const Text('Kya aap waqai is purchase bill ko exit karna chahte hain? Aapke add kiye gaye items hat jayenge.', style: TextStyle(fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, elevation: 0),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes, Exit'),
+          ),
+        ],
+      ),
+    );
+
+    return shouldPop ?? false;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_isGstActive ? 'Purchase Entry (GST Mode)' : 'Purchase Entry (Simple Mode)'),
-        backgroundColor: Colors.blue.shade800,
-        foregroundColor: Colors.white,
-        actions: [
-          // 🆕 Date Selection Button
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Center(
-              child: GestureDetector(
-                onTap: _selectDate,
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today, size: 16),
-                    const SizedBox(width: 4),
-                    Text(DateFormat('dd-MMM-yyyy').format(_selectedDate), style: const TextStyle(fontSize: 12)),
-                  ],
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_isGstActive ? 'Purchase Entry (GST Mode)' : 'Purchase Entry (Simple Mode)'),
+          backgroundColor: Colors.blue.shade800,
+          foregroundColor: Colors.white,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Center(
+                child: GestureDetector(
+                  onTap: _selectDate,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today, size: 16),
+                      const SizedBox(width: 4),
+                      Text(DateFormat('dd-MMM-yyyy').format(_selectedDate), style: const TextStyle(fontSize: 12)),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Bill Number Row
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _billNoController,
-                    decoration: const InputDecoration(
-                      labelText: 'Bill Number',
-                      border: OutlineInputBorder(),
-                      isDense: true,
+          ],
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Bill Number Row (Editable / Modifiable)
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _billNoController,
+                      decoration: const InputDecoration(
+                        labelText: 'Bill Number (Editable)',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                // 🆕 Stock Type Dropdown
-                SizedBox(
-                  width: 140,
-                  child: DropdownButtonFormField<String>(
-                    value: _globalStockType,
-                    items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
-                    onChanged: (val) => setState(() => _globalStockType = val!),
-                    decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder(), isDense: true),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 140,
+                    child: DropdownButtonFormField<String>(
+                      value: _globalStockType,
+                      items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
+                      onChanged: (val) => setState(() => _globalStockType = val!),
+                      decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder(), isDense: true),
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: SearchableField(
-                    label: 'Supplier / Party Name *',
-                    items: _allAccounts,
-                    controller: _partyController,
-                    onSelected: (val) {
-                      _partyController.text = val;
-                    },
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: SearchableField(
+                      label: 'Supplier / Party Name *',
+                      items: _allAccounts,
+                      controller: _partyController,
+                      onSelected: (val) {
+                        _partyController.text = val;
+                      },
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                    ),
+                    icon: const Icon(Icons.person_add, size: 18),
+                    label: const Text('New'),
+                    onPressed: _navigateToAddNewParty,
                   ),
-                  icon: const Icon(Icons.person_add, size: 18),
-                  label: const Text('New'),
-                  onPressed: _navigateToAddNewParty,
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            const Text('Items Purchased:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 8),
-            Expanded(
-              child: _cartItems.isEmpty
-                  ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
-                  : ListView.builder(
-                      itemCount: _cartItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _cartItems[index];
-                        double total = (item['qty'] as int) * (item['price'] as double);
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          child: ListTile(
-                            title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('SKU: ${item['sku']} | Type: ${item['stockType']} | Qty: ${item['qty']} x ₹${item['price']}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                                IconButton(
-                                  icon: const Icon(Icons.edit, color: Colors.orange, size: 18),
-                                  onPressed: () => _editCartItem(index),
-                                  tooltip: 'Edit Item',
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                                  onPressed: () => setState(() => _cartItems.removeAt(index)),
-                                  tooltip: 'Delete Item',
-                                ),
-                              ],
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // 🔥 INLINE PRODUCT SEARCH SECTION
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Add Product to Purchase:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue)),
+                    const SizedBox(height: 6),
+                    Autocomplete<InventoryItem>(
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        if (textEditingValue.text.isEmpty) {
+                          return const Iterable<InventoryItem>.empty();
+                        }
+                        return _allInventoryItems.where((item) =>
+                          item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                          (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
+                        );
+                      },
+                      displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
+                      onSelected: (InventoryItem selection) {
+                        setState(() {
+                          _selectedInlineProduct = selection;
+                          _inlinePriceController.text = selection.purchasePrice.toString();
+                        });
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            labelText: 'Search Product Name or SKU...',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            suffixIcon: controller.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: () {
+                                      controller.clear();
+                                      setState(() => _selectedInlineProduct = null);
+                                    },
+                                  )
+                                : null,
+                          ),
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4,
+                            child: SizedBox(
+                              width: 320,
+                              height: 200,
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                itemCount: options.length + 1,
+                                itemBuilder: (context, index) {
+                                  if (index == options.length) {
+                                    return ListTile(
+                                      tileColor: Colors.blue.shade100,
+                                      leading: const Icon(Icons.add_circle, color: Colors.blue),
+                                      title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                                      onTap: () async {
+                                        await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
+                                        );
+                                        await _loadDropdownDataAndSettings();
+                                      },
+                                    );
+                                  }
+                                  final item = options.elementAt(index);
+                                  return ListTile(
+                                    title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 11)),
+                                    onTap: () => onSelected(item),
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         );
                       },
                     ),
-            ),
-            const Divider(),
-            
-            // BOTTOM CALCULATION CONTAINER
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  
-                  // DISCOUNT SECTION
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Discount:', style: TextStyle(fontSize: 13)),
+                    if (_selectedInlineProduct != null) ...[
+                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          SizedBox(
-                            width: 80,
+                          Expanded(
                             child: TextField(
-                              controller: _discountValueController,
+                              controller: _inlineQtyController,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
-                              onChanged: (_) => setState(() {}),
+                              decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          SizedBox(
-                            width: 60,
-                            child: DropdownButtonFormField<String>(
-                              value: _discountType,
-                              items: const [
-                                DropdownMenuItem(value: '₹', child: Text('₹')),
-                                DropdownMenuItem(value: '%', child: Text('%')),
-                              ],
-                              onChanged: (val) => setState(() => _discountType = val!),
-                              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _inlinePriceController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder(), isDense: true),
                             ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+                            onPressed: _addInlineItemToCart,
+                            child: const Text('Add'),
                           ),
                         ],
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  // FREIGHT CHARGE
-                  const Text('Freight Charge (Default ₹30 / unit):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue)),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _freightQtyController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'No. (1, 2, 3...)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _freightRateController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Rate (₹)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '= ₹ ${_freightTotalAmount.toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  // EXTRA CHARGES DROPDOWN
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: DropdownButtonFormField<Map<String, dynamic>>(
-                          value: _selectedPresetCharge,
-                          isExpanded: true,
-                          items: _presetChargesList.map((c) => DropdownMenuItem(
-                            value: c, 
-                            child: Text('${c['name']} (${c['type'] == 'Add' ? '+' : '-'})', style: TextStyle(fontSize: 13, color: c['type'] == 'Add' ? Colors.blue.shade900 : Colors.red.shade900)),
-                          )).toList(),
-                          onChanged: (val) {
-                            setState(() {
-                              _selectedPresetCharge = val;
-                              if (val != null) {
-                                _extraChargeAmountController.text = val['value'].toString();
-                              }
-                            });
-                          },
-                          decoration: const InputDecoration(labelText: 'Select Charge / Discount', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        flex: 1,
-                        child: TextField(
-                          controller: _extraChargeAmountController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Value', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle, color: Colors.blue, size: 30),
-                        onPressed: () {
-                          if (_selectedPresetCharge != null) {
-                            setState(() {
-                              _extraChargesList.add({
-                                'name': _selectedPresetCharge!['name'],
-                                'type': _selectedPresetCharge!['type'],
-                                'mode': _selectedPresetCharge!['mode'],
-                                'amount': double.tryParse(_extraChargeAmountController.text) ?? 0.0,
-                              });
-                            });
-                          }
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text('Items Purchased:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 6),
+              Expanded(
+                child: _cartItems.isEmpty
+                    ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
+                    : ListView.builder(
+                        itemCount: _cartItems.length,
+                        itemBuilder: (context, index) {
+                          final item = _cartItems[index];
+                          double total = (item['qty'] as int) * (item['price'] as double);
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 3),
+                            child: ListTile(
+                              dense: true,
+                              title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('SKU: ${item['sku']} | Type: ${item['stockType']} | Qty: ${item['qty']} x ₹${item['price']}'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Colors.orange, size: 16),
+                                    onPressed: () => _editCartItem(index),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                    onPressed: () => setState(() => _cartItems.removeAt(index)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
                         },
                       ),
-                    ],
-                  ),
-
-                  // LIST OF ADDED EXTRA CHARGES
-                  if (_extraChargesList.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Column(
-                      children: List.generate(_extraChargesList.length, (i) {
-                        final ex = _extraChargesList[i];
-                        bool isAdd = ex['type'] == 'Add';
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('• ${ex['name']} (${ex['mode']})', style: TextStyle(fontSize: 12, color: isAdd ? Colors.blue.shade800 : Colors.red.shade800, fontWeight: FontWeight.bold)),
-                            Row(
-                              children: [
-                                Text('${isAdd ? "+" : "-"} ${ex['amount']}${ex['mode'] == 'Percentage' ? '%' : '₹'}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isAdd ? Colors.blue.shade800 : Colors.red.shade800)),
-                                IconButton(
-                                  icon: const Icon(Icons.close, size: 14, color: Colors.red),
-                                  onPressed: () => setState(() => _extraChargesList.removeAt(i)),
-                                ),
-                              ],
-                            ),
-                          ],
-                        );
-                      }),
-                    ),
-                  ],
-
-                  const Divider(),
-                  // 🆕 GST Row
-                  if (_isGstActive)
+              ),
+              const Divider(),
+              
+              // 🔥 BOTTOM CALCULATION & DYNAMIC CHARGES SECTION
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('GST (${_gstRate.toStringAsFixed(1)}%):', style: const TextStyle(fontSize: 13)),
-                        Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                        const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                       ],
                     ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      SizedBox(
-                        width: 140,
-                        child: DropdownButtonFormField<String>(
-                          value: _paymentMode,
-                          items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                          onChanged: (val) => setState(() => _paymentMode = val!),
-                          decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
+                    const SizedBox(height: 8),
+
+                    const Text('Freight & Additional Charges:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue)),
+                    const SizedBox(height: 4),
+
+                    ...List.generate(_billChargesList.length, (index) {
+                      final charge = _billChargesList[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(charge['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                            SizedBox(
+                              width: 60,
+                              child: TextField(
+                                controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(labelText: 'No.', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(6)),
+                                onChanged: (val) {
+                                  charge['qty'] = double.tryParse(val) ?? 1.0;
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            SizedBox(
+                              width: 75,
+                              child: TextField(
+                                controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(labelText: 'Rate(₹)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(6)),
+                                onChanged: (val) {
+                                  charge['rate'] = double.tryParse(val) ?? 0.0;
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                              onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                            ),
+                          ],
                         ),
-                      ),
-                      Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
-                    ],
+                      );
+                    }),
+
+                    const SizedBox(height: 6),
+                    Autocomplete<Map<String, dynamic>>(
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        if (textEditingValue.text.isEmpty) {
+                          return const Iterable<Map<String, dynamic>>.empty();
+                        }
+                        return _presetChargesList.where((c) =>
+                          c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase())
+                        );
+                      },
+                      displayStringForOption: (option) => option['name'],
+                      onSelected: (selection) {
+                        setState(() {
+                          _billChargesList.add({
+                            'name': selection['name'],
+                            'type': selection['type'],
+                            'mode': selection['mode'],
+                            'qty': 1.0,
+                            'rate': selection['value'] ?? 0.0,
+                          });
+                        });
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'Search Freight or Charge to add...',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            prefixIcon: Icon(Icons.add_circle_outline, size: 18, color: Colors.blue),
+                          ),
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4,
+                            child: SizedBox(
+                              width: 280,
+                              height: 150,
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                itemCount: options.length,
+                                itemBuilder: (context, index) {
+                                  final opt = options.elementAt(index);
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(opt['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    subtitle: Text('Default: ₹${opt['value']}'),
+                                    onTap: () => onSelected(opt),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        SizedBox(
+                          width: 140,
+                          child: DropdownButtonFormField<String>(
+                            value: _paymentMode,
+                            items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                            onChanged: (val) => setState(() => _paymentMode = val!),
+                            decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
+                          ),
+                        ),
+                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade600, foregroundColor: Colors.white),
+                      icon: const Icon(Icons.preview, size: 16),
+                      label: const Text('Preview'),
+                      onPressed: () => _generateAndPrintOrShareBill(isShare: false),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                      icon: const Icon(Icons.share, size: 16),
+                      label: const Text('Share'),
+                      onPressed: () => _generateAndPrintOrShareBill(isShare: true),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
+                      onPressed: _savePurchaseTransaction,
+                      child: const Text('Save Bill', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade600, foregroundColor: Colors.white),
-                    icon: const Icon(Icons.preview, size: 16),
-                    label: const Text('Preview'),
-                    onPressed: () => _generateAndPrintOrShareBill(isShare: false),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                    icon: const Icon(Icons.share, size: 16),
-                    label: const Text('Share'),
-                    onPressed: () => _generateAndPrintOrShareBill(isShare: true),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800, foregroundColor: Colors.white),
-                    onPressed: _savePurchaseTransaction,
-                    child: const Text('Save Bill', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-      // 🆕 FloatingActionButton for Add Item
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addItemToCart,
-        backgroundColor: Colors.blue.shade800,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Item'),
       ),
     );
   }
@@ -1032,10 +857,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   void dispose() {
     _partyController.dispose();
     _billNoController.dispose();
-    _freightQtyController.dispose();
-    _freightRateController.dispose();
-    _discountValueController.dispose();
-    _extraChargeAmountController.dispose();
     super.dispose();
   }
 }
