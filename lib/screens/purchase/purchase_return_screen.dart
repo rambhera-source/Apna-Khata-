@@ -15,7 +15,8 @@ import 'package:accounting_app/models/transaction_model.dart';
 import 'package:accounting_app/models/settings_model.dart';
 import 'package:accounting_app/models/inventory_model.dart';
 import '../searchable_field.dart';
-import 'product_inventory_screen.dart';
+import '../account/add_account_screen.dart';
+import '../products/product_inventory_screen.dart';
 
 class PurchaseReturnScreen extends StatefulWidget {
   const PurchaseReturnScreen({super.key});
@@ -28,17 +29,12 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _returnNoController = TextEditingController(text: 'PRN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
-  // Inline Product Search & Input Controllers
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
 
-  // Dynamic Charges List loaded from Settings
   List<Map<String, dynamic>> _presetChargesList = [];
-  
-  // Dynamic Bill Level Charges / Freight / Discounts rows
   final List<Map<String, dynamic>> _billChargesList = [];
 
-  // Selected Return Date Variable
   DateTime _selectedDate = DateTime.now();
 
   List<String> _allAccounts = [];
@@ -91,6 +87,21 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     });
   }
 
+  void _navigateToAddNewParty() async {
+    final String? newPartyName = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddAccountScreen()),
+    );
+
+    await _loadDropdownDataAndSettings();
+
+    if (newPartyName != null && newPartyName.isNotEmpty) {
+      setState(() {
+        _partyController.text = newPartyName;
+      });
+    }
+  }
+
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -105,7 +116,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     }
   }
 
-  // ➕ Add item directly from inline row
   void _addInlineItemToReturnCart() {
     if (_selectedInlineProduct == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -206,7 +216,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     );
   }
 
-  // 🧮 Calculations
   double get _subTotal {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
@@ -388,9 +397,8 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     });
   }
 
-  // 🛡️ Smart Exit Warning Dialog
   Future<bool> _onWillPop() async {
-    if (_cartItems.isEmpty && _partyController.text.isEmpty) {
+    if (_cartItems.isEmpty) {
       return true;
     }
 
@@ -449,7 +457,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Return Number Row (Editable)
               Row(
                 children: [
                   Expanded(
@@ -496,19 +503,12 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                     ),
                     icon: const Icon(Icons.person_add, size: 18),
                     label: const Text('New'),
-                    onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const AddAccountScreen()),
-                      );
-                      await _loadDropdownDataAndSettings();
-                    },
+                    onPressed: _navigateToAddNewParty,
                   ),
                 ],
               ),
               const SizedBox(height: 12),
 
-              // 🔥 INLINE PRODUCT SEARCH SECTION
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
@@ -663,7 +663,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const Divider(),
               
-              // 🔥 BOTTOM CALCULATION & DYNAMIC CHARGES SECTION
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
@@ -799,7 +798,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                             value: _refundMode,
                             items: _refundModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
                             onChanged: (val) => setState(() => _refundMode = val!),
-                            decoration: const InputDecoration(labelText: 'Refund Mode', border: OutlineInputBorder(), isDense: true),
+                            decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
                           ),
                         ),
                         Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue)),
@@ -832,7 +831,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                   Expanded(
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade900, foregroundColor: Colors.white),
-                      onPressed: _savePurchaseReturnTransaction,
+                      onPressed: _saveSalesReturnTransaction,
                       child: const Text('Save Return', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                     ),
                   ),
