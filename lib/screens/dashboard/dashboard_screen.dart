@@ -10,10 +10,10 @@ import 'package:accounting_app/screens/purchase/purchase_return_screen.dart';
 import 'package:accounting_app/screens/reports/ledger_screen.dart';
 import 'package:accounting_app/screens/order/orders_management_screen.dart';
 import 'package:accounting_app/screens/reports/financial_reports_screen.dart';
-import 'package:accounting_app/screens/day_book_screen.dart'; // ✅ Correct path
+import 'package:accounting_app/screens/reports/daybook_screen.dart'; // ✅ Corrected filename (daybook_screen.dart)
 import 'package:accounting_app/screens/account/parties_master_screen.dart';
 import 'package:accounting_app/screens/products/product_inventory_screen.dart';
-import 'package:accounting_app/screens/company_settings_screen.dart'; // ✅ Correct path
+import 'package:accounting_app/screens/setting/settings_screen.dart'; // ✅ Corrected filename (settings_screen.dart)
 import 'package:accounting_app/screens/manufacturing_screen.dart';
 import 'package:accounting_app/screens/login_screen.dart';
 
@@ -147,7 +147,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _buildMenuCard(context, 'Manufacturing', Icons.precision_manufacturing, Colors.indigo.shade900, const ManufacturingScreen()),
                       _buildMenuCard(context, 'Payment', Icons.payment, Colors.red.shade700, const VoucherEntryScreen()),
                       _buildMenuCard(context, 'Receipt', Icons.receipt, Colors.green.shade700, const VoucherEntryScreen()),
-                      _buildMenuCard(context, 'Settings', Icons.settings, Colors.blueGrey, const CompanySettingsScreen()),
+                      _buildMenuCard(context, 'Settings', Icons.settings, Colors.blueGrey, const SettingsScreen()),
                     ],
                   ),
                 ],
