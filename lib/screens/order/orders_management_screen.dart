@@ -5,7 +5,7 @@ import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/product.dart';
 import 'package:accounting_app/models/order_model.dart';
-import 'searchable_field.dart';
+import '../searchable_field.dart'; // ✅ Updated relative import path
 import '../products/product_inventory_screen.dart'; // 🔥 Product Inventory Screen Imported
 
 class OrdersManagementScreen extends StatefulWidget {
@@ -338,7 +338,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
           ],
         ),
         actions: [
-          // 📦 Inventory Screen Shortcut Button in AppBar
           IconButton(
             icon: const Icon(Icons.inventory_2),
             onPressed: _navigateToInventoryScreen,
@@ -410,7 +409,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                // Date Filter Row
                 Row(
                   children: [
                     Expanded(
@@ -448,7 +446,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                 ),
                 const SizedBox(height: 16),
 
-                // Orders List
                 Expanded(
                   child: _isLoadingOrders
                       ? const Center(child: CircularProgressIndicator())
@@ -498,7 +495,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                                       children: [
                                         IconButton(
                                           icon: const Icon(Icons.edit, color: Colors.blue),
-                                          tooltip: 'Modify Order',
+                                          tooltip: 'Modify Order Management',
                                           onPressed: () => _editOrder(order),
                                         ),
                                         IconButton(
