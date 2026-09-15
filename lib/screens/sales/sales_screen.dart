@@ -489,12 +489,12 @@ class _SalesScreenState extends State<SalesScreen> {
                     child: TextField(
                       controller: _invoiceNoController,
                       readOnly: true,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Invoice Number (Fixed)',
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         isDense: true,
                         filled: true,
-                        fillColor: Colors.grey200,
+                        fillColor: Colors.grey.shade200,
                       ),
                     ),
                   ),
@@ -510,7 +510,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
@@ -533,128 +533,9 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-
-              // 🔥 INLINE PRODUCT ADDITION SECTION
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.teal.shade200)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Add Product to Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
-                    const SizedBox(height: 6),
-                    Autocomplete<InventoryItem>(
-                      optionsBuilder: (TextEditingValue textEditingValue) {
-                        if (textEditingValue.text.isEmpty) {
-                          return const Iterable<InventoryItem>.empty();
-                        }
-                        return _allInventoryItems.where((item) =>
-                          item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                          (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
-                        );
-                      },
-                      displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
-                      onSelected: (InventoryItem selection) {
-                        setState(() {
-                          _selectedInlineProduct = selection;
-                          _inlinePriceController.text = selection.priceA.toString();
-                        });
-                      },
-                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                        return TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          decoration: InputDecoration(
-                            labelText: 'Search Product Name or SKU...',
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                            prefixIcon: const Icon(Icons.search, size: 20),
-                            suffixIcon: controller.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear, size: 18),
-                                    onPressed: () {
-                                      controller.clear();
-                                      setState(() => _selectedInlineProduct = null);
-                                    },
-                                  )
-                                : null,
-                          ),
-                        );
-                      },
-                      optionsViewBuilder: (context, onSelected, options) {
-                        return Align(
-                          alignment: Alignment.topLeft,
-                          child: Material(
-                            elevation: 4,
-                            child: SizedBox(
-                              width: 320,
-                              height: 200,
-                              child: ListView.builder(
-                                padding: EdgeInsets.zero,
-                                itemCount: options.length + 1,
-                                itemBuilder: (context, index) {
-                                  if (index == options.length) {
-                                    return ListTile(
-                                      tileColor: Colors.teal.shade100,
-                                      leading: const Icon(Icons.add_circle, color: Colors.teal),
-                                      title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
-                                      onTap: () async {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
-                                        );
-                                        await _loadDropdownDataAndSettings();
-                                      },
-                                    );
-                                  }
-                                  final item = options.elementAt(index);
-                                  return ListTile(
-                                    title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                    subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 11)),
-                                    onTap: () => onSelected(item),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    if (_selectedInlineProduct != null) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _inlineQtyController,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: _inlinePriceController,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                            onPressed: _addInlineItemToCart,
-                            child: const Text('Add'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              const SizedBox(height: 6),
+              const SizedBox(height: 14),
+              const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 8),
               Expanded(
                 child: _cartItems.isEmpty
                     ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
@@ -664,9 +545,8 @@ class _SalesScreenState extends State<SalesScreen> {
                           final item = _cartItems[index];
                           double total = (item['qty'] as int) * (item['price'] as double);
                           return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 3),
+                            margin: const EdgeInsets.symmetric(vertical: 4),
                             child: ListTile(
-                              dense: true,
                               title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('SKU: ${item['sku']} | Type: ${item['stockType']} | Qty: ${item['qty']} x ₹${item['price']}'),
                               trailing: Row(
@@ -674,12 +554,14 @@ class _SalesScreenState extends State<SalesScreen> {
                                 children: [
                                   Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
                                   IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.orange, size: 16),
+                                    icon: const Icon(Icons.edit, color: Colors.orange, size: 18),
                                     onPressed: () => _editCartItem(index),
+                                    tooltip: 'Edit Item',
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                    icon: const Icon(Icons.delete, color: Colors.red, size: 18),
                                     onPressed: () => setState(() => _cartItems.removeAt(index)),
+                                    tooltip: 'Delete Item',
                                   ),
                                 ],
                               ),
@@ -690,7 +572,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const Divider(),
               
-              // 🔥 BOTTOM CALCULATION & DYNAMIC CHARGES / FREIGHT SEARCHABLE SECTION
+              // BOTTOM CALCULATION CONTAINER
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8)),
@@ -704,126 +586,44 @@ class _SalesScreenState extends State<SalesScreen> {
                         Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                       ],
                     ),
-                    const SizedBox(height: 8),
-
-                    // DYNAMIC CHARGES / FREIGHT LIST ROWS
-                    const Text('Freight & Additional Charges:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
-                    const SizedBox(height: 4),
-
-                    ...List.generate(_billChargesList.length, (index) {
-                      final charge = _billChargesList[index];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
+                    const SizedBox(height: 6),
+                    
+                    // BILL CHARGES SECTION
+                    if (_billChargesList.isNotEmpty)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: List.generate(_billChargesList.length, (i) {
+                          final charge = _billChargesList[i];
+                          double amt = (charge['qty'] as double) * (charge['rate'] as double);
+                          bool isLess = charge['type'] == 'Less';
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('${charge['name']}:', style: const TextStyle(fontSize: 13)),
+                              Text('${isLess ? "-" : "+"} ₹${amt.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: isLess ? Colors.red : Colors.green)),
+                            ],
+                          );
+                        }),
+                      ),
+                    
+                    if (_isGstActive)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
                         child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(
-                              flex: 3,
-                              child: Text(charge['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            ),
-                            SizedBox(
-                              width: 60,
-                              child: TextField(
-                                controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'No.', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(6)),
-                                onChanged: (val) {
-                                  charge['qty'] = double.tryParse(val) ?? 1.0;
-                                  setState(() {});
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            SizedBox(
-                              width: 75,
-                              child: TextField(
-                                controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'Rate(₹)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(6)),
-                                onChanged: (val) {
-                                  charge['rate'] = double.tryParse(val) ?? 0.0;
-                                  setState(() {});
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 18, color: Colors.red),
-                              onPressed: () => setState(() => _billChargesList.removeAt(index)),
-                            ),
+                            Text('GST (${_gstRate.toStringAsFixed(1)}%):', style: const TextStyle(fontSize: 13)),
+                            Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
                           ],
                         ),
-                      );
-                    }),
-
-                    const SizedBox(height: 6),
-                    // SEARCH & ADD NEW CHARGE / FREIGHT AUTOCOMPLETE
-                    Autocomplete<Map<String, dynamic>>(
-                      optionsBuilder: (TextEditingValue textEditingValue) {
-                        if (textEditingValue.text.isEmpty) {
-                          return const Iterable<Map<String, dynamic>>.empty();
-                        }
-                        return _presetChargesList.where((c) =>
-                          c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase())
-                        );
-                      },
-                      displayStringForOption: (option) => option['name'],
-                      onSelected: (selection) {
-                        setState(() {
-                          _billChargesList.add({
-                            'name': selection['name'],
-                            'type': selection['type'],
-                            'mode': selection['mode'],
-                            'qty': 1.0,
-                            'rate': selection['value'] ?? 0.0,
-                          });
-                        });
-                      },
-                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                        return TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          decoration: const InputDecoration(
-                            labelText: 'Search Freight or Charge to add...',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                            prefixIcon: Icon(Icons.add_circle_outline, size: 18, color: Colors.teal),
-                          ),
-                        );
-                      },
-                      optionsViewBuilder: (context, onSelected, options) {
-                        return Align(
-                          alignment: Alignment.topLeft,
-                          child: Material(
-                            elevation: 4,
-                            child: SizedBox(
-                              width: 280,
-                              height: 150,
-                              child: ListView.builder(
-                                padding: EdgeInsets.zero,
-                                itemCount: options.length,
-                                itemBuilder: (context, index) {
-                                  final opt = options.elementAt(index);
-                                  return ListTile(
-                                    dense: true,
-                                    title: Text(opt['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    subtitle: Text('Default: ₹${opt['value']}'),
-                                    onTap: () => onSelected(opt),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-
+                      ),
+                    
                     const Divider(),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         SizedBox(
-                          width: 130,
+                          width: 140,
                           child: DropdownButtonFormField<String>(
                             value: _paymentMode,
                             items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
@@ -831,13 +631,13 @@ class _SalesScreenState extends State<SalesScreen> {
                             decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true),
                           ),
                         ),
-                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
                       ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -869,6 +669,12 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ],
           ),
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _addInlineItemToCart,
+          backgroundColor: Colors.teal,
+          icon: const Icon(Icons.add),
+          label: const Text('Add Item'),
         ),
       ),
     );
