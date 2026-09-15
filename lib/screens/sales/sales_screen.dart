@@ -32,13 +32,13 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _freightQtyController = TextEditingController(text: '1');
   final TextEditingController _freightRateController = TextEditingController(text: '30');
 
-  // Discount & Manual/Dropdown Extra Charge Controllers
+  // Discount Controllers
   final TextEditingController _discountValueController = TextEditingController(text: '0');
   String _discountType = '₹';
 
-  // Master/Preset list for charges (Aap ise database ya settings se bhi fetch kar sakte hain)
-  final List<String> _presetChargesList = ['Packing Charge', 'Loading Charge', 'Delivery Fee', 'Handling Charge', 'Other Charges'];
-  String? _selectedPresetCharge;
+  // Dynamic Charges List loaded from Settings (Database)
+  List<Map<String, dynamic>> _presetChargesList = [];
+  Map<String, dynamic>? _selectedPresetCharge;
   
   final TextEditingController _extraChargeAmountController = TextEditingController(text: '0');
   
@@ -66,7 +66,6 @@ class _SalesScreenState extends State<SalesScreen> {
   void initState() {
     super.initState();
     _loadDropdownDataAndSettings();
-    _selectedPresetCharge = _presetChargesList.first;
   }
 
   Future<void> _loadDropdownDataAndSettings() async {
@@ -74,12 +73,33 @@ class _SalesScreenState extends State<SalesScreen> {
     final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
 
+    List<Map<String, dynamic>> loadedCharges = [];
+    if (settings != null) {
+      try {
+        loadedCharges = List<Map<String, dynamic>>.from(settings.extraCharges.map((e) {
+          if (e is Map) {
+            return Map<String, dynamic>.from(e);
+          }
+          return {'name': e.toString(), 'type': 'Add', 'mode': 'Fixed', 'value': 0.0};
+        }));
+      } catch (_) {
+        loadedCharges = [
+          {'name': 'Packing Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 0.0},
+        ];
+      }
+    }
+
     setState(() {
       _allAccounts = accounts.map((a) => a.name).toList();
       _allInventoryItems = inventoryItems;
       if (settings != null) {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
+      }
+      _presetChargesList = loadedCharges;
+      if (_presetChargesList.isNotEmpty) {
+        _selectedPresetCharge = _presetChargesList.first;
+        _extraChargeAmountController.text = _selectedPresetCharge!['value'].toString();
       }
     });
   }
@@ -124,67 +144,6 @@ class _SalesScreenState extends State<SalesScreen> {
         ),
       );
     }
-  }
-
-  Future<void> _loadSpecificOrderIntoBill(SalesOrder order) async {
-    await order.items.load();
-
-    setState(() {
-      _selectedPendingOrder = order;
-      _cartItems.clear();
-      for (var item in order.items) {
-        if (!item.isDelivered) {
-          _cartItems.add({
-            'name': item.productName,
-            'sku': '-',
-            'qty': item.qty,
-            'price': item.price,
-            'stockType': _globalStockType,
-          });
-        }
-      }
-    });
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Order successfully loaded into bill!'), backgroundColor: Colors.green),
-    );
-  }
-
-  void _showSelectOrderDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Pending Order to Load'),
-        content: SizedBox(
-          width: 350,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: _pendingOrdersList.length,
-            itemBuilder: (context, index) {
-              final ord = _pendingOrdersList[index];
-              return Card(
-                child: ListTile(
-                  title: Text('Order No: ${ord.orderNo}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Date: ${DateFormat('dd-MM-yyyy').format(ord.date)}'),
-                  trailing: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _loadSpecificOrderIntoBill(ord);
-                    },
-                    child: const Text('Load'),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-        ],
-      ),
-    );
   }
 
   void _addItemToCart() {
@@ -275,8 +234,21 @@ class _SalesScreenState extends State<SalesScreen> {
     return val;
   }
 
+  // Calculate net effect of extra charges (Add adds up, Less subtracts)
   double get _extraChargesTotal {
-    return _extraChargesList.fold(0.0, (sum, item) => sum + (item['amount'] as double));
+    double totalNet = 0.0;
+    for (var item in _extraChargesList) {
+      double amt = item['amount'] as double;
+      if (item['mode'] == 'Percentage') {
+        amt = (_subTotal * amt) / 100;
+      }
+      if (item['type'] == 'Add') {
+        totalNet += amt;
+      } else {
+        totalNet -= amt;
+      }
+    }
+    return totalNet;
   }
 
   double get _taxAmount {
@@ -360,7 +332,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         if (_discountAmount > 0) pw.Text('Discount: - ₹ ${_discountAmount.toStringAsFixed(2)}'),
                         if (_freightTotalAmount > 0) pw.Text('Freight Charge: + ₹ ${_freightTotalAmount.toStringAsFixed(2)}'),
                         for (var extra in _extraChargesList)
-                          pw.Text('${extra['name']}: + ₹ ${(extra['amount'] as double).toStringAsFixed(2)}'),
+                          pw.Text('${extra['name']} (${extra['type']}): ${extra['type'] == 'Add' ? '+' : '-'} ₹ ${(extra['amount'] as double).toStringAsFixed(2)}'),
                         pw.Divider(),
                         pw.Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
                       ],
@@ -494,7 +466,7 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const Divider(),
             
-            // BOTTOM CALCULATION & DROPDOWN CHARGES CONTAINER
+            // BOTTOM CALCULATION & DATABASE LOADED CHARGES CONTAINER
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8)),
@@ -576,17 +548,27 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                   const SizedBox(height: 8),
 
-                  // EXTRA CHARGES DROPDOWN & AMOUNT SELECTION
+                  // EXTRA CHARGES DROPDOWN (Loaded from Settings Master)
                   Row(
                     children: [
                       Expanded(
                         flex: 2,
-                        child: DropdownButtonFormField<String>(
+                        child: DropdownButtonFormField<Map<String, dynamic>>(
                           value: _selectedPresetCharge,
                           isExpanded: true,
-                          items: _presetChargesList.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13)))).toList(),
-                          onChanged: (val) => setState(() => _selectedPresetCharge = val),
-                          decoration: const InputDecoration(labelText: 'Select Charge', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                          items: _presetChargesList.map((c) => DropdownMenuItem(
+                            value: c, 
+                            child: Text('${c['name']} (${c['type'] == 'Add' ? '+' : '-'})', style: TextStyle(fontSize: 13, color: c['type'] == 'Add' ? Colors.green.shade900 : Colors.red.shade900, fontWeight: FontWeight.bold)),
+                          )).toList(),
+                          onChanged: (val) {
+                            setState(() {
+                              _selectedPresetCharge = val;
+                              if (val != null) {
+                                _extraChargeAmountController.text = val['value'].toString();
+                              }
+                            });
+                          },
+                          decoration: const InputDecoration(labelText: 'Select Charge / Discount', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -595,7 +577,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         child: TextField(
                           controller: _extraChargeAmountController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Amount (₹)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                          decoration: const InputDecoration(labelText: 'Value', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -605,10 +587,11 @@ class _SalesScreenState extends State<SalesScreen> {
                           if (_selectedPresetCharge != null) {
                             setState(() {
                               _extraChargesList.add({
-                                'name': _selectedPresetCharge!,
+                                'name': _selectedPresetCharge!['name'],
+                                'type': _selectedPresetCharge!['type'], // 'Add' or 'Less'
+                                'mode': _selectedPresetCharge!['mode'], // 'Fixed' or 'Percentage'
                                 'amount': double.tryParse(_extraChargeAmountController.text) ?? 0.0,
                               });
-                              _extraChargeAmountController.text = '0';
                             });
                           }
                         },
@@ -616,19 +599,20 @@ class _SalesScreenState extends State<SalesScreen> {
                     ],
                   ),
 
-                  // LIST OF ADDED EXTRA CHARGES
+                  // LIST OF ADDED EXTRA CHARGES IN BILL
                   if (_extraChargesList.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Column(
                       children: List.generate(_extraChargesList.length, (i) {
                         final ex = _extraChargesList[i];
+                        bool isAdd = ex['type'] == 'Add';
                         return Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('• ${ex['name']}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                            Text('• ${ex['name']} (${ex['mode']})', style: TextStyle(fontSize: 12, color: isAdd ? Colors.green.shade800 : Colors.red.shade800, fontWeight: FontWeight.bold)),
                             Row(
                               children: [
-                                Text('₹ ${ex['amount']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text('${isAdd ? "+" : "-"} ${ex['amount']}${ex['mode'] == 'Percentage' ? '%' : '₹'}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isAdd ? Colors.green : Colors.red)),
                                 IconButton(
                                   icon: const Icon(Icons.close, size: 14, color: Colors.red),
                                   onPressed: () => setState(() => _extraChargesList.removeAt(i)),
