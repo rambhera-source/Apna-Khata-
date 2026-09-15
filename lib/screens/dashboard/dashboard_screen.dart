@@ -16,7 +16,6 @@ import 'package:accounting_app/screens/products/product_inventory_screen.dart';
 import 'package:accounting_app/screens/setting/settings_screen.dart';
 import 'package:accounting_app/screens/manufacturing_screen.dart';
 import 'package:accounting_app/screens/login_screen.dart';
-import 'package:accounting_app/screens/reports/all_history_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final UserAccount currentUser;
@@ -76,7 +75,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
 
-      // 📱 RESTRUCTURED 9-CATEGORY SIDEBAR (DRAWER)
+      // 📱 SIDEBAR (DRAWER) ACCORDING TO YOUR 9 CATEGORIES
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -132,7 +131,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: const Text('Sales & Return History'),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AllHistoryScreen(initialType: 'Sales')));
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen()));
                   },
                 ),
               ],
@@ -164,7 +163,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: const Text('Purchase History'),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AllHistoryScreen(initialType: 'Purchase')));
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen()));
                   },
                 ),
               ],
