@@ -14,7 +14,7 @@ import 'package:accounting_app/models/transaction_model.dart';
 import 'package:accounting_app/models/order_model.dart';
 import 'package:accounting_app/models/settings_model.dart'; 
 import 'package:accounting_app/models/inventory_model.dart'; 
-import 'package:accounting_app/screens/searchable_field.dart'; // ✅ Correct package import
+import 'package:accounting_app/screens/searchable_field.dart';
 import 'package:accounting_app/screens/account/add_account_screen.dart';        
 
 class SalesScreen extends StatefulWidget {
@@ -28,9 +28,19 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _invoiceNoController = TextEditingController(text: 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
-  final TextEditingController _freightController = TextEditingController(text: '0');
+  // Freight Controllers (Default rate ₹30)
+  final TextEditingController _freightQtyController = TextEditingController(text: '1');
+  final TextEditingController _freightRateController = TextEditingController(text: '30');
+
+  // Discount & Manual Extra Charge Controllers
   final TextEditingController _discountValueController = TextEditingController(text: '0');
   String _discountType = '₹';
+
+  final TextEditingController _extraChargeNameController = TextEditingController();
+  final TextEditingController _extraChargeAmountController = TextEditingController(text: '0');
+  
+  // List to hold multiple manual extra charges if added
+  final List<Map<String, dynamic>> _extraChargesList = [];
 
   DateTime _selectedDate = DateTime.now();
 
@@ -49,8 +59,6 @@ class _SalesScreenState extends State<SalesScreen> {
   List<SalesOrder> _pendingOrdersList = [];
   SalesOrder? _selectedPendingOrder;
   bool _isLoadingOrder = false;
-
-  final List<String> _priceCategories = List.generate(26, (index) => String.fromCharCode(65 + index));
 
   @override
   void initState() {
@@ -181,9 +189,7 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _addItemToCart() {
-    if (_allInventoryItems.isEmpty) {
-      return;
-    }
+    if (_allInventoryItems.isEmpty) return;
 
     InventoryItem selectedItem = _allInventoryItems.first;
     final TextEditingController qtyController = TextEditingController(text: '1');
@@ -256,8 +262,10 @@ class _SalesScreenState extends State<SalesScreen> {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  double get _freightAmount {
-    return double.tryParse(_freightController.text) ?? 0.0;
+  double get _freightTotalAmount {
+    int qty = int.tryParse(_freightQtyController.text) ?? 0;
+    double rate = double.tryParse(_freightRateController.text) ?? 0.0;
+    return qty * rate;
   }
 
   double get _discountAmount {
@@ -268,15 +276,19 @@ class _SalesScreenState extends State<SalesScreen> {
     return val;
   }
 
+  double get _extraChargesTotal {
+    return _extraChargesList.fold(0.0, (sum, item) => sum + (item['amount'] as double));
+  }
+
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    double taxableValue = _subTotal - _discountAmount + _freightAmount;
+    double taxableValue = _subTotal - _discountAmount + _freightTotalAmount + _extraChargesTotal;
     if (taxableValue < 0) taxableValue = 0;
     return taxableValue * 0.18;
   }
 
   double get _grandTotal {
-    double total = _subTotal - _discountAmount + _freightAmount + _taxAmount;
+    double total = _subTotal - _discountAmount + _freightTotalAmount + _extraChargesTotal + _taxAmount;
     return total < 0 ? 0 : total;
   }
 
@@ -350,7 +362,9 @@ class _SalesScreenState extends State<SalesScreen> {
                       children: [
                         pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
                         if (_discountAmount > 0) pw.Text('Discount: - ₹ ${_discountAmount.toStringAsFixed(2)}'),
-                        if (_freightAmount > 0) pw.Text('Freight: + ₹ ${_freightAmount.toStringAsFixed(2)}'),
+                        if (_freightTotalAmount > 0) pw.Text('Freight Charge (${_freightQtyController.text} x ₹${_freightRateController.text}): + ₹ ${_freightTotalAmount.toStringAsFixed(2)}'),
+                        for (var extra in _extraChargesList)
+                          pw.Text('${extra['name']}: + ₹ ${(extra['amount'] as double).toStringAsFixed(2)}'),
                         if (_isGstActive) ...[
                           pw.SizedBox(height: 4),
                           pw.Text('CGST (9%): ₹ ${(_taxAmount / 2).toStringAsFixed(2)}'),
@@ -723,10 +737,12 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const Divider(),
             
+            // BOTTOM CALCULATION & FREIGHT WITH DEFAULT ₹30 + MANUAL EXTRA CHARGES BOX
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8)),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -736,6 +752,8 @@ class _SalesScreenState extends State<SalesScreen> {
                     ],
                   ),
                   const SizedBox(height: 6),
+                  
+                  // DISCOUNT SECTION
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -768,22 +786,102 @@ class _SalesScreenState extends State<SalesScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
+
+                  // FREIGHT CHARGE (Default Rate ₹30 with manual quantity/numbers 1, 2, 3...)
+                  const Text('Freight Charge (Default ₹30 / unit):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
+                  const SizedBox(height: 4),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Freight / Shipping:', style: TextStyle(fontSize: 13)),
-                      SizedBox(
-                        width: 100,
+                      Expanded(
                         child: TextField(
-                          controller: _freightController,
+                          controller: _freightQtyController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                          decoration: const InputDecoration(labelText: 'No. (1, 2, 3...)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
                           onChanged: (_) => setState(() {}),
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _freightRateController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Rate (₹)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '= ₹ ${_freightTotalAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 14),
+                      ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+
+                  // MANUAL EXTRA CHARGE INPUT (For any other custom charges)
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: _extraChargeNameController,
+                          decoration: const InputDecoration(labelText: 'Other Charge Name', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        flex: 1,
+                        child: TextField(
+                          controller: _extraChargeAmountController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Amount (₹)', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(8)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle, color: Colors.teal, size: 30),
+                        onPressed: () {
+                          if (_extraChargeNameController.text.isNotEmpty) {
+                            setState(() {
+                              _extraChargesList.add({
+                                'name': _extraChargeNameController.text,
+                                'amount': double.tryParse(_extraChargeAmountController.text) ?? 0.0,
+                              });
+                              _extraChargeNameController.clear();
+                              _extraChargeAmountController.text = '0';
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+
+                  // Display added extra charges if any
+                  if (_extraChargesList.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Column(
+                      children: List.generate(_extraChargesList.length, (i) {
+                        final ex = _extraChargesList[i];
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('• ${ex['name']}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                            Row(
+                              children: [
+                                Text('₹ ${ex['amount']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 14, color: Colors.red),
+                                  onPressed: () => setState(() => _extraChargesList.removeAt(i)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      }),
+                    ),
+                  ],
+
                   if (_isGstActive) ...[
                     const SizedBox(height: 6),
                     Row(
