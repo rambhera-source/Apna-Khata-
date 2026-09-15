@@ -173,7 +173,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                     if (existingUser != null) {
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Yeh Username/Mobile pehle se registered hai!'), backgroundColor: Colors.red),
+                        const SnackBar(content: Text('Yeh Username/Mobile pehle से registered hai!'), backgroundColor: Colors.red),
                       );
                       return;
                     }
@@ -420,12 +420,14 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 title: const Text('Go to Dashboard'),
                 onTap: () {
                   Navigator.pop(context); // Close drawer
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DashboardScreen(currentUser: widget.currentUser),
-                    ),
-                  );
+                  if (widget.currentUser != null) {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DashboardScreen(currentUser: widget.currentUser!), // ✅ Fixed null-safety here
+                      ),
+                    );
+                  }
                 },
               ),
               ListTile(
