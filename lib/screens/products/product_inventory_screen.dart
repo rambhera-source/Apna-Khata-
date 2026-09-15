@@ -7,9 +7,9 @@ import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
-import '../database/database_helper.dart';
-import '../models/inventory_model.dart';
-import '../models/transaction_model.dart';
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/inventory_model.dart';
+import 'package:accounting_app/models/transaction_model.dart';
 
 class ProductInventoryScreen extends StatefulWidget {
   const ProductInventoryScreen({super.key});
