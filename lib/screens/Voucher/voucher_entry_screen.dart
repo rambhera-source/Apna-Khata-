@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/transaction_model.dart';
-import 'searchable_field.dart';
+import 'package:accounting_app/screens/searchable_field.dart'; // ✅ Correct package import path
 
 class VoucherEntryScreen extends StatefulWidget {
   const VoucherEntryScreen({super.key});
