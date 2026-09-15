@@ -16,6 +16,7 @@ import 'package:accounting_app/screens/products/product_inventory_screen.dart';
 import 'package:accounting_app/screens/setting/settings_screen.dart';
 import 'package:accounting_app/screens/manufacturing_screen.dart';
 import 'package:accounting_app/screens/login_screen.dart';
+import 'package:accounting_app/screens/reports/all_history_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final UserAccount currentUser;
@@ -61,21 +62,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: Text('ORLIFE ERP - ${widget.currentUser.name} (${widget.currentUser.role})'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-              );
-            },
-          ),
-        ],
+        // Top right logout icon removed as requested
       ),
 
-      // 📱 SIDEBAR (DRAWER) ACCORDING TO YOUR 9 CATEGORIES
+      // 📱 CLEAN SIDEBAR (DRAWER) WITHOUT NUMBERS
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -105,10 +95,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
 
-            // 1. SALES MODULE
+            // 1. SALES
             ExpansionTile(
               leading: const Icon(Icons.point_of_sale, color: Colors.teal),
-              title: const Text('1. Sales', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text('Sales', style: TextStyle(fontWeight: FontWeight.bold)),
               children: [
                 ListTile(
                   leading: const SizedBox(width: 24),
@@ -131,16 +121,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: const Text('Sales & Return History'),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen()));
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AllHistoryScreen(initialType: 'Sales')));
                   },
                 ),
               ],
             ),
 
-            // 2. PURCHASE MODULE
+            // 2. PURCHASE
             ExpansionTile(
               leading: const Icon(Icons.shopping_cart, color: Colors.blue),
-              title: const Text('2. Purchase', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text('Purchase', style: TextStyle(fontWeight: FontWeight.bold)),
               children: [
                 ListTile(
                   leading: const SizedBox(width: 24),
@@ -163,56 +153,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: const Text('Purchase History'),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DayBookScreen()));
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AllHistoryScreen(initialType: 'Purchase')));
                   },
                 ),
               ],
             ),
 
-            // 3. ACCOUNTS MODULE
+            // 3. ACCOUNTS
             ListTile(
               leading: const Icon(Icons.people, color: Colors.indigo),
-              title: const Text('3. Accounts (Parties Master)'),
+              title: const Text('Accounts'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const PartiesMasterScreen()));
               },
             ),
 
-            // 4. ORDER MODULE
+            // 4. ORDERS MANAGEMENT
             ListTile(
               leading: const Icon(Icons.list_alt, color: Colors.amber),
-              title: const Text('4. Orders Management'),
+              title: const Text('Orders Management'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersManagementScreen()));
               },
             ),
 
-            // 5. PRODUCT MODULE
+            // 5. PRODUCT INVENTORY
             ListTile(
               leading: const Icon(Icons.inventory, color: Colors.orange),
-              title: const Text('5. Product Inventory'),
+              title: const Text('Product Inventory'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
               },
             ),
 
-            // 6. VOUCHER MODULE
+            // 6. VOUCHER ENTRY
             ListTile(
               leading: const Icon(Icons.payment, color: Colors.red),
-              title: const Text('6. Voucher Entry'),
+              title: const Text('Voucher Entry'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const VoucherEntryScreen()));
               },
             ),
 
-            // 7 & 8. REPORTS & DAYBOOK MODULE
+            // 7. REPORTS (Daybook, Financial Reports, Ledger)
             ExpansionTile(
               leading: const Icon(Icons.analytics, color: Colors.deepPurple),
-              title: const Text('7 & 8. Reports & Daybook', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text('Reports', style: TextStyle(fontWeight: FontWeight.bold)),
               children: [
                 ListTile(
                   leading: const SizedBox(width: 24),
@@ -241,10 +231,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
 
-            // 9. SETTINGS & BACKUP MODULE
+            // 8. SETTINGS & BACKUP
             ListTile(
               leading: const Icon(Icons.settings, color: Colors.blueGrey),
-              title: const Text('9. Settings (Backup & Master)'),
+              title: const Text('Settings (Backup & Master)'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
@@ -273,37 +263,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(16.0),
               child: ListView(
                 children: [
+                  // WORKABLE TOTAL SALES & TOTAL PURCHASES CARDS
                   Row(
                     children: [
                       Expanded(
-                        child: Card(
-                          color: Colors.teal.shade50,
-                          child: Padding(
-                            padding: const EdgeInsets.all(14.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Total Sales', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                const SizedBox(height: 4),
-                                Text('₹ ${_totalSales.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal)),
-                              ],
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const AllHistoryScreen(initialType: 'Sales')),
+                            );
+                          },
+                          child: Card(
+                            color: Colors.teal.shade50,
+                            elevation: 2,
+                            child: Padding(
+                              padding: const EdgeInsets.all(14.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Total Sales', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  const SizedBox(height: 4),
+                                  Text('₹ ${_totalSales.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal)),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Card(
-                          color: Colors.blue.shade50,
-                          child: Padding(
-                            padding: const EdgeInsets.all(14.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Total Purchases', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                const SizedBox(height: 4),
-                                Text('₹ ${_totalPurchases.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),
-                              ],
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const AllHistoryScreen(initialType: 'Purchase')),
+                            );
+                          },
+                          child: Card(
+                            color: Colors.blue.shade50,
+                            elevation: 2,
+                            child: Padding(
+                              padding: const EdgeInsets.all(14.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Total Purchases', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  const SizedBox(height: 4),
+                                  Text('₹ ${_totalPurchases.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),
+                                ],
+                              ),
                             ),
                           ),
                         ),
