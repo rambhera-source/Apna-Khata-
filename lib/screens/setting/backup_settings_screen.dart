@@ -6,10 +6,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 
-import '../database/database_helper.dart';
-import '../models/inventory_model.dart';
-import '../models/account.dart';
-import '../models/transaction_model.dart';
+import '../../database/database_helper.dart'; // 👈 Updated path
+import '../../models/inventory_model.dart'; // 👈 Updated path
+import '../../models/account.dart'; // 👈 Updated path
+import '../../models/transaction_model.dart'; // 👈 Updated path
 
 class BackupSettingsScreen extends StatefulWidget {
   const BackupSettingsScreen({super.key});
