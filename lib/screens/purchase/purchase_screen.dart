@@ -13,8 +13,8 @@ import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/transaction_model.dart';
 import 'package:accounting_app/models/settings_model.dart'; 
 import 'package:accounting_app/models/inventory_model.dart'; 
-import 'searchable_field.dart';
-import '../account/add_account_screen.dart'; // ✅ Updated relative path for add_account_screen inside account folder
+import '../searchable_field.dart'; // ✅ Updated relative import path
+import '../account/add_account_screen.dart';
 
 class PurchaseScreen extends StatefulWidget {
   const PurchaseScreen({super.key});
@@ -656,7 +656,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             ),
             const SizedBox(height: 8),
 
-            // 🔥 Professional Table List View for Purchase Items
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               color: Colors.blue.shade100,
@@ -723,7 +722,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             ),
             const Divider(),
             
-            // 🔥 Calculations Box with Freight & Discount
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
