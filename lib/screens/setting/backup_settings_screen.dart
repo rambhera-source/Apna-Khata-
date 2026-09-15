@@ -25,20 +25,50 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
   bool _compulsoryBackupEnabled = true;
   bool _isGoogleDriveLinked = false;
   String _linkedGoogleAccount = 'Not Connected';
+  
+  // 📁 Custom Backup Folder Path Variable
+  String _customBackupPath = '';
 
   @override
   void initState() {
     super.initState();
+    _loadInitialBackupPath();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkForExistingLocalBackupOnStartup();
     });
   }
 
-  // ✨ 1. Startup पर कूल और प्रीमियम रिस्टोर प्रॉम्प्ट
+  // 📂 डिफ़ॉल्ट या सेवेन्द्र पाथ लोड करें
+  Future<void> _loadInitialBackupPath() async {
+    final directory = await getApplicationDocumentsDirectory();
+    setState(() {
+      _customBackupPath = '${directory.path}/orlife_backups';
+    });
+  }
+
+  // 📁 यूजर द्वारा कस्टम फोल्डर चुनने का फंक्शन
+  Future<void> _pickCustomBackupFolder() async {
+    try {
+      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory != null) {
+        setState(() {
+          _customBackupPath = selectedDirectory;
+        });
+        _showResultDialog(
+          isSuccess: true, 
+          title: 'Folder Updated', 
+          message: 'Backup destination successfully changed to:\n$_customBackupPath'
+        );
+      }
+    } catch (e) {
+      _showResultDialog(isSuccess: false, title: 'Error', message: 'Could not select folder: $e');
+    }
+  }
+
+  // ✨ Startup पर कूल और प्रीमियम रिस्टोर प्रॉम्प्ट
   Future<void> _checkForExistingLocalBackupOnStartup() async {
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final backupDir = Directory('${directory.path}/orlife_backups');
+      final backupDir = Directory(_customBackupPath);
       
       if (await backupDir.exists()) {
         List<FileSystemEntity> files = backupDir.listSync();
@@ -47,7 +77,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
         if (jsonFiles.isNotEmpty) {
           jsonFiles.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
 
-          // 10 फाइल्स की लिमिट बनाए रखें
           if (jsonFiles.length > 10) {
             for (int i = 10; i < jsonFiles.length; i++) {
               try { await jsonFiles[i].delete(); } catch (_) {}
@@ -77,7 +106,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     } catch (_) {}
   }
 
-  // ✨ 2. प्रीमियम प्रोग्रेस/प्रोसेसिंग डायलॉग
+  // ✨ प्रीमियम प्रोग्रेस/प्रोसेसिंग डायलॉग
   void _showProcessingDialog(String message) {
     showDialog(
       context: context,
@@ -99,7 +128,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     );
   }
 
-  // ✨ 3. प्रीमियम सक्सेस / फेलर पॉप-अप
+  // ✨ प्रीमियम सक्सेस / फेलर पॉप-अप
   void _showResultDialog({required bool isSuccess, required String title, required String message}) {
     showDialog(
       context: context,
@@ -128,7 +157,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     );
   }
 
-  // ✨ 4. जेनेरिक स्मार्ट डायलॉग (प्रिमियम लुक)
+  // ✨ जेनेरिक स्मार्ट डायलॉग
   void _showSmartDialog({
     required String title,
     required String subtitle,
@@ -172,14 +201,13 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     );
   }
 
-  // 📂 डेट-वाइज बैकअप लिस्ट देखने का प्रीमियम बॉटम शीट / डायलॉग
+  // 📂 डेट-वाइज बैकअप लिस्ट देखने का प्रीमियम बॉटम शीट
   Future<void> _showLocalBackupsListDialog() async {
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final backupDir = Directory('${directory.path}/orlife_backups');
+      final backupDir = Directory(_customBackupPath);
 
       if (!await backupDir.exists()) {
-        _showResultDialog(isSuccess: false, title: 'No Backups', message: 'No local backup files found on your device.');
+        _showResultDialog(isSuccess: false, title: 'No Backups', message: 'Selected backup folder does not exist yet.');
         return;
       }
 
@@ -187,7 +215,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       List<File> jsonFiles = files.whereType<File>().where((e) => e.path.endsWith('.json')).toList();
 
       if (jsonFiles.isEmpty) {
-        _showResultDialog(isSuccess: false, title: 'No Backups', message: 'Your backup list is currently empty.');
+        _showResultDialog(isSuccess: false, title: 'No Backups', message: 'No backup files found in the selected folder.');
         return;
       }
 
@@ -212,7 +240,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
                 ],
               ),
-              const Text('Choose from your last 10 saved backup points:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              Text('Path: $_customBackupPath', style: const TextStyle(fontSize: 11, color: Colors.grey)),
               const SizedBox(height: 10),
               Expanded(
                 child: ListView.builder(
@@ -261,7 +289,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
-  // 📤 App Close पर साइलेंट ऑटो-बैकअप
+  // 📤 App Close पर ऑटो-बैकअप (कस्टम फोल्डर में)
   Future<void> _performAutoBackupOnClose() async {
     try {
       final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
@@ -276,8 +304,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
         'transactions': transactions.map((e) => {'date': e.date.toIso8601String(), 'voucherType': e.voucherType, 'voucherNumber': e.voucherNumber, 'partyName': e.partyName, 'amount': e.amount}).toList(),
       };
 
-      final directory = await getApplicationDocumentsDirectory();
-      final backupDir = Directory('${directory.path}/orlife_backups');
+      final backupDir = Directory(_customBackupPath);
       if (!await backupDir.exists()) {
         await backupDir.create(recursive: true);
       }
@@ -285,7 +312,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       final file = File('${backupDir.path}/auto_backup_${DateTime.now().millisecondsSinceEpoch}.json');
       await file.writeAsString(jsonEncode(backupData));
 
-      // 10 फाइल्स की लिमिट बनाए रखें
       List<FileSystemEntity> files = backupDir.listSync();
       List<File> jsonFiles = files.whereType<File>().where((e) => e.path.endsWith('.json')).toList();
       jsonFiles.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
@@ -298,7 +324,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     } catch (_) {}
   }
 
-  // ✨ 5. प्रीमियम ऐप एग्जिट वार्निंग विद ऑटो-बैकअप
   Future<bool> _onWillPop() async {
     if (!_autoBackupEnabled) return true;
 
@@ -328,11 +353,11 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
               _showProcessingDialog('Creating secure backup...');
               await _performAutoBackupOnClose();
               if (!mounted) return;
-              Navigator.pop(context); // Close progress
-              _showResultDialog(isSuccess: true, title: 'Backup Successful', message: 'Your data has been safely secured locally.');
+              Navigator.pop(context);
+              _showResultDialog(isSuccess: true, title: 'Backup Successful', message: 'Your data has been safely secured in your selected folder.');
               await Future.delayed(const Duration(milliseconds: 1200));
               if (!mounted) return;
-              Navigator.pop(context, true); // Exit screen
+              Navigator.pop(context, true);
             },
             child: const Text('Backup & Exit'),
           ),
@@ -343,7 +368,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     return shouldExit;
   }
 
-  // 📤 Manual Export Backup
   void _exportBackup() async {
     _showProcessingDialog('Preparing export file...');
     try {
@@ -360,14 +384,18 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       };
 
       String jsonString = jsonEncode(backupData);
-      final outputDir = await getTemporaryDirectory();
-      final file = File('${outputDir.path}/orlife_erp_backup_${DateTime.now().millisecondsSinceEpoch}.json');
+      final backupDir = Directory(_customBackupPath);
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
+      }
+
+      final file = File('${backupDir.path}/manual_export_${DateTime.now().millisecondsSinceEpoch}.json');
       await file.writeAsBytes(utf8.encode(jsonString));
 
       if (!mounted) return;
-      Navigator.pop(context); // Close progress
+      Navigator.pop(context);
       await Share.shareXFiles([XFile(file.path)], text: 'ORLIFE ERP Database Backup File.');
-      _showResultDialog(isSuccess: true, title: 'Exported!', message: 'Backup file generated and ready to share.');
+      _showResultDialog(isSuccess: true, title: 'Exported & Saved!', message: 'Backup saved to your folder and ready to share.');
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
@@ -375,7 +403,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
-  // 📥 Restore from File helper
   Future<void> _restoreFromFile(File file) async {
     _showProcessingDialog('Restoring database...');
     try {
@@ -433,7 +460,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       });
 
       if (!mounted) return;
-      Navigator.pop(context); // Close progress
+      Navigator.pop(context);
       _showResultDialog(isSuccess: true, title: 'Restore Successful', message: 'Your database has been successfully restored.');
     } catch (e) {
       if (!mounted) return;
@@ -478,6 +505,44 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
         body: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
+            // 📁 Custom Backup Folder Path Section
+            const Text('Backup Storage Path / Folder', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+            const SizedBox(height: 8),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Current Backup Folder:', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(
+                      _customBackupPath,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.teal,
+                          side: const BorderSide(color: Colors.teal),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        icon: const Icon(Icons.folder_open_rounded, size: 16),
+                        label: const Text('Change Folder', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: _pickCustomBackupFolder,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
             const Text('Cloud Storage & Google Drive Sync', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
             const SizedBox(height: 8),
             Card(
