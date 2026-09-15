@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/user_model.dart';
-import 'package:accounting_app/screens/voucher_entry_screen.dart'; // ✅ Correct package import
+import 'package:accounting_app/screens/voucher_entry_screen.dart';
 import 'package:accounting_app/screens/sales/sales_screen.dart';
 import 'package:accounting_app/screens/purchase/purchase_screen.dart';
 import 'package:accounting_app/screens/sales/sales_return_screen.dart';
@@ -43,7 +43,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final txns = await DatabaseHelper.isar.accountingTransactions.where().findAll();
     double sales = 0.0;
     double purchases = 0.0;
-    double cash = 50000.0; // Default opening cash
+    double cash = 50000.0;
 
     for (var t in txns) {
       if (t.voucherType == 'Sales') sales += t.amount;
@@ -88,7 +88,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(16.0),
               child: ListView(
                 children: [
-                  // Summary Cards Row
                   Row(
                     children: [
                       Expanded(
@@ -127,10 +126,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-
                   const Text('Quick Shortcuts & Modules', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
-
                   GridView.count(
                     crossAxisCount: 3,
                     shrinkWrap: true,
