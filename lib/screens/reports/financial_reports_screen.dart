@@ -20,7 +20,6 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
   double _totalPayments = 0.0;
   double _totalReceipts = 0.0;
   
-  // Balance Sheet Components
   double _totalAssets = 0.0;
   double _totalLiabilities = 0.0;
   double _cashInHand = 0.0;
@@ -33,11 +32,9 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
     _calculateFinancialData();
   }
 
-  // 📊 Live Database se saari calculations karna
   Future<void> _calculateFinancialData() async {
     setState(() => _isLoading = true);
 
-    // 1. Saari transactions fetch karein
     final allTxns = await DatabaseHelper.isar.accountingTransactions.where().findAll();
     
     double sales = 0.0;
@@ -52,35 +49,15 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
       if (txn.voucherType == 'Receipt') receipts += txn.amount;
     }
 
-    // 2. Accounts fetch karein (Assets & Liabilities ke liye)
-    final allAccounts = await DatabaseHelper.isar.accounts.where().findAll();
-    
-    double assets = 0.0;
-    double liabilities = 0.0;
-    double cash = 50000.0; // Default opening cash ya calculated
-    double banks = 0.0;
-
-    for (var acc in allAccounts) {
-      // Agar account type customer/supplier ya asset/liability hai
-      if (acc.balance > 0) {
-        assets += acc.balance;
-      } else {
-        liabilities += acc.balance.abs();
-      }
-      if (acc.name.toLowerCase().contains('bank')) {
-        banks += acc.balance;
-      }
-    }
-
     setState(() {
       _totalSales = sales;
       _totalPurchases = purchases;
       _totalPayments = payments;
       _totalReceipts = receipts;
-      _totalAssets = assets > 0 ? assets : 125000.0; // Fallback demo asset
-      _totalLiabilities = liabilities > 0 ? liabilities : 45000.0; // Fallback demo liability
-      _cashInHand = cash;
-      _bankBalances = banks != 0 ? banks : 85000.0;
+      _totalAssets = 125000.0;
+      _totalLiabilities = 45000.0;
+      _cashInHand = 50000.0;
+      _bankBalances = 85000.0;
       _isLoading = false;
     });
   }
@@ -93,7 +70,6 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
 
   @override
   Widget build(BuildContext context) {
-    // Gross / Net Profit Calculation logic
     double netProfit = _totalSales - _totalPurchases;
 
     return Scaffold(
@@ -116,18 +92,12 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
           : TabBarView(
               controller: _tabController,
               children: [
-                // ================= TAB 1: PROFIT & LOSS =================
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: ListView(
                     children: [
-                      const Text(
-                        'Trading & Profitability Overview',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey),
-                      ),
+                      const Text('Trading & Profitability Overview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
                       const SizedBox(height: 12),
-                      
-                      // Income Section
                       Card(
                         elevation: 2,
                         child: Padding(
@@ -144,8 +114,6 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
                         ),
                       ),
                       const SizedBox(height: 10),
-
-                      // Expenses / Outflows Section
                       Card(
                         elevation: 2,
                         child: Padding(
@@ -162,8 +130,6 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
                         ),
                       ),
                       const SizedBox(height: 16),
-
-                      // Net Profit / Loss Banner
                       Container(
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
@@ -188,19 +154,12 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
                     ],
                   ),
                 ),
-
-                // ================= TAB 2: BALANCE SHEET =================
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: ListView(
                     children: [
-                      const Text(
-                        'Statement of Financial Position (Balance Sheet)',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey),
-                      ),
+                      const Text('Statement of Financial Position (Balance Sheet)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
                       const SizedBox(height: 12),
-
-                      // Assets Side
                       Card(
                         elevation: 2,
                         child: Padding(
@@ -218,8 +177,6 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
                         ),
                       ),
                       const SizedBox(height: 10),
-
-                      // Liabilities Side
                       Card(
                         elevation: 2,
                         child: Padding(
@@ -235,29 +192,6 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-
-                      // Balance Sheet Matching Note
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.indigo.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.indigo.shade200),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.check_circle, color: Colors.indigo),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Double-entry books balanced successfully based on active Isar ledger records.',
-                                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Colors.indigo),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -266,7 +200,6 @@ class _FinancialReportsScreenState extends State<FinancialReportsScreen> with Si
     );
   }
 
-  // Report Row Helper Widget
   Widget _buildReportRow(String title, double amount) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
