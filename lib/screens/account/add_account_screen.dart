@@ -3,8 +3,9 @@ import 'package:isar/isar.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:accounting_app/database/database_helper.dart';
-import 'package:accounting_app/models/account.dart'; // ✅ Correct Account Model
-import 'package:accounting_app/models/settings_model.dart'; // ✅ For CompanySettings (Routes & Salesmen)
+import 'package:accounting_app/models/account.dart';
+import 'package:accounting_app/models/settings_model.dart';
+import '../searchable_field.dart'; // ✅ Added searchable field import
 
 class AddAccountScreen extends StatefulWidget {
   const AddAccountScreen({super.key});
@@ -24,6 +25,16 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _pincodeController = TextEditingController();
   final _cityController = TextEditingController();
   final _stateController = TextEditingController();
+
+  // 🇮🇳 List of Indian States for Searchable Field
+  final List<String> _indianStates = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Jammu and Kashmir'
+  ];
 
   // 🔥 Route & Salesman Dropdown Variables & Lists
   List<String> _availableRoutes = [];
@@ -75,10 +86,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   @override
   void initState() {
     super.initState();
-    _loadMasterData(); // 👈 Settings se Routes aur Salesmen load karna
+    _loadMasterData();
   }
 
-  // 📂 CompanySettings se Routes aur Salesmen ki list fetch karna
   Future<void> _loadMasterData() async {
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
     if (settings != null) {
@@ -89,7 +99,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     }
   }
 
-  // ⚡ Quick Add Dialog (Naya Route ya Salesman turant add karne ke liye)
   void _showQuickAddDialog(String titleType, Function(String) onAdded) {
     final controller = TextEditingController();
 
@@ -163,7 +172,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     super.dispose();
   }
 
-  // 🌍 Pincode Auto-Fill Function
   Future<void> _lookupPincode(String pincode) async {
     if (pincode.length == 6) {
       try {
@@ -203,12 +211,11 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     if (name.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya Account / Party ka Naam likhein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Kripya Account / Party का Naam likhein!'), backgroundColor: Colors.red),
       );
       return;
     }
 
-    // 1️⃣ Check Existing Name
     final existingAccount = await DatabaseHelper.isar.accounts
         .filter()
         .nameEqualTo(name, caseSensitive: false)
@@ -222,7 +229,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       return;
     }
 
-    // 2️⃣ 🔥 Check Existing Mobile Number (1 Mobile = 1 Account Check)
     if (phone.isNotEmpty) {
       final existingByPhone = await DatabaseHelper.isar.accounts
           .filter()
@@ -266,33 +272,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       SnackBar(content: Text('Account "$name" safaltapurvak save ho gaya!'), backgroundColor: Colors.green),
     );
 
-    // Reset Form
-    _nameController.clear();
-    _phoneController.clear();
-    _emailController.clear();
-    _houseNoController.clear();
-    _streetController.clear();
-    _landmarkController.clear();
-    _pincodeController.clear();
-    _cityController.clear();
-    _stateController.clear();
-    _gstinController.clear();
-    _balanceController.clear();
-    _creditLimitAmountController.clear();
-    _creditDaysController.clear();
-    _usernameController.clear();
-    _passwordController.clear();
-    setState(() {
-      _groupCategory = 'Sundry Debtor';
-      _balanceType = 'Dr';
-      _priceCategory = 'A';
-      _isCreditControlEnabled = false;
-      _isPortalAccessEnabled = false;
-      _selectedRoute = null;
-      _selectedSalesman = null;
-    });
-
-    // Pop and return name if opened from Sales/Purchase
     Navigator.pop(context, name);
   }
 
@@ -312,7 +291,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Group Category Dropdown
               DropdownButtonFormField<String>(
                 value: _groupCategory,
                 items: _groupCategories.map((group) {
@@ -331,7 +309,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               ),
               const SizedBox(height: 14),
 
-              // 2. Account Name
               TextField(
                 controller: _nameController,
                 decoration: const InputDecoration(
@@ -344,7 +321,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               ),
               const SizedBox(height: 12),
 
-              // 3. Phone & Email
               Row(
                 children: [
                   Expanded(
@@ -370,7 +346,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               ),
               const SizedBox(height: 14),
 
-              // 4. Address & Price Tier
               if (isParty) ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -447,14 +422,21 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                       child: TextField(controller: _cityController, decoration: const InputDecoration(labelText: 'City / District', border: OutlineInputBorder())),
                     ),
                     const SizedBox(width: 8),
+                    // ✅ State field made Searchable using SearchableField
                     Expanded(
-                      child: TextField(controller: _stateController, decoration: const InputDecoration(labelText: 'State', border: OutlineInputBorder())),
+                      child: SearchableField(
+                        label: 'State',
+                        items: _indianStates,
+                        controller: _stateController,
+                        onSelected: (val) {
+                          _stateController.text = val;
+                        },
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
 
-                // 🔥 Route Dropdown with Quick Add Button
                 Row(
                   children: [
                     Expanded(
@@ -490,7 +472,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // 🔥 Salesman Dropdown with Quick Add Button
                 Row(
                   children: [
                     Expanded(
@@ -535,7 +516,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 const SizedBox(height: 12),
               ],
 
-              // 5. Opening Balance
               Row(
                 children: [
                   Expanded(
@@ -565,7 +545,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 6. Credit Control
               if (_groupCategory == 'Sundry Debtor') ...[
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -625,7 +604,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 const SizedBox(height: 16),
               ],
 
-              // 7. 🔥 CLIENT PORTAL LOGIN SETUP SECTION
               if (isParty) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -684,7 +662,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 const SizedBox(height: 24),
               ],
 
-              // Save Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
