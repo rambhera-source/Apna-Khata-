@@ -7,21 +7,21 @@ import '../models/product.dart';
 import '../models/order_model.dart';
 import '../models/user_model.dart';
 
-// ✅ All Screens Imported
-import 'sales_screen.dart';
-import 'sales_return_screen.dart';
-import 'purchase_screen.dart';
-import 'purchase_return_screen.dart';
-import 'ledger_screen.dart';
-import 'orders_management_screen.dart';
-import 'product_inventory_screen.dart';
+// ✅ All Screens Imported with New Folders Paths
+import 'sales/sales_screen.dart';
+import 'sales/sales_return_screen.dart';
+import 'purchase/purchase_screen.dart';
+import 'purchase/purchase_return_screen.dart';
+import 'reports/ledger_screen.dart';
+import 'order/orders_management_screen.dart';
+import 'products/product_inventory_screen.dart';
 import 'manufacturing_screen.dart';
-import 'voucher_entry_screen.dart';
-import 'settings_screen.dart';
+import 'voucher/voucher_entry_screen.dart';
+import 'setting/settings_screen.dart';
 import 'login_screen.dart';
-import 'add_account_screen.dart';
-import 'parties_master_screen.dart';
-import 'backup_settings_screen.dart';
+import 'account/add_account_screen.dart';
+import 'account/parties_master_screen.dart';
+import 'setting/backup_settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final UserAccount? currentUser;
@@ -158,7 +158,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersManagementScreen())).then((_) => _loadDashboardData());
   }
 
-  // 🔥 Placeholders for History Screens
   void _openSalesHistory() {
     if (Navigator.canPop(context)) Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -291,7 +290,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           
-          // 📱 MOBILE LEFT SIDEBAR (DRAWER)
           drawer: Drawer(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -327,7 +325,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onTap: _openAccountsMaster,
                 ),
 
-                // 🔥 Sales Dropdown Menu
                 ExpansionTile(
                   leading: const Icon(Icons.point_of_sale, color: Colors.green),
                   title: const Text('Sales', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -351,7 +348,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
 
-                // 🔥 Purchase Dropdown Menu
                 ExpansionTile(
                   leading: const Icon(Icons.shopping_bag, color: Colors.blue),
                   title: const Text('Purchase', style: TextStyle(fontWeight: FontWeight.bold)),
