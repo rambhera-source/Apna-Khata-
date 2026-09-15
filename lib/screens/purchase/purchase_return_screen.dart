@@ -13,7 +13,7 @@ import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/transaction_model.dart';
 import 'package:accounting_app/models/settings_model.dart';
 import 'package:accounting_app/models/inventory_model.dart';
-import 'searchable_field.dart';
+import '../searchable_field.dart'; // ✅ Updated relative import path
 
 class PurchaseReturnScreen extends StatefulWidget {
   const PurchaseReturnScreen({super.key});
@@ -453,7 +453,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             ),
             const SizedBox(height: 8),
 
-            // 🔥 Professional Table List View for Purchase Return Items
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               color: Colors.blue.shade100,
@@ -520,7 +519,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             ),
             const Divider(),
             
-            // 🔥 Calculations Box with Freight & Discount
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
