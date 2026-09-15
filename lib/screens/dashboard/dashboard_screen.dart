@@ -8,14 +8,16 @@ import '../sales/sales_screen.dart';
 import '../purchase/purchase_screen.dart';
 import '../sales/sales_return_screen.dart';
 import '../purchase/purchase_return_screen.dart';
-import '../accounts/accounts_screen.dart';
+import '../account/accounts_screen.dart'; // ✅ Corrected path
 import '../inventory/inventory_screen.dart';
 import '../daybook/daybook_screen.dart';
 import '../reports/reports_screen.dart';
 import '../setting/settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final dynamic currentUser; // ✅ Added back to support login & super admin passing
+
+  const DashboardScreen({super.key, this.currentUser});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -96,8 +98,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ORLIFE ERP Dashboard', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.teal.shade800,
+        title: const Text('ORLIFE ERP Dashboard', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF1B365D),
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -125,7 +127,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 🔥 TOP SUMMARY CARDS (Clickable Total Sales / Purchases & Balances)
+                    // 🔥 TOP SUMMARY CARDS
                     Row(
                       children: [
                         Expanded(
@@ -173,8 +175,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 🔥 MODULES GRID (9 Professional Categories)
-                    const Text('Quick Operations & Masters', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    // 🔥 MODULES GRID
+                    const Text('Quick Operations & Masters', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
                     const SizedBox(height: 8),
 
                     GridView.count(
@@ -206,13 +208,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildSummaryCard({required String title, required double amount, required Color color, required IconData icon, VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(6),
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          border: Border.all(color: color.withOpacity(0.4), width: 1),
-          borderRadius: BorderRadius.circular(8),
+          color: color.withOpacity(0.08),
+          border: Border.all(color: color.withOpacity(0.3), width: 1),
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -227,7 +229,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 6),
             Text(
               '₹ ${amount.toStringAsFixed(2)}',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color),
             ),
           ],
         ),
@@ -238,23 +240,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildMenuCard(BuildContext context, String title, IconData icon, Color color, Widget targetScreen) {
     return InkWell(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => targetScreen)),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(6),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           boxShadow: [
-            BoxShadow(color: Colors.grey.withOpacity(0.15), blurRadius: 4, offset: const Offset(0, 2)),
+            BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 3, offset: const Offset(0, 1)),
           ],
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: Colors.grey.shade300),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircleAvatar(
-              radius: 18,
-              backgroundColor: color.withOpacity(0.15),
-              child: Icon(icon, size: 20, color: color),
+              radius: 16,
+              backgroundColor: color.withOpacity(0.12),
+              child: Icon(icon, size: 18, color: color),
             ),
             const SizedBox(height: 6),
             Text(
