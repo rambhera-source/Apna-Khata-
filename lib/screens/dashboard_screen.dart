@@ -21,7 +21,7 @@ import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'add_account_screen.dart';
 import 'parties_master_screen.dart';
-import 'backup_settings_screen.dart'; // 🔥 Backup & Restore Screen Imported
+import 'backup_settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final UserAccount? currentUser;
@@ -96,7 +96,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // 🛠️ Open Customization Dialog
   void _showCustomizeDialog() {
     showDialog(
       context: context,
@@ -159,6 +158,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersManagementScreen())).then((_) => _loadDashboardData());
   }
 
+  // 🔥 Placeholders for History Screens
+  void _openSalesHistory() {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sales History Screen abhi banani baaki hai!'), backgroundColor: Colors.orange),
+    );
+  }
+
+  void _openPurchaseHistory() {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Purchase History Screen abhi banani baaki hai!'), backgroundColor: Colors.orange),
+    );
+  }
+
   void _openSaleBilling() {
     if (Navigator.canPop(context)) Navigator.pop(context);
     Navigator.push(context, MaterialPageRoute(builder: (context) => const SalesScreen())).then((_) => _loadDashboardData());
@@ -213,7 +227,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())).then((_) => _loadDashboardData());
   }
 
-  // 📂 Open Backup & Restore Screen
   void _openBackupSettings() {
     if (Navigator.canPop(context)) Navigator.pop(context);
     Navigator.push(context, MaterialPageRoute(builder: (context) => const BackupSettingsScreen())).then((_) => _loadDashboardData());
@@ -307,31 +320,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                 ),
+                
                 ListTile(
                   leading: const Icon(Icons.people, color: Colors.teal),
                   title: const Text('Accounts (All Parties)'),
                   onTap: _openAccountsMaster,
                 ),
-                ListTile(
-                  leading: const Icon(Icons.receipt, color: Colors.green),
-                  title: const Text('Sale Billing'),
-                  onTap: _openSaleBilling,
+
+                // 🔥 Sales Dropdown Menu
+                ExpansionTile(
+                  leading: const Icon(Icons.point_of_sale, color: Colors.green),
+                  title: const Text('Sales', style: TextStyle(fontWeight: FontWeight.bold)),
+                  childrenPadding: const EdgeInsets.only(left: 16.0),
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.history, color: Colors.teal),
+                      title: const Text('Sales History'),
+                      onTap: _openSalesHistory,
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.receipt, color: Colors.green),
+                      title: const Text('Sale Invoice'),
+                      onTap: _openSaleBilling,
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.assignment_return, color: Colors.greenAccent),
+                      title: const Text('Sale Return'),
+                      onTap: _openSalesReturn,
+                    ),
+                  ],
                 ),
-                ListTile(
-                  leading: const Icon(Icons.assignment_return, color: Colors.greenAccent),
-                  title: const Text('Sales Return'),
-                  onTap: _openSalesReturn,
-                ),
-                ListTile(
+
+                // 🔥 Purchase Dropdown Menu
+                ExpansionTile(
                   leading: const Icon(Icons.shopping_bag, color: Colors.blue),
-                  title: const Text('Purchase Entry'),
-                  onTap: _openPurchase,
+                  title: const Text('Purchase', style: TextStyle(fontWeight: FontWeight.bold)),
+                  childrenPadding: const EdgeInsets.only(left: 16.0),
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.history, color: Colors.indigo),
+                      title: const Text('Purchase History'),
+                      onTap: _openPurchaseHistory,
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.receipt_long, color: Colors.blue),
+                      title: const Text('Purchase Invoice'),
+                      onTap: _openPurchase,
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.keyboard_return, color: Colors.blueAccent),
+                      title: const Text('Purchase Return'),
+                      onTap: _openPurchaseReturn,
+                    ),
+                  ],
                 ),
-                ListTile(
-                  leading: const Icon(Icons.keyboard_return, color: Colors.blueAccent),
-                  title: const Text('Purchase Return'),
-                  onTap: _openPurchaseReturn,
-                ),
+
                 ListTile(
                   leading: const Icon(Icons.account_balance_wallet, color: Colors.indigo),
                   title: const Text('Ledger & Parties'),
@@ -368,7 +411,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: const Text('General Voucher'),
                   onTap: _openGeneralVoucher,
                 ),
-                // 🔥 Renamed to 'Settings' and linked to Backup & Restore Manager
                 ListTile(
                   leading: const Icon(Icons.settings, color: Colors.blueGrey),
                   title: const Text('Settings'),
