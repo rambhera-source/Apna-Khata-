@@ -127,7 +127,6 @@ class _SalesScreenState extends State<SalesScreen> {
 
     if (pendingOrders.isEmpty || !mounted) return;
 
-    // Track selected orders inside the popup dialog
     Set<SalesOrder> selectedOrdersForBilling = {};
 
     showDialog(
@@ -214,7 +213,6 @@ class _SalesScreenState extends State<SalesScreen> {
     for (var order in orders) {
       await order.items.load();
       for (var orderItem in order.items) {
-        // Find matching inventory item for stock info & SKU
         final invMatch = _allInventoryItems.firstWhere(
           (inv) => inv.itemName.toLowerCase() == orderItem.productName.toLowerCase(),
           orElse: () => InventoryItem()
@@ -623,7 +621,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Date Input (Manual + Calendar Picker) & Customer Searchable Autocomplete
+              // Date Input & Customer Searchable Autocomplete (Stable Dropdown on Keyboard Hide)
               Row(
                 children: [
                   SizedBox(
@@ -658,12 +656,15 @@ class _SalesScreenState extends State<SalesScreen> {
                   Expanded(
                     child: SizedBox(
                       height: 40,
-                      child: Autocomplete<Account>(
+                      child: RawAutocomplete<Account>(
                         optionsBuilder: (TextEditingValue textEditingValue) {
                           if (textEditingValue.text.isEmpty) {
                             return _allAccountsList;
                           }
-                          return _allAccountsList.where((acc) => acc.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) || (acc.phone != null && acc.phone!.contains(textEditingValue.text)));
+                          return _allAccountsList.where((acc) => 
+                            acc.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) || 
+                            (acc.phone != null && acc.phone!.contains(textEditingValue.text))
+                          );
                         },
                         displayStringForOption: (Account option) => option.name,
                         onSelected: (Account selection) {
@@ -671,10 +672,9 @@ class _SalesScreenState extends State<SalesScreen> {
                           _checkForPendingOrders(selection.name);
                           Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
                         },
+                        textEditingController: _partyController,
+                        focusNode: FocusNode(),
                         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                          if (_partyController.text.isNotEmpty && controller.text.isEmpty) {
-                            controller.text = _partyController.text;
-                          }
                           return TextField(
                             controller: controller,
                             focusNode: focusNode,
@@ -686,7 +686,6 @@ class _SalesScreenState extends State<SalesScreen> {
                               contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                               prefixIcon: Icon(Icons.person, size: 16),
                             ),
-                            onChanged: (val) => _partyController.text = val,
                           );
                         },
                         optionsViewBuilder: (context, onSelected, options) {
@@ -707,7 +706,6 @@ class _SalesScreenState extends State<SalesScreen> {
                                         leading: const Icon(Icons.person_add, color: Colors.teal, size: 16),
                                         title: const Text('+ Add New Party / Customer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
                                         onTap: () {
-                                          Navigator.pop(context);
                                           _navigateToAddNewParty();
                                         },
                                       );
@@ -813,7 +811,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
                     const SizedBox(height: 4),
 
-                    // Inline Search Bar for Inventory Items
+                    // Stable RawAutocomplete for Inventory Items
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
@@ -821,7 +819,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (_selectedInlineProduct == null)
-                            Autocomplete<InventoryItem>(
+                            RawAutocomplete<InventoryItem>(
                               optionsBuilder: (TextEditingValue textEditingValue) {
                                 if (textEditingValue.text.isEmpty) return _allInventoryItems;
                                 return _allInventoryItems.where((item) =>
@@ -853,13 +851,12 @@ class _SalesScreenState extends State<SalesScreen> {
                                   });
                                 }
                               },
+                              textEditingController: _inlineSearchController,
+                              focusNode: _searchFocusNode,
                               fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                if (_inlineSearchController.text.isNotEmpty && controller.text.isEmpty) {
-                                  controller.text = _inlineSearchController.text;
-                                }
                                 return TextField(
                                   controller: controller,
-                                  focusNode: _searchFocusNode,
+                                  focusNode: focusNode,
                                   style: const TextStyle(fontSize: 12),
                                   decoration: const InputDecoration(
                                     labelText: 'Search Product Name or SKU to add...',
@@ -868,7 +865,6 @@ class _SalesScreenState extends State<SalesScreen> {
                                     contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                     prefixIcon: Icon(Icons.search, size: 16),
                                   ),
-                                  onChanged: (val) => _inlineSearchController.text = val,
                                   onSubmitted: (val) {
                                     if (val.trim().isEmpty) {
                                       _freightFocusNode.requestFocus();
@@ -894,7 +890,6 @@ class _SalesScreenState extends State<SalesScreen> {
                                               leading: const Icon(Icons.add_circle, color: Colors.teal, size: 16),
                                               title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
                                               onTap: () async {
-                                                Navigator.pop(context);
                                                 await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
                                                 await _loadDropdownDataAndSettings();
                                               },
@@ -1041,7 +1036,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     const SizedBox(height: 2),
                     SizedBox(
                       height: 32,
-                      child: Autocomplete<Map<String, dynamic>>(
+                      child: RawAutocomplete<Map<String, dynamic>>(
                         optionsBuilder: (TextEditingValue textEditingValue) {
                           if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
                           return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
@@ -1059,10 +1054,12 @@ class _SalesScreenState extends State<SalesScreen> {
                           });
                           _freightSearchController.clear();
                         },
+                        textEditingController: _freightSearchController,
+                        focusNode: _freightFocusNode,
                         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                           return TextField(
                             controller: controller,
-                            focusNode: _freightFocusNode,
+                            focusNode: focusNode,
                             style: const TextStyle(fontSize: 11),
                             decoration: const InputDecoration(
                               labelText: 'Add Freight / Charge...',
@@ -1076,6 +1073,30 @@ class _SalesScreenState extends State<SalesScreen> {
                                 FocusScope.of(context).requestFocus(_saveButtonFocusNode);
                               }
                             },
+                          );
+                        },
+                        optionsViewBuilder: (context, onSelected, options) {
+                          return Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 4,
+                              child: SizedBox(
+                                width: 240,
+                                height: 120,
+                                child: ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: options.length,
+                                  itemBuilder: (context, index) {
+                                    final opt = options.elementAt(index);
+                                    return ListTile(
+                                      dense: true,
+                                      title: Text(opt['name'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                      onTap: () => onSelected(opt),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
                           );
                         },
                       ),
