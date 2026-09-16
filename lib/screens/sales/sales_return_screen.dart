@@ -12,22 +12,21 @@ import 'package:share_plus/share_plus.dart';
 import '../../database/database_helper.dart';
 import '../../models/account.dart';
 import '../../models/transaction_model.dart';
-import '../../models/order_model.dart';
 import '../../models/settings_model.dart'; 
 import '../../models/inventory_model.dart';
 import '../account/add_account_screen.dart';
 import '../products/product_inventory_screen.dart';
 
-class SalesScreen extends StatefulWidget {
-  const SalesScreen({super.key});
+class SalesReturnScreen extends StatefulWidget {
+  const SalesReturnScreen({super.key});
 
   @override
-  State<SalesScreen> createState() => _SalesScreenState();
+  State<SalesReturnScreen> createState() => _SalesReturnScreenState();
 }
 
-class _SalesScreenState extends State<SalesScreen> {
+class _SalesReturnScreenState extends State<SalesReturnScreen> {
   final TextEditingController _partyController = TextEditingController();
-  final TextEditingController _invoiceNoController = TextEditingController(text: 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
+  final TextEditingController _returnNoController = TextEditingController(text: 'SR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   final TextEditingController _dateController = TextEditingController();
   
   final TextEditingController _inlineSearchController = TextEditingController();
@@ -41,9 +40,6 @@ class _SalesScreenState extends State<SalesScreen> {
   final FocusNode _priceFocusNode = FocusNode();
   final FocusNode _saveButtonFocusNode = FocusNode();
 
-  List<Map<String, dynamic>> _presetChargesList = [];
-  final List<Map<String, dynamic>> _billChargesList = [];
-
   DateTime _selectedDate = DateTime.now();
 
   List<Account> _allAccountsList = [];
@@ -51,9 +47,6 @@ class _SalesScreenState extends State<SalesScreen> {
   InventoryItem? _selectedInlineProduct;
   
   final List<Map<String, dynamic>> _cartItems = [];
-  String _paymentMode = 'Cash';
-  final List<String> _paymentModes = ['Cash', 'Bank / UPI', 'Credit'];
-
   String _globalStockType = 'Fresh';
   final List<String> _stockTypes = ['Fresh', 'Old', 'Damaged'];
 
@@ -77,20 +70,6 @@ class _SalesScreenState extends State<SalesScreen> {
     final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
 
-    List<Map<String, dynamic>> loadedCharges = [];
-    loadedCharges.add({'name': 'Freight Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 30.0});
-    loadedCharges.add({'name': 'Discount', 'type': 'Less', 'mode': 'Fixed', 'value': 0.0});
-
-    if (settings != null) {
-      try {
-        for (var e in settings.extraCharges) {
-          try {
-            loadedCharges.add(Map<String, dynamic>.from(jsonDecode(e)));
-          } catch (_) {}
-        }
-      } catch (_) {}
-    }
-
     setState(() {
       _allAccountsList = accounts;
       _allInventoryItems = inventoryItems;
@@ -98,7 +77,6 @@ class _SalesScreenState extends State<SalesScreen> {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
       }
-      _presetChargesList = loadedCharges;
     });
   }
 
@@ -114,140 +92,7 @@ class _SalesScreenState extends State<SalesScreen> {
       setState(() {
         _partyController.text = newPartyName;
       });
-      _checkForPendingOrders(newPartyName);
     }
-  }
-
-  Future<void> _checkForPendingOrders(String partyName) async {
-    if (partyName.isEmpty) return;
-
-    final pendingOrders = await DatabaseHelper.isar.salesOrders
-        .filter()
-        .partyNameEqualTo(partyName, caseSensitive: false)
-        .and()
-        .statusEqualTo('Pending')
-        .findAll();
-
-    if (pendingOrders.isEmpty || !mounted) return;
-
-    Set<SalesOrder> selectedOrdersForBilling = {};
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Icon(Icons.bookmark_added_rounded, color: Colors.teal.shade800, size: 26),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Pending Orders Found (${pendingOrders.length})',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: 350,
-            height: 280,
-            child: ListView.builder(
-              itemCount: pendingOrders.length,
-              itemBuilder: (context, index) {
-                final order = pendingOrders[index];
-                final isChecked = selectedOrdersForBilling.contains(order);
-
-                return Container(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isChecked ? Colors.teal.shade50 : Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: isChecked ? Colors.teal.shade300 : Colors.grey.shade300),
-                  ),
-                  child: CheckboxListTile(
-                    dense: true,
-                    activeColor: Colors.teal,
-                    title: Text('Order No: ${order.orderNo}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    subtitle: Text('Date: ${DateFormat('dd-MM-yyyy').format(order.date)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                    value: isChecked,
-                    onChanged: (bool? value) {
-                      setDialogState(() {
-                        if (value == true) {
-                          selectedOrdersForBilling.add(order);
-                        } else {
-                          selectedOrdersForBilling.remove(order);
-                        }
-                      });
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Skip', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              onPressed: () {
-                if (selectedOrdersForBilling.isNotEmpty) {
-                  _loadItemsFromSelectedOrders(selectedOrdersForBilling);
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Load Into Bill'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _loadItemsFromSelectedOrders(Set<SalesOrder> orders) async {
-    for (var order in orders) {
-      await order.items.load();
-      for (var orderItem in order.items) {
-        final invMatch = _allInventoryItems.firstWhere(
-          (inv) => inv.itemName.toLowerCase() == orderItem.productName.toLowerCase(),
-          orElse: () => InventoryItem()
-            ..itemName = orderItem.productName
-            ..sku = '-'
-            ..priceA = orderItem.price
-            ..stockQuantity = 0,
-        );
-
-        bool isOutOfStock = invMatch.stockQuantity <= 0;
-
-        setState(() {
-          int existingIndex = _cartItems.indexWhere((item) => item['name'] == orderItem.productName);
-
-          if (existingIndex != -1) {
-            _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + orderItem.qty;
-          } else {
-            _cartItems.add({
-              'name': orderItem.productName,
-              'sku': invMatch.sku ?? '-',
-              'qty': orderItem.qty,
-              'price': orderItem.price,
-              'stockType': _globalStockType,
-              'isOutOfStock': isOutOfStock,
-            });
-          }
-        });
-      }
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pending order items successfully loaded into bill!'), backgroundColor: Colors.green),
-    );
   }
 
   Future<void> _selectDate() async {
@@ -278,8 +123,6 @@ class _SalesScreenState extends State<SalesScreen> {
       return;
     }
 
-    bool isOutOfStock = _selectedInlineProduct!.stockQuantity <= 0;
-
     setState(() {
       int existingIndex = _cartItems.indexWhere((item) => item['name'] == _selectedInlineProduct!.itemName);
 
@@ -293,7 +136,6 @@ class _SalesScreenState extends State<SalesScreen> {
           'qty': q,
           'price': pr,
           'stockType': _globalStockType,
-          'isOutOfStock': isOutOfStock,
         });
       }
 
@@ -312,40 +154,24 @@ class _SalesScreenState extends State<SalesScreen> {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  double get _billChargesTotal {
-    double total = 0.0;
-    for (var charge in _billChargesList) {
-      double qty = charge['qty'] is double ? charge['qty'] : double.tryParse(charge['qty'].toString()) ?? 1.0;
-      double rate = charge['rate'] is double ? charge['rate'] : double.tryParse(charge['rate'].toString()) ?? 0.0;
-      double amt = qty * rate;
-
-      if (charge['type'] == 'Less' || charge['name'].toString().toLowerCase().contains('discount')) {
-        total -= amt;
-      } else {
-        total += amt;
-      }
-    }
-    return total;
-  }
-
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    double taxableValue = _subTotal + _billChargesTotal;
+    double taxableValue = _subTotal;
     if (taxableValue < 0) taxableValue = 0;
     return taxableValue * (_gstRate / 100);
   }
 
   double get _grandTotal {
-    double total = _subTotal + _billChargesTotal + _taxAmount;
+    double total = _subTotal + _taxAmount;
     return total < 0 ? 0 : total;
   }
 
   // 🔥 Interactive Invoice Preview Dialog
-  void _showInvoicePreviewDialog() {
+  void _showReturnPreviewDialog() {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('⚠️ Pehle Party Name aur Items add karein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('⚠️ Pehle Party Name aur Return Items add karein!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -357,7 +183,7 @@ class _SalesScreenState extends State<SalesScreen> {
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Invoice Preview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+            const Text('Sales Return Preview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange)),
             IconButton(
               icon: const Icon(Icons.close, size: 20),
               onPressed: () => Navigator.pop(context),
@@ -375,7 +201,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   child: Column(
                     children: [
                       Text('ORLIFE Mobile Accessories', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text('Wholesale & Retail Mobile Parts', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      Text('Sales Return / Debit Note', style: TextStyle(fontSize: 11, color: Colors.grey)),
                     ],
                   ),
                 ),
@@ -386,14 +212,14 @@ class _SalesScreenState extends State<SalesScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Bill To: $partyName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        Text('Payment: $_paymentMode | Type: $_globalStockType', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                        Text('Party Name: $partyName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text('Stock Type: $_globalStockType', style: const TextStyle(fontSize: 10, color: Colors.grey)),
                       ],
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text('Inv No: ${_invoiceNoController.text}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        Text('Return No: ${_returnNoController.text}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                         Text('Date: ${_dateController.text}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                       ],
                     ),
@@ -402,7 +228,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                  decoration: BoxDecoration(color: Colors.teal.shade700, borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(color: Colors.orange.shade800, borderRadius: BorderRadius.circular(4)),
                   child: const Row(
                     children: [
                       SizedBox(width: 25, child: Text('S.N.', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
@@ -440,7 +266,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         if (_isGstActive) Text('GST (${_gstRate}%): + ₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         const SizedBox(height: 4),
-                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.teal)),
+                        Text('Return Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.orange)),
                       ],
                     ),
                   ],
@@ -455,12 +281,12 @@ class _SalesScreenState extends State<SalesScreen> {
             child: const Text('Close', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
             icon: const Icon(Icons.print, size: 16),
             label: const Text('Print / PDF'),
             onPressed: () {
               Navigator.pop(context);
-              _generateAndPrintOrShareInvoice(isWhatsApp: false);
+              _generateAndPrintOrShareReturn(isWhatsApp: false);
             },
           ),
         ],
@@ -468,8 +294,8 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // 🔥 Professional PDF Generation for Share & Print
-  Future<void> _generateAndPrintOrShareInvoice({required bool isWhatsApp}) async {
+  // 🔥 Professional PDF Generation for Sales Return
+  Future<void> _generateAndPrintOrShareReturn({required bool isWhatsApp}) async {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) return;
 
@@ -481,15 +307,14 @@ class _SalesScreenState extends State<SalesScreen> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // Header
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
-                      pw.Text('Wholesale & Retail Mobile Parts & Accessories', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
+                      pw.Text('Sales Return / Debit Note', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                       if (_isGstActive && _companyGstin.isNotEmpty)
                         pw.Text('GSTIN: $_companyGstin', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ],
@@ -497,17 +322,16 @@ class _SalesScreenState extends State<SalesScreen> {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
-                      pw.Text(_isGstActive ? 'TAX INVOICE' : 'ESTIMATE BILL', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
-                      pw.Text('Invoice No: ${_invoiceNoController.text}', style: const pw.TextStyle(fontSize: 11)),
+                      pw.Text('SALES RETURN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
+                      pw.Text('Return No: ${_returnNoController.text}', style: const pw.TextStyle(fontSize: 11)),
                       pw.Text('Date: ${_dateController.text}', style: const pw.TextStyle(fontSize: 11)),
                     ],
                   ),
                 ],
               ),
-              pw.Divider(thickness: 1.5, color: PdfColors.teal),
+              pw.Divider(thickness: 1.5, color: PdfColors.orange),
               pw.SizedBox(height: 8),
 
-              // Party & Bill Info
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -521,7 +345,6 @@ class _SalesScreenState extends State<SalesScreen> {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
-                      pw.Text('Payment Mode: $_paymentMode', style: const pw.TextStyle(fontSize: 11)),
                       pw.Text('Stock Type: $_globalStockType', style: const pw.TextStyle(fontSize: 11)),
                     ],
                   ),
@@ -529,7 +352,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               pw.SizedBox(height: 15),
 
-              // Items Table
               pw.Table.fromTextArray(
                 headers: ['S.N.', 'Item Description & SKU', 'Qty', 'Unit', 'Price (₹)', 'Total (₹)'],
                 data: List.generate(_cartItems.length, (index) {
@@ -545,7 +367,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   ];
                 }),
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.teal),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.orange),
                 cellStyle: const pw.TextStyle(fontSize: 10),
                 cellAlignment: pw.Alignment.centerLeft,
                 columnWidths: {
@@ -559,21 +381,20 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               pw.SizedBox(height: 20),
 
-              // Total Summary Box
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.end,
                 children: [
                   pw.Container(
                     width: 220,
                     padding: const pw.EdgeInsets.all(8),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.teal), borderRadius: pw.BorderRadius.circular(4)),
+                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.orange), borderRadius: pw.BorderRadius.circular(4)),
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            const pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)),
+                            pw.Text('Subtotal:', style: const pw.TextStyle(fontSize: 11)),
                             pw.Text('₹ ${_subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
@@ -591,8 +412,8 @@ class _SalesScreenState extends State<SalesScreen> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
-                            pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
+                            pw.Text('Return Total:', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
+                            pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
                           ],
                         ),
                       ],
@@ -608,15 +429,15 @@ class _SalesScreenState extends State<SalesScreen> {
 
     if (isWhatsApp) {
       final output = await getTemporaryDirectory();
-      final file = File('${output.path}/Invoice_${_invoiceNoController.text}.pdf');
+      final file = File('${output.path}/SalesReturn_${_returnNoController.text}.pdf');
       await file.writeAsBytes(await pdf.save());
-      await Share.shareXFiles([XFile(file.path)], text: 'Sales Invoice #${_invoiceNoController.text} from ORLIFE Mobile Accessories. Total: ₹ ${_grandTotal.toStringAsFixed(2)}');
+      await Share.shareXFiles([XFile(file.path)], text: 'Sales Return #${_returnNoController.text} from ORLIFE. Total: ₹ ${_grandTotal.toStringAsFixed(2)}');
     } else {
       await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     }
   }
 
-  Future<void> _saveSalesTransaction() async {
+  Future<void> _saveSalesReturnTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
       return;
@@ -625,21 +446,21 @@ class _SalesScreenState extends State<SalesScreen> {
     await DatabaseHelper.isar.writeTxn(() async {
       final txn = AccountingTransaction()
         ..date = _selectedDate
-        ..voucherType = 'Sales'
-        ..voucherNumber = _invoiceNoController.text
+        ..voucherType = 'Sales Return'
+        ..voucherNumber = _returnNoController.text
         ..partyName = _partyController.text.trim()
-        ..cashOrBank = _paymentMode
+        ..cashOrBank = 'Cash'
         ..amount = _grandTotal
-        ..notes = 'Sales Invoice';
+        ..notes = 'Sales Return Bill';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
+      // Sales return me stock wapas inventory me judta hai
       for (var cartItem in _cartItems) {
         String prodName = cartItem['name'];
-        double soldQty = (cartItem['qty'] as int).toDouble();
+        double returnedQty = (cartItem['qty'] as int).toDouble();
         final invItem = await DatabaseHelper.isar.inventoryItems.filter().itemNameEqualTo(prodName, caseSensitive: false).findFirst();
         if (invItem != null) {
-          invItem.stockQuantity -= soldQty;
-          if (invItem.stockQuantity < 0) invItem.stockQuantity = 0;
+          invItem.stockQuantity += returnedQty;
           await DatabaseHelper.isar.inventoryItems.put(invItem);
         }
       }
@@ -654,17 +475,17 @@ class _SalesScreenState extends State<SalesScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: const [
-            Icon(Icons.check_circle, color: Colors.teal, size: 28),
+            Icon(Icons.check_circle, color: Colors.orange, size: 28),
             SizedBox(width: 10),
-            Text('Bill Saved Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('Return Saved Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('Aapka sales bill safalपूर्वक save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
+        content: const Text('Sales return safalपूर्वक save ho gaya hai aur stock inventory me update kar diya gaya hai.', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _clearBill();
+              _clearReturn();
             },
             child: const Text('Close', style: TextStyle(color: Colors.grey)),
           ),
@@ -674,18 +495,18 @@ class _SalesScreenState extends State<SalesScreen> {
             label: const Text('Share PDF'),
             onPressed: () {
               Navigator.pop(context);
-              _generateAndPrintOrShareInvoice(isWhatsApp: true);
-              _clearBill();
+              _generateAndPrintOrShareReturn(isWhatsApp: true);
+              _clearReturn();
             },
           ),
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
             icon: const Icon(Icons.print, size: 16),
             label: const Text('Print'),
             onPressed: () {
               Navigator.pop(context);
-              _generateAndPrintOrShareInvoice(isWhatsApp: false);
-              _clearBill();
+              _generateAndPrintOrShareReturn(isWhatsApp: false);
+              _clearReturn();
             },
           ),
         ],
@@ -693,12 +514,11 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  void _clearBill() {
+  void _clearReturn() {
     setState(() {
       _cartItems.clear();
       _partyController.clear();
-      _invoiceNoController.text = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-      _billChargesList.clear();
+      _returnNoController.text = 'SR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     });
     Future.delayed(const Duration(milliseconds: 50), () {
       _dateFocusNode.requestFocus();
@@ -712,8 +532,8 @@ class _SalesScreenState extends State<SalesScreen> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('Discard Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Kya aap waqai is sales bill ko exit karna chahte hain?', style: TextStyle(fontSize: 13)),
+        title: const Text('Discard Return?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: const Text('Kya aap waqai is sales return bill ko exit karna chahte hain?', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
@@ -734,8 +554,8 @@ class _SalesScreenState extends State<SalesScreen> {
       child: Scaffold(
         resizeToAvoidBottomInset: false,
         appBar: AppBar(
-          title: const Text('Sales Invoice'),
-          backgroundColor: Colors.teal.shade800,
+          title: const Text('Sales Return'),
+          backgroundColor: Colors.orange.shade800,
           foregroundColor: Colors.white,
         ),
         body: Padding(
@@ -743,19 +563,19 @@ class _SalesScreenState extends State<SalesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Bar (Invoice No, Stock Type, Payment Mode)
+              // Top Bar (Return No & Stock Type)
               Row(
                 children: [
                   Expanded(
-                    flex: 2,
+                    flex: 3,
                     child: SizedBox(
                       height: 40,
                       child: TextField(
-                        controller: _invoiceNoController,
+                        controller: _returnNoController,
                         readOnly: true,
                         style: const TextStyle(fontSize: 11),
                         decoration: InputDecoration(
-                          labelText: 'Invoice No',
+                          labelText: 'Return No',
                           border: const OutlineInputBorder(),
                           isDense: true,
                           filled: true,
@@ -767,7 +587,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                   const SizedBox(width: 6),
                   Expanded(
-                    flex: 2,
+                    flex: 3,
                     child: SizedBox(
                       height: 40,
                       child: DropdownButtonFormField<String>(
@@ -775,19 +595,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type, style: const TextStyle(fontSize: 11)))).toList(),
                         onChanged: (val) => setState(() => _globalStockType = val!),
                         decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    flex: 2,
-                    child: SizedBox(
-                      height: 40,
-                      child: DropdownButtonFormField<String>(
-                        value: _paymentMode,
-                        items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
-                        onChanged: (val) => setState(() => _paymentMode = val!),
-                        decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8)),
                       ),
                     ),
                   ),
@@ -812,7 +619,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                         suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_today, size: 14, color: Colors.teal),
+                          icon: const Icon(Icons.calendar_today, size: 14, color: Colors.orange),
                           onPressed: _selectDate,
                           constraints: const BoxConstraints(),
                           padding: const EdgeInsets.only(right: 4),
@@ -840,7 +647,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         displayStringForOption: (Account option) => option.name,
                         onSelected: (Account selection) {
                           _partyController.text = selection.name;
-                          _checkForPendingOrders(selection.name);
                           Future.delayed(const Duration(milliseconds: 50), () {
                             _searchFocusNode.requestFocus();
                           });
@@ -886,9 +692,9 @@ class _SalesScreenState extends State<SalesScreen> {
                                   itemBuilder: (context, index) {
                                     if (index == 0) {
                                       return ListTile(
-                                        tileColor: Colors.teal.shade50,
-                                        leading: const Icon(Icons.person_add, color: Colors.teal, size: 16),
-                                        title: const Text('+ Add New Party / Customer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
+                                        tileColor: Colors.orange.shade50,
+                                        leading: const Icon(Icons.person_add, color: Colors.orange, size: 16),
+                                        title: const Text('+ Add New Party / Customer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.orange)),
                                         onTap: () {
                                           _navigateToAddNewParty();
                                         },
@@ -917,7 +723,7 @@ class _SalesScreenState extends State<SalesScreen> {
               // Professional Grid Table Header
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                decoration: BoxDecoration(color: Colors.teal.shade800, borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(color: Colors.orange.shade800, borderRadius: BorderRadius.circular(4)),
                 child: const Row(
                   children: [
                     SizedBox(width: 25, child: Text('S.N.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10))),
@@ -940,7 +746,6 @@ class _SalesScreenState extends State<SalesScreen> {
                     ...List.generate(_cartItems.length, (index) {
                       final item = _cartItems[index];
                       double total = (item['qty'] as int) * (item['price'] as double);
-                      bool isOutOfStock = item['isOutOfStock'] ?? false;
 
                       return Container(
                         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -956,7 +761,7 @@ class _SalesScreenState extends State<SalesScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(item['name'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87)),
+                                  Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87)),
                                   Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                 ],
                               ),
@@ -999,7 +804,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             const SizedBox(width: 6),
                             SizedBox(
                               width: 65,
-                              child: Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal), textAlign: TextAlign.right),
+                              child: Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.orange), textAlign: TextAlign.right),
                             ),
                             SizedBox(
                               width: 25,
@@ -1020,7 +825,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     // Inline Product Search Bar
                     Container(
                       padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
+                      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.orange.shade200)),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1056,7 +861,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                   focusNode: focusNode,
                                   style: const TextStyle(fontSize: 12),
                                   decoration: const InputDecoration(
-                                    labelText: 'Search Product Name or SKU to add...',
+                                    labelText: 'Search Product Name or SKU to return...',
                                     border: OutlineInputBorder(),
                                     isDense: true,
                                     contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -1082,26 +887,13 @@ class _SalesScreenState extends State<SalesScreen> {
                                       height: 150,
                                       child: ListView.builder(
                                         padding: EdgeInsets.zero,
-                                        itemCount: options.length + 1,
+                                        itemCount: options.length,
                                         itemBuilder: (context, index) {
-                                          if (index == 0) {
-                                            return ListTile(
-                                              tileColor: Colors.teal.shade100,
-                                              leading: const Icon(Icons.add_circle, color: Colors.teal, size: 16),
-                                              title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
-                                              onTap: () async {
-                                                await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
-                                                await _loadDropdownDataAndSettings();
-                                              },
-                                            );
-                                          }
-                                          final item = options.elementAt(index - 1);
-                                          bool isOutOfStock = item.stockQuantity <= 0;
-
+                                          final item = options.elementAt(index);
                                           return ListTile(
                                             dense: true,
-                                            title: Text(item.itemName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87)),
-                                            subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: TextStyle(fontSize: 9, color: isOutOfStock ? Colors.red.shade700 : Colors.grey)),
+                                            title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                            subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                             onTap: () => onSelected(item),
                                           );
                                         },
@@ -1118,7 +910,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                   flex: 3,
                                   child: Text(
                                     _selectedInlineProduct!.itemName,
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _selectedInlineProduct!.stockQuantity <= 0 ? Colors.red : Colors.teal),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -1173,12 +965,12 @@ class _SalesScreenState extends State<SalesScreen> {
               // Bottom Summary
               Container(
                 padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
+                decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.orange.shade200)),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                    Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
+                    Text('Return Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.orange)),
                   ],
                 ),
               ),
@@ -1194,7 +986,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                         icon: const Icon(Icons.preview, size: 14),
                         label: const Text('Preview', style: TextStyle(fontSize: 11)),
-                        onPressed: _showInvoicePreviewDialog,
+                        onPressed: _showReturnPreviewDialog,
                       ),
                     ),
                   ),
@@ -1206,7 +998,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                         icon: const Icon(Icons.share, size: 14),
                         label: const Text('WhatsApp', style: TextStyle(fontSize: 11)),
-                        onPressed: () => _generateAndPrintOrShareInvoice(isWhatsApp: true),
+                        onPressed: () => _generateAndPrintOrShareReturn(isWhatsApp: true),
                       ),
                     ),
                   ),
@@ -1216,9 +1008,9 @@ class _SalesScreenState extends State<SalesScreen> {
                       height: 36,
                       child: ElevatedButton(
                         focusNode: _saveButtonFocusNode,
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade800, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
-                        onPressed: _saveSalesTransaction,
-                        child: const Text('Save Bill', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
+                        onPressed: _saveSalesReturnTransaction,
+                        child: const Text('Save Return', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ),
@@ -1234,7 +1026,7 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void dispose() {
     _partyController.dispose();
-    _invoiceNoController.dispose();
+    _returnNoController.dispose();
     _dateController.dispose();
     _inlineSearchController.dispose();
     _inlineQtyController.dispose();
