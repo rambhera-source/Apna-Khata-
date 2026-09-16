@@ -15,8 +15,8 @@ import '../../models/transaction_model.dart';
 import '../../models/order_model.dart';
 import '../../models/settings_model.dart'; 
 import '../../models/inventory_model.dart';
-import 'accounting/add_account_screen.dart';        // 👈 Correct relative path for AddAccountScreen
-import 'products/product_inventory_screen.dart'; // 👈 Correct relative path for ProductInventoryScreen
+import '../account/add_account_screen.dart';        // 👈 Fixed relative path
+import '../products/product_inventory_screen.dart'; // 👈 Fixed relative path
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -180,7 +180,7 @@ class _SalesScreenState extends State<SalesScreen> {
           'qty': q,
           'price': pr,
           'stockType': _globalStockType,
-          'isOutOfStock': isOutOfStock, // 👈 Track stock status in cart
+          'isOutOfStock': isOutOfStock,
         });
       }
 
@@ -727,7 +727,6 @@ class _SalesScreenState extends State<SalesScreen> {
                                   );
                                   _inlineSearchController.clear();
                                 } else {
-                                  bool isOutOfStock = selection.stockQuantity <= 0;
                                   setState(() {
                                     _selectedInlineProduct = selection;
                                     _inlinePriceController.text = selection.priceA.toString();
