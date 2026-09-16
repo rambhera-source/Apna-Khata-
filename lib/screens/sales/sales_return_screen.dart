@@ -749,7 +749,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                                                 title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.green)),
                                                 onTap: () async {
                                                   Navigator.pop(context);
-                                                  await Navigator.path(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
+                                                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
                                                   await _loadDropdownDataAndSettings();
                                                 },
                                               );
