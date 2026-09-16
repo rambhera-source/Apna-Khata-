@@ -29,7 +29,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _returnNoController = TextEditingController(text: 'SRN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
-  // Inline Product Search & Input Controllers with FocusNodes for smooth flow
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
@@ -92,10 +91,10 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     });
   }
 
-  void _navigateToAddNewPartyWithPreFill(String partyName) async {
+  void _navigateToAddNewParty() async {
     final String? newPartyName = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => AddAccountScreen(initialName: partyName)),
+      MaterialPageRoute(builder: (context) => const AddAccountScreen()),
     );
 
     await _loadDropdownDataAndSettings();
@@ -316,7 +315,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
 
     if (!mounted) return;
 
-    // ✨ Sales Return Saved Success Dialog with Share & Print options
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -426,7 +424,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Return No, Stock Type & Refund Mode Row
               Row(
                 children: [
                   Expanded(
@@ -478,7 +475,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               ),
               const SizedBox(height: 8),
 
-              // 2. Date Selection & Customer Row
               Row(
                 children: [
                   Expanded(
@@ -511,74 +507,35 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                     flex: 5,
                     child: SizedBox(
                       height: 42,
-                      child: Autocomplete<String>(
-                        optionsBuilder: (TextEditingValue textEditingValue) {
-                          if (textEditingValue.text.isEmpty) {
-                            return const Iterable<String>.empty();
-                          }
-                          return _allAccounts.where((acc) => acc.toLowerCase().contains(textEditingValue.text.toLowerCase()));
-                        },
-                        onSelected: (String selection) {
-                          _partyController.text = selection;
-                        },
-                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                          if (_partyController.text.isNotEmpty && controller.text.isEmpty) {
-                            controller.text = _partyController.text;
-                          }
-                          return TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            decoration: InputDecoration(
-                              labelText: 'Customer / Party Name *',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-                              suffixIcon: const Icon(Icons.arrow_drop_down, size: 20),
-                            ),
-                            onChanged: (val) => _partyController.text = val,
-                          );
-                        },
-                        optionsViewBuilder: (context, onSelected, options) {
-                          return Align(
-                            alignment: Alignment.topLeft,
-                            child: Material(
-                              elevation: 4,
-                              child: SizedBox(
-                                width: 280,
-                                height: 160,
-                                child: ListView.builder(
-                                  padding: EdgeInsets.zero,
-                                  itemCount: options.length + 1,
-                                  itemBuilder: (context, index) {
-                                    if (index == options.length) {
-                                      return ListTile(
-                                        tileColor: Colors.green.shade50,
-                                        leading: const Icon(Icons.person_add, color: Colors.green, size: 16),
-                                        title: Text('Add New: "${_partyController.text}"', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.green)),
-                                        onTap: () => _navigateToAddNewPartyWithPreFill(_partyController.text),
-                                      );
-                                    }
-                                    final opt = options.elementAt(index);
-                                    return ListTile(
-                                      dense: true,
-                                      title: Text(opt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                      onTap: () => onSelected(opt),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                          );
+                      child: SearchableField(
+                        label: 'Customer / Party Name *',
+                        items: _allAccounts,
+                        controller: _partyController,
+                        onSelected: (val) {
+                          _partyController.text = val;
                         },
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    height: 42,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade700, 
+                        foregroundColor: Colors.white, 
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                      icon: const Icon(Icons.person_add, size: 14),
+                      label: const Text('New', style: TextStyle(fontSize: 11)),
+                      onPressed: _navigateToAddNewParty,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
 
-              // 3. Items List with Dynamic Inline Search at the bottom
               const Text('Returned Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 4),
 
@@ -656,7 +613,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                     ),
                     const SizedBox(height: 4),
 
-                    // Inline Product Search Bar
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.green.shade200)),
@@ -675,7 +631,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                             onSelected: (InventoryItem selection) {
                               setState(() {
                                 _selectedInlineProduct = selection;
-                                _inlinePriceController.text = selection.priceA.toString();
+                                _inlinePriceController.text = selection.purchasePrice.toString();
                               });
                               Future.delayed(const Duration(milliseconds: 100), () => _qtyFocusNode.requestFocus());
                             },
@@ -776,7 +732,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               ),
               const Divider(height: 8),
               
-              // 5. Bottom Calculation & Grand Total
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(6)),
@@ -909,7 +864,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               ),
               const SizedBox(height: 8),
 
-              // Action Buttons
               Row(
                 children: [
                   Expanded(
@@ -925,7 +879,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8)),
                       icon: const Icon(Icons.share, size: 14),
-                      label: const Text('WhatsApp', style: TextStyle(fontSize: 12)),
+                      label: const Text('Share', style: TextStyle(fontSize: 12)),
                       onPressed: () => _generateAndPrintOrShareReturn(isShare: true),
                     ),
                   ),
