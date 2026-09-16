@@ -198,7 +198,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         builder: (context) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: const Text('Cannot Delete Product', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red)),
-          content: Text('Transaction available! "${item.itemName}" ke naam par transactions maujood hain. Aap is product को delete nahi kar sakte.', style: const TextStyle(fontSize: 13)),
+          content: Text('Transaction available! "${item.itemName}" ke naam par transactions maujood hain. Aap is product ko delete nahi kar sakte.', style: const TextStyle(fontSize: 13)),
           actions: [
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, minimumSize: const Size(60, 32)),
@@ -287,8 +287,9 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
           .where((cat) => cat.trim().isNotEmpty)
           .toSet();
       
-      String availableCategoriesStr = uniqueCategories.isNotEmpty ? uniqueCategories.join(', ') : 'General, Charger, Power Bank';
+      String availableCategoriesStr = uniqueCategories.isNotEmpty ? uniqueCategories.join(', ') : 'Accessories > Chargers';
 
+      // 🔥 सटीक सीक्वेंस के अनुसार हेडर्स
       List<dynamic> headers = [
         'Product Name (Mandatory & Unique)',
         'SKU ID (Mandatory & Unique)',
@@ -311,7 +312,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         'ORLIFE 85W Cable', 
         'CAB-85W', 
         'ORLIFE Cable 85W', 
-        'Charger', 
+        'Accessories > Chargers', 
         '8504', 
         18, 
         '8901234567890', 
@@ -438,6 +439,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               continue;
             }
 
+            // 🔥 कॉलम मैपिंग सीक्वेंस के अनुसार
             String printName = row.length > 2 ? row[2].toString().trim() : '';
             String category = row.length > 3 && row[3].toString().trim().isNotEmpty ? row[3].toString().trim() : 'General';
             String hsnCode = row.length > 4 ? row[4].toString().trim() : '';
@@ -535,90 +537,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     }
   }
 
-  Future<void> _showProductHistoryDialog(InventoryItem item) async {
-    final transactions = await DatabaseHelper.isar.accountingTransactions
-        .filter()
-        .notesContains(item.itemName, caseSensitive: false)
-        .findAll();
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(item.itemName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
-            Text('SKU: ${item.sku ?? "-"} | Category: ${item.category ?? "General"}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          ],
-        ),
-        content: SizedBox(
-          width: 500,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8)),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Opening Stock: ${item.openingStock ?? 0}', style: const TextStyle(fontSize: 12)),
-                          Text('Closing Stock: ${item.stockQuantity}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 12)),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text('Purchase ₹${item.purchasePrice.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12)),
-                          Text('Selling (Tier ${item.priceCategory ?? "A"}): ₹${item.priceA.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text('Transaction History (Sales, Purchase & Returns):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                const SizedBox(height: 6),
-                transactions.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(20.0),
-                        child: Center(child: Text('Is product ki koi transaction history nahi hai.', style: TextStyle(color: Colors.grey, fontSize: 12))),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: transactions.length,
-                        itemBuilder: (context, index) {
-                          final txn = transactions[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            child: ListTile(
-                              dense: true,
-                              title: Text('${txn.voucherType} - ${txn.partyName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                              subtitle: Text('Bill No: ${txn.voucherNumber} | Date: ${DateFormat('dd-MM-yyyy').format(txn.date)}', style: const TextStyle(fontSize: 10)),
-                              trailing: Text('₹${txn.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 12)),
-                            ),
-                          );
-                        },
-                      ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -705,9 +623,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.grey.shade300),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2)),
-                      ],
                     ),
                     child: TextField(
                       controller: _searchController,
@@ -749,163 +664,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 36,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        side: BorderSide(color: Colors.teal.shade300),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                      ),
-                      icon: const Icon(Icons.date_range, size: 14, color: Colors.teal),
-                      label: Text(
-                        _startDate == null || _endDate == null
-                            ? 'Filter by Date Range'
-                            : '${DateFormat('dd-MM-yyyy').format(_startDate!)} to ${DateFormat('dd-MM-yyyy').format(_endDate!)}',
-                        style: const TextStyle(fontSize: 11, color: Colors.black87),
-                      ),
-                      onPressed: _selectDateRange,
-                    ),
-                  ),
-                ),
-                if (_startDate != null) ...[
-                  const SizedBox(width: 6),
-                  IconButton(
-                    icon: const Icon(Icons.clear, size: 16, color: Colors.red),
-                    onPressed: () {
-                      setState(() {
-                        _startDate = null;
-                        _endDate = null;
-                        _filterItems(_searchController.text);
-                      });
-                    },
-                    tooltip: 'Clear Date Filter',
-                    constraints: const BoxConstraints(),
-                    padding: EdgeInsets.zero,
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 6),
-            if (_selectedCategoryFilter != null && _selectedCategoryFilter != 'All') ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                margin: const EdgeInsets.only(bottom: 6),
-                decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Filtered by Category: $_selectedCategoryFilter', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
-                    InkWell(
-                      onTap: () {
-                        setState(() {
-                          _selectedCategoryFilter = null;
-                          _filterItems(_searchController.text);
-                        });
-                      },
-                      child: const Icon(Icons.close, size: 14, color: Colors.red),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(color: Colors.teal.shade100, borderRadius: BorderRadius.circular(6)),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: _isSelectAll,
-                    activeColor: Colors.teal,
-                    visualDensity: VisualDensity.compact,
-                    onChanged: (bool? value) {
-                      setState(() {
-                        _isSelectAll = value ?? false;
-                        if (_isSelectAll) {
-                          _selectedItemIds.addAll(_filteredItems.map((item) => item.id));
-                        } else {
-                          _selectedItemIds.clear();
-                        }
-                      });
-                    },
-                  ),
-                  const Text('All', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
-                  const SizedBox(width: 10),
-                  const Expanded(flex: 3, child: Text('Product Name / SKU', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                  Expanded(
-                    flex: 2,
-                    child: InkWell(
-                      onTap: () {
-                        Set<String> categories = _allInventoryItems
-                            .map((item) => item.category ?? 'General')
-                            .where((cat) => cat.trim().isNotEmpty)
-                            .toSet();
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Filter by Category', style: TextStyle(fontSize: 15)),
-                            content: SizedBox(
-                              width: 280,
-                              child: ListView(
-                                shrinkWrap: true,
-                                children: [
-                                  ListTile(
-                                    title: const Text('All Categories', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedCategoryFilter = null;
-                                        _filterItems(_searchController.text);
-                                      });
-                                      Navigator.pop(context);
-                                    },
-                                  ),
-                                  const Divider(),
-                                  ...categories.map((cat) => ListTile(
-                                        title: Text(cat, style: const TextStyle(fontSize: 12)),
-                                        trailing: _selectedCategoryFilter == cat ? const Icon(Icons.check, color: Colors.teal, size: 16) : null,
-                                        onTap: () {
-                                          setState(() {
-                                            _selectedCategoryFilter = cat;
-                                            _filterItems(_searchController.text);
-                                          });
-                                          Navigator.pop(context);
-                                        },
-                                      )),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                      child: Row(
-                        children: const [
-                          Text('Category', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
-                          Icon(Icons.arrow_drop_down, size: 16, color: Colors.teal),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: InkWell(
-                      onTap: _toggleStockSorting,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text('Stock', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
-                          Icon(_isStockAscending ? Icons.arrow_upward : Icons.arrow_downward, size: 12, color: Colors.teal),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             Expanded(
               child: _filteredItems.isEmpty
                   ? const Center(child: Text('No inventory items found.', style: TextStyle(color: Colors.grey, fontSize: 13)))
