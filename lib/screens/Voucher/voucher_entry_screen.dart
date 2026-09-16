@@ -16,37 +16,16 @@ class VoucherEntryScreen extends StatefulWidget {
 }
 
 class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
-  String _voucherType = 'Payment';
+  String _voucherType = 'Payment'; // Payment, Receipt, Journal
   DateTime _selectedDate = DateTime.now();
   String _voucherNumber = '';
 
-  final TextEditingController _partyController = TextEditingController();
-  final TextEditingController _debitController = TextEditingController();
-  final TextEditingController _creditController = TextEditingController();
-  final TextEditingController _amountController = TextEditingController();
+  // Multi-Row Lists for Accounts & Amounts
+  final List<Map<String, dynamic>> _debitRows = [];
+  final List<Map<String, dynamic>> _creditRows = [];
+
   final TextEditingController _notesController = TextEditingController();
-
-  final FocusNode _amountFocusNode = FocusNode();
-  final FocusNode _modeFocusNode = FocusNode();
   final FocusNode _notesFocusNode = FocusNode();
-
-  String _paymentMode = 'Cash';
-  final List<String> _paymentModes = [
-    'Cash', 
-    'Bank Transfer (NEFT/RTGS)', 
-    'UPI / QR Code', 
-    'Cheque', 
-    'Third Party Gateway'
-  ];
-
-  String _selectedBank = 'HDFC Bank A/c';
-  final List<String> _bankList = ['HDFC Bank A/c', 'IDFC First Bank A/c', 'Kotak Bank A/c', 'SBI Current A/c'];
-
-  String _selectedUpiApp = 'PhonePe / Google Pay';
-  final List<String> _upiList = ['PhonePe / Google Pay', 'Paytm Business', 'BharatPe QR'];
-
-  String _selectedThirdParty = 'Razorpay Gateway';
-  final List<String> _thirdPartyList = ['Razorpay Gateway', 'Cashfree', 'Instamojo'];
 
   List<String> _allAccounts = [];
 
@@ -55,6 +34,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     super.initState();
     _loadAccounts();
     _generateVoucherNumber();
+    _initDefaultRows();
   }
 
   void _generateVoucherNumber() {
@@ -64,6 +44,25 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     
     _voucherNumber = '$prefix-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     setState(() {});
+  }
+
+  void _initDefaultRows() {
+    _debitRows.clear();
+    _creditRows.clear();
+
+    if (_voucherType == 'Payment') {
+      // Payment: Party is Debit, Source (Cash/Bank) is Credit
+      _debitRows.add({'accountController': TextEditingController(), 'amountController': TextEditingController()});
+      _creditRows.add({'accountController': TextEditingController(text: 'Cash-in-Hand'), 'amountController': TextEditingController()});
+    } else if (_voucherType == 'Receipt') {
+      // Receipt: Source (Cash/Bank) is Debit, Party is Credit
+      _debitRows.add({'accountController': TextEditingController(text: 'Cash-in-Hand'), 'amountController': TextEditingController()});
+      _creditRows.add({'accountController': TextEditingController(), 'amountController': TextEditingController()});
+    } else {
+      // Journal: Multiple Dr and Cr allowed
+      _debitRows.add({'accountController': TextEditingController(), 'amountController': TextEditingController()});
+      _creditRows.add({'accountController': TextEditingController(), 'amountController': TextEditingController()});
+    }
   }
 
   Future<void> _loadAccounts() async {
@@ -87,76 +86,84 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     }
   }
 
-  Future<void> _saveVoucher() async {
-    final amount = double.tryParse(_amountController.text) ?? 0.0;
-    final notes = _notesController.text.trim();
+  double get _totalDebit {
+    double total = 0.0;
+    for (var row in _debitRows) {
+      total += double.tryParse(row['amountController'].text) ?? 0.0;
+    }
+    return total;
+  }
 
-    if (amount <= 0) {
+  double get _totalCredit {
+    double total = 0.0;
+    for (var row in _creditRows) {
+      total += double.tryParse(row['amountController'].text) ?? 0.0;
+    }
+    return total;
+  }
+
+  void _addDebitRow() {
+    setState(() {
+      _debitRows.add({'accountController': TextEditingController(), 'amountController': TextEditingController()});
+    });
+  }
+
+  void _addCreditRow() {
+    setState(() {
+      _creditRows.add({'accountController': TextEditingController(), 'amountController': TextEditingController()});
+    });
+  }
+
+  Future<void> _saveVoucher() async {
+    double drTotal = _totalDebit;
+    double crTotal = _totalCredit;
+
+    if (drTotal <= 0 || crTotal <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya valid Amount darj karein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Kripya valid Debit aur Credit amount darj karein!'), backgroundColor: Colors.red),
       );
       return;
     }
 
-    String partyOrAccounts = '';
-    String cashOrBankSource = 'Cash-in-Hand';
-
-    if (_voucherType == 'Payment' || _voucherType == 'Receipt') {
-      partyOrAccounts = _partyController.text.trim();
-      if (partyOrAccounts.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kripya Party ka naam select karein!'), backgroundColor: Colors.red),
-        );
-        return;
-      }
-
-      if (_paymentMode == 'Cash') {
-        cashOrBankSource = 'Cash-in-Hand';
-      } else if (_paymentMode.contains('Bank')) {
-        cashOrBankSource = _selectedBank;
-      } else if (_paymentMode.contains('UPI')) {
-        cashOrBankSource = 'UPI: $_selectedUpiApp';
-      } else if (_paymentMode == 'Cheque') {
-        cashOrBankSource = 'Cheque Payment via $_selectedBank';
-      } else {
-        cashOrBankSource = 'Third Party: $_selectedThirdParty';
-      }
-
-    } else {
-      final dr = _debitController.text.trim();
-      final cr = _creditController.text.trim();
-      if (dr.isEmpty || cr.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Debit aur Credit dono accounts select karein!'), backgroundColor: Colors.red),
-        );
-        return;
-      }
-      partyOrAccounts = 'Dr: $dr | Cr: $cr';
-      cashOrBankSource = 'Journal Transfer';
+    if ((drTotal - crTotal).abs() > 0.01) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Mismatch! Total Debit (₹$drTotal) must equal Total Credit (₹$crTotal)'), backgroundColor: Colors.red),
+      );
+      return;
     }
+
+    // Prepare descriptions for database transaction storage
+    List<String> drListDesc = [];
+    for (var r in _debitRows) {
+      String acc = r['accountController'].text.trim();
+      String amt = r['amountController'].text.trim();
+      if (acc.isNotEmpty && amt.isNotEmpty) drListDesc.add('$acc (₹$amt)');
+    }
+
+    List<String> crListDesc = [];
+    for (var r in _creditRows) {
+      String acc = r['accountController'].text.trim();
+      String amt = r['amountController'].text.trim();
+      if (acc.isNotEmpty && amt.isNotEmpty) crListDesc.add('$acc (₹$amt)');
+    }
+
+    String partySummary = 'Dr: [${drListDesc.join(", ")}] | Cr: [${crListDesc.join(", ")}]';
+    String sourceSummary = _voucherType == 'Payment' ? (_creditRows.first['accountController'].text.trim()) : (_debitRows.first['accountController'].text.trim());
+    if (sourceSummary.isEmpty) sourceSummary = 'Cash-in-Hand';
+
+    final notes = _notesController.text.trim();
 
     final txn = AccountingTransaction()
       ..voucherType = _voucherType
       ..voucherNumber = _voucherNumber
       ..date = _selectedDate
-      ..partyName = partyOrAccounts
-      ..cashOrBank = cashOrBankSource
-      ..amount = amount
+      ..partyName = partySummary
+      ..cashOrBank = sourceSummary
+      ..amount = drTotal
       ..notes = notes.isEmpty ? null : notes;
 
     await DatabaseHelper.isar.writeTxn(() async {
       await DatabaseHelper.isar.accountingTransactions.put(txn);
-
-      if (_voucherType == 'Payment' || _voucherType == 'Receipt') {
-        final partyAccount = await DatabaseHelper.isar.accounts
-            .filter()
-            .nameEqualTo(partyOrAccounts)
-            .findFirst();
-
-        if (partyAccount != null) {
-          await DatabaseHelper.isar.accounts.put(partyAccount);
-        }
-      }
     });
 
     if (!mounted) return;
@@ -185,12 +192,9 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
             onPressed: () {
               Navigator.pop(context);
               setState(() {
-                _partyController.clear();
-                _debitController.clear();
-                _creditController.clear();
-                _amountController.clear();
                 _notesController.clear();
                 _generateVoucherNumber();
+                _initDefaultRows();
               });
             },
             child: const Text('Okay'),
@@ -202,14 +206,16 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
 
   @override
   void dispose() {
-    _partyController.dispose();
-    _debitController.dispose();
-    _creditController.dispose();
-    _amountController.dispose();
     _notesController.dispose();
-    _amountFocusNode.dispose();
-    _modeFocusNode.dispose();
     _notesFocusNode.dispose();
+    for (var r in _debitRows) {
+      r['accountController'].dispose();
+      r['amountController'].dispose();
+    }
+    for (var r in _creditRows) {
+      r['accountController'].dispose();
+      r['amountController'].dispose();
+    }
     super.dispose();
   }
 
@@ -227,11 +233,12 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
         foregroundColor: Colors.white,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(12.0),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Voucher Type Switcher Header
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
@@ -251,14 +258,15 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                           value: _voucherType,
                           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
                           items: const [
-                            DropdownMenuItem(value: 'Payment', child: Text('Payment (Dr)', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
-                            DropdownMenuItem(value: 'Receipt', child: Text('Receipt (Cr)', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
-                            DropdownMenuItem(value: 'Journal', child: Text('General / Journal', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold))),
+                            DropdownMenuItem(value: 'Payment', child: Text('Payment Voucher', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
+                            DropdownMenuItem(value: 'Receipt', child: Text('Receipt Voucher', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
+                            DropdownMenuItem(value: 'Journal', child: Text('Journal / General', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold))),
                           ],
                           onChanged: (val) {
                             setState(() {
                               _voucherType = val!;
                               _generateVoucherNumber();
+                              _initDefaultRows();
                             });
                           },
                         ),
@@ -267,8 +275,9 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
+              // Date & Voucher No
               Row(
                 children: [
                   Expanded(
@@ -289,7 +298,7 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
                       readOnly: true,
@@ -310,135 +319,137 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
               ),
               const SizedBox(height: 16),
 
-              if (_voucherType == 'Payment' || _voucherType == 'Receipt') ...[
-                SearchableField(
-                  label: (_voucherType == 'Payment') ? 'Party Name (Paid To) *' : 'Party Name (Received From) *',
-                  items: _allAccounts,
-                  controller: _partyController,
-                  onSelected: (selectedName) {
-                    FocusScope.of(context).requestFocus(_amountFocusNode);
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                TextField(
-                  controller: _amountController,
-                  focusNode: _amountFocusNode,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Amount (₹) *',
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    prefixIcon: const Icon(Icons.currency_rupee, size: 18),
-                    fillColor: themeColor.withOpacity(0.08),
-                    filled: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                  ),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                  onSubmitted: (_) {
-                    FocusScope.of(context).requestFocus(_modeFocusNode);
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                DropdownButtonFormField<String>(
-                  value: _paymentMode,
-                  focusNode: _modeFocusNode,
-                  items: _paymentModes.map((mode) {
-                    return DropdownMenuItem(value: mode, child: Text(mode, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)));
-                  }).toList(),
-                  onChanged: (val) => setState(() => _paymentMode = val!),
-                  decoration: const InputDecoration(
-                    labelText: 'Mode of Payment / Receipt *',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    prefixIcon: Icon(Icons.payment, size: 18),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                  ),
-                ),
-
-                if (_paymentMode.contains('Bank') || _paymentMode == 'Cheque') ...[
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _selectedBank,
-                    items: _bankList.map((bank) {
-                      return DropdownMenuItem(value: bank, child: Text(bank, style: const TextStyle(fontSize: 13)));
-                    }).toList(),
-                    onChanged: (val) => setState(() => _selectedBank = val!),
-                    decoration: const InputDecoration(
-                      labelText: 'Select Bank Account *',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                      prefixIcon: Icon(Icons.account_balance, size: 18),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                    ),
-                  ),
-                ] else if (_paymentMode.contains('UPI')) ...[
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _selectedUpiApp,
-                    items: _upiList.map((upi) {
-                      return DropdownMenuItem(value: upi, child: Text(upi, style: const TextStyle(fontSize: 13)));
-                    }).toList(),
-                    onChanged: (val) => setState(() => _selectedUpiApp = val!),
-                    decoration: const InputDecoration(
-                      labelText: 'Select UPI App / QR *',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                      prefixIcon: Icon(Icons.phone_android, size: 18),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                    ),
-                  ),
-                ] else if (_paymentMode == 'Third Party Gateway') ...[
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _selectedThirdParty,
-                    items: _thirdPartyList.map((tp) {
-                      return DropdownMenuItem(value: tp, child: Text(tp, style: const TextStyle(fontSize: 13)));
-                    }).toList(),
-                    onChanged: (val) => setState(() => _selectedThirdParty = val!),
-                    decoration: const InputDecoration(
-                      labelText: 'Select Third Party Portal *',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                      prefixIcon: Icon(Icons.cloud_sync, size: 18),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                    ),
+              // 🔴 DEBIT SECTION (Dr)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Debit Accounts (Dr):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red)),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 30)),
+                    icon: const Icon(Icons.add_circle, size: 16, color: Colors.red),
+                    label: const Text('Add Dr Row', style: TextStyle(fontSize: 11, color: Colors.red)),
+                    onPressed: _addDebitRow,
                   ),
                 ],
-
-              ] else ...[
-                SearchableField(
-                  label: 'Debit Account (Dr) *',
-                  items: _allAccounts,
-                  controller: _debitController,
-                  onSelected: (_) {},
-                ),
-                const SizedBox(height: 16),
-                SearchableField(
-                  label: 'Credit Account (Cr) *',
-                  items: _allAccounts,
-                  controller: _creditController,
-                  onSelected: (_) {},
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _amountController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Amount (₹) *',
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    prefixIcon: const Icon(Icons.currency_rupee, size: 18),
-                    fillColor: Colors.purple.shade50,
-                    filled: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+              ),
+              ...List.generate(_debitRows.length, (index) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: SearchableField(
+                          label: 'Debit Account #${index + 1} *',
+                          items: _allAccounts,
+                          controller: _debitRows[index]['accountController'],
+                          onSelected: (_) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: _debitRows[index]['amountController'],
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Amount (₹)',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                          ),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      if (_debitRows.length > 1)
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 18),
+                          onPressed: () => setState(() => _debitRows.removeAt(index)),
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        ),
+                    ],
                   ),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                ),
-              ],
-              const SizedBox(height: 16),
+                );
+              }),
+              const SizedBox(height: 10),
 
+              // 🟢 CREDIT SECTION (Cr)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Credit Accounts (Cr):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 30)),
+                    icon: const Icon(Icons.add_circle, size: 16, color: Colors.green),
+                    label: const Text('Add Cr Row', style: TextStyle(fontSize: 11, color: Colors.green)),
+                    onPressed: _addCreditRow,
+                  ),
+                ],
+              ),
+              ...List.generate(_creditRows.length, (index) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: SearchableField(
+                          label: 'Credit Account #${index + 1} *',
+                          items: _allAccounts,
+                          controller: _creditRows[index]['accountController'],
+                          onSelected: (_) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: _creditRows[index]['amountController'],
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Amount (₹)',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                          ),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      if (_creditRows.length > 1)
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 18),
+                          onPressed: () => setState(() => _creditRows.removeAt(index)),
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 14),
+
+              // 📊 Totals & Validation Banner
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: (_totalDebit == _totalCredit && _totalDebit > 0) ? Colors.green.shade50 : Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: (_totalDebit == _totalCredit && _totalDebit > 0) ? Colors.green.shade300 : Colors.red.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Total Dr: ₹${_totalDebit.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red)),
+                    Text('Total Cr: ₹${_totalCredit.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Remarks / Narration
               TextField(
                 controller: _notesController,
                 focusNode: _notesFocusNode,
@@ -451,10 +462,10 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                 ),
                 style: const TextStyle(fontSize: 13),
-                onSubmitted: (_) => _saveVoucher(),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
+              // Save Button
               SizedBox(
                 width: double.infinity,
                 height: 45,
