@@ -17,7 +17,7 @@ import 'account/parties_master_screen.dart';
 import 'order/orders_management_screen.dart';
 import 'Voucher/voucher_entry_screen.dart';
 import 'setting/settings_screen.dart';
-import 'setting/backup_settings_screen.dart'; // 👈 Backup Screen Import
+import 'setting/backup_settings_screen.dart';
 import 'manufacturing_screen.dart';
 import 'login_screen.dart';
 
@@ -37,7 +37,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _bankBalance = 0.0;
   bool _isLoading = true;
 
-  // 🎛️ User Selected Quick Menu Items (Customizable)
   final List<String> _selectedQuickMenus = [
     'Sales Bill', 'Purchase', 'Sales Return', 'Purchase Ret.',
     'Parties', 'Inventory', 'Day Book', 'Ledger', 'Reports',
@@ -106,7 +105,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // ⚙️ Customize Home Screen Shortcuts Dialog
   void _showCustomizeMenusDialog() {
     showDialog(
       context: context,
@@ -169,14 +167,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // 🛡️ Exit app with backup check
   Future<bool> _onWillPop() async {
     bool shouldExit = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Exit App?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Kya aap waqai ERP app se bahar jana chahte hain?', style: TextStyle(fontSize: 13)),
+        content: const Text('Kya aap waqai ERP app से bahar jana chahte hain?', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
@@ -282,7 +279,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 title: const Text('Settings'),
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
               ),
-              // 📂 Sidebar mein Backup & Restore Option
               ListTile(
                 leading: const Icon(Icons.backup_rounded, color: Colors.teal),
                 title: const Text('Storage & Backup', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
@@ -359,7 +355,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 16),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.between,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween, // 👈 Fixed
                         children: [
                           const Text('Quick Operations & Masters', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
                           IconButton(
