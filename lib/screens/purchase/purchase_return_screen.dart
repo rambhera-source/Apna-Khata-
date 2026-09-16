@@ -222,7 +222,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     return total < 0 ? 0 : total;
   }
 
-  // 🔥 Interactive Purchase Return Preview Dialog
   void _showPurchaseReturnPreviewDialog() {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) {
@@ -319,7 +318,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)), // Fixed const issue
+                        Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         for (var charge in _billChargesList)
                           Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         if (_isGstActive) Text('GST (18%): + ₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
@@ -449,7 +448,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)), // Fixed const issue
+                            pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)),
                             pw.Text('₹ ${_subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
@@ -468,7 +467,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
-                              pw.Text('CGST (9%):', style: pw.TextStyle(fontSize: 11)), // Fixed const issue
+                              pw.Text('CGST (9%):', style: pw.TextStyle(fontSize: 11)),
                               pw.Text('₹ ${(_taxAmount / 2).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
@@ -476,7 +475,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
-                              pw.Text('SGST (9%):', style: pw.TextStyle(fontSize: 11)), // Fixed const issue
+                              pw.Text('SGST (9%):', style: pw.TextStyle(fontSize: 11)),
                               pw.Text('₹ ${(_taxAmount / 2).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
@@ -825,7 +824,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Professional Grid Table Header
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(color: Colors.blue.shade900, borderRadius: BorderRadius.circular(4)),
@@ -843,7 +841,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const SizedBox(height: 2),
 
-              // Professional Items Table & Inline Search Grid
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
@@ -927,7 +924,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
 
                     const SizedBox(height: 6),
 
-                    // Inline Product Search Bar with Party Validation
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
@@ -1076,7 +1072,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const Divider(height: 6),
               
-              // Freight & Discount Charges Section
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
@@ -1225,7 +1220,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Fixed Bottom Action Buttons
               Row(
                 children: [
                   Expanded(
