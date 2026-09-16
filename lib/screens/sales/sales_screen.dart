@@ -33,6 +33,7 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
+  final TextEditingController _freightSearchController = TextEditingController();
   
   // 🔥 Permanent Focus Nodes
   final FocusNode _dateFocusNode = FocusNode();
@@ -40,7 +41,11 @@ class _SalesScreenState extends State<SalesScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
+  final FocusNode _freightFocusNode = FocusNode();
   final FocusNode _saveButtonFocusNode = FocusNode();
+
+  List<Map<String, dynamic>> _presetChargesList = [];
+  final List<Map<String, dynamic>> _billChargesList = [];
 
   DateTime _selectedDate = DateTime.now();
 
@@ -65,7 +70,6 @@ class _SalesScreenState extends State<SalesScreen> {
     _dateController.text = DateFormat('dd-MM-yyyy').format(_selectedDate);
     _loadDropdownDataAndSettings();
 
-    // 🔥 स्क्रीन खुलते ही सबसे पहला और पक्का फोकस 'Date' पर रहेगा
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(_dateFocusNode);
     });
@@ -76,6 +80,20 @@ class _SalesScreenState extends State<SalesScreen> {
     final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
 
+    List<Map<String, dynamic>> loadedCharges = [];
+    loadedCharges.add({'name': 'Freight Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 30.0});
+    loadedCharges.add({'name': 'Discount', 'type': 'Less', 'mode': 'Fixed', 'value': 0.0});
+
+    if (settings != null) {
+      try {
+        for (var e in settings.extraCharges) {
+          try {
+            loadedCharges.add(Map<String, dynamic>.from(jsonDecode(e)));
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+
     setState(() {
       _allAccountsList = accounts;
       _allInventoryItems = inventoryItems;
@@ -83,6 +101,7 @@ class _SalesScreenState extends State<SalesScreen> {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
       }
+      _presetChargesList = loadedCharges;
     });
   }
 
@@ -113,7 +132,6 @@ class _SalesScreenState extends State<SalesScreen> {
         _selectedDate = picked;
         _dateController.text = DateFormat('dd-MM-yyyy').format(picked);
       });
-      // डेट चुनने के बाद फोकस पार्टी नेम पर भेजें
       _partyFocusNode.requestFocus();
     }
   }
@@ -156,7 +174,6 @@ class _SalesScreenState extends State<SalesScreen> {
       _inlinePriceController.text = '0';
     });
 
-    // आइटम ऐड होने के बाद फोकस वापस प्रोडक्ट सर्च पर फिक्स रहे
     Future.delayed(const Duration(milliseconds: 50), () {
       _searchFocusNode.requestFocus();
     });
@@ -166,17 +183,36 @@ class _SalesScreenState extends State<SalesScreen> {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
+  // 🔥 फ्रेट और डिस्काउंट चार्जेज का कुल योग
+  double get _billChargesTotal {
+    double total = 0.0;
+    for (var charge in _billChargesList) {
+      double qty = charge['qty'] is double ? charge['qty'] : double.tryParse(charge['qty'].toString()) ?? 1.0;
+      double rate = charge['rate'] is double ? charge['rate'] : double.tryParse(charge['rate'].toString()) ?? 0.0;
+      double amt = qty * rate;
+
+      if (charge['type'] == 'Less' || charge['name'].toString().toLowerCase().contains('discount')) {
+        total -= amt;
+      } else {
+        total += amt;
+      }
+    }
+    return total;
+  }
+
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    return _subTotal * (_gstRate / 100);
+    double taxableValue = _subTotal + _billChargesTotal;
+    if (taxableValue < 0) taxableValue = 0;
+    return taxableValue * (_gstRate / 100);
   }
 
   double get _grandTotal {
-    double total = _subTotal + _taxAmount;
+    double total = _subTotal + _billChargesTotal + _taxAmount;
     return total < 0 ? 0 : total;
   }
 
-  // 🔥 Interactive Invoice Preview Dialog
+  // 🔥 Interactive Invoice Preview Dialog (Freight & Discount के साथ)
   void _showInvoicePreviewDialog() {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) {
@@ -274,6 +310,8 @@ class _SalesScreenState extends State<SalesScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+                        for (var charge in _billChargesList)
+                          Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         if (_isGstActive) Text('GST (${_gstRate}%): + ₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         const SizedBox(height: 4),
                         Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.teal)),
@@ -371,6 +409,8 @@ class _SalesScreenState extends State<SalesScreen> {
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
+                        for (var charge in _billChargesList)
+                          pw.Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
                         if (_isGstActive) pw.Text('GST (${_gstRate.toStringAsFixed(1)}%): + ₹ ${_taxAmount.toStringAsFixed(2)}'),
                         pw.Divider(),
                         pw.Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
@@ -477,6 +517,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _cartItems.clear();
       _partyController.clear();
       _invoiceNoController.text = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+      _billChargesList.clear();
     });
     Future.delayed(const Duration(milliseconds: 50), () {
       FocusScope.of(context).requestFocus(_dateFocusNode);
@@ -510,7 +551,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        resizeToAvoidBottomInset: false, // स्क्रीन को सिकुड़ने से रोकने के लिए
+        resizeToAvoidBottomInset: false,
         appBar: AppBar(
           title: const Text('Sales Invoice'),
           backgroundColor: Colors.teal.shade800,
@@ -573,7 +614,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Date (With First Focus & dd-MM-yyyy format) & Customer Autocomplete
+              // Date & Customer Autocomplete
               Row(
                 children: [
                   SizedBox(
@@ -581,7 +622,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     width: 120,
                     child: TextField(
                       controller: _dateController,
-                      focusNode: _dateFocusNode, // 🔥 सबसे पहला फोकस
+                      focusNode: _dateFocusNode,
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                       textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
@@ -597,7 +638,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         ),
                       ),
                       onTap: () {
-                        // क्लिक करते ही पूरी डेट सिलेक्ट हो जाए ताकि आसानी से एडिट हो सके
                         _dateController.selection = TextSelection(baseOffset: 0, extentOffset: _dateController.text.length);
                       },
                       onSubmitted: (_) {
@@ -951,15 +991,150 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const Divider(height: 6),
               
-              // Bottom Summary
+              // 🔥 Freight & Discount Charges Section (सेटिंग्स से लिंक्ड)
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                    Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+
+                    ...List.generate(_billChargesList.length, (index) {
+                      final charge = _billChargesList[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 1),
+                        child: Row(
+                          children: [
+                            Expanded(flex: 3, child: Text(charge['name'], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+                            SizedBox(
+                              width: 40,
+                              height: 26,
+                              child: TextField(
+                                controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
+                                keyboardType: TextInputType.number,
+                                style: const TextStyle(fontSize: 10),
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
+                                onChanged: (val) {
+                                  charge['qty'] = double.tryParse(val) ?? 1.0;
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            SizedBox(
+                              width: 50,
+                              height: 26,
+                              child: TextField(
+                                controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
+                                keyboardType: TextInputType.number,
+                                style: const TextStyle(fontSize: 10),
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
+                                onChanged: (val) {
+                                  charge['rate'] = double.tryParse(val) ?? 0.0;
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 12, color: Colors.red),
+                              onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+
+                    const SizedBox(height: 2),
+                    SizedBox(
+                      height: 32,
+                      child: TapRegion(
+                        onTapOutside: (_) {},
+                        child: RawAutocomplete<Map<String, dynamic>>(
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
+                            return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                          },
+                          displayStringForOption: (option) => option['name'],
+                          onSelected: (selection) {
+                            setState(() {
+                              _billChargesList.add({
+                                'name': selection['name'],
+                                'type': selection['type'],
+                                'mode': selection['mode'],
+                                'qty': 1.0,
+                                'rate': selection['value'] ?? 0.0,
+                              });
+                            });
+                            _freightSearchController.clear();
+                          },
+                          textEditingController: _freightSearchController,
+                          focusNode: _freightFocusNode,
+                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                            return TextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: const InputDecoration(
+                                labelText: 'Add Freight / Discount Charge...',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                prefixIcon: Icon(Icons.add_circle_outline, size: 14),
+                              ),
+                              onSubmitted: (val) {
+                                if (val.trim().isEmpty) {
+                                  FocusScope.of(context).requestFocus(_saveButtonFocusNode);
+                                }
+                              },
+                            );
+                          },
+                          optionsViewBuilder: (context, onSelected, options) {
+                            return Align(
+                              alignment: Alignment.topLeft,
+                              child: Material(
+                                elevation: 4,
+                                child: SizedBox(
+                                  width: 240,
+                                  height: 120,
+                                  child: ListView.builder(
+                                    padding: EdgeInsets.zero,
+                                    itemCount: options.length,
+                                    itemBuilder: (context, index) {
+                                      final opt = options.elementAt(index);
+                                      return ListTile(
+                                        dense: true,
+                                        title: Text(opt['name'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        onTap: () => onSelected(opt),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
+                      ],
+                    ),
                   ],
                 ),
               ),
