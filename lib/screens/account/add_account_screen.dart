@@ -5,10 +5,12 @@ import 'dart:convert';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/settings_model.dart';
-import '../searchable_field.dart'; // ✅ Added searchable field import
+import '../searchable_field.dart';
 
 class AddAccountScreen extends StatefulWidget {
-  const AddAccountScreen({super.key});
+  final Account? accountToEdit; // 🔥 Added to receive account data for editing
+
+  const AddAccountScreen({super.key, this.accountToEdit});
 
   @override
   State<AddAccountScreen> createState() => _AddAccountScreenState();
@@ -26,7 +28,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _cityController = TextEditingController();
   final _stateController = TextEditingController();
 
-  // 🇮🇳 List of Indian States for Searchable Field
   final List<String> _indianStates = [
     'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
     'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
@@ -36,7 +37,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Jammu and Kashmir'
   ];
 
-  // 🔥 Route & Salesman Dropdown Variables & Lists
   List<String> _availableRoutes = [];
   List<String> _availableSalesmen = [];
   String? _selectedRoute;
@@ -49,7 +49,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _creditDaysController = TextEditingController();
   bool _isCreditControlEnabled = false;
 
-  // 🔥 Portal Login Controllers
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPortalAccessEnabled = false;
@@ -87,6 +86,47 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   void initState() {
     super.initState();
     _loadMasterData();
+    _initializeEditData(); // 🔥 Pre-fill data if editing
+  }
+
+  void _initializeEditData() {
+    if (widget.accountToEdit != null) {
+      final acc = widget.accountToEdit!;
+      _nameController.text = acc.name;
+      _phoneController.text = acc.phone ?? '';
+      _emailController.text = acc.email ?? '';
+      _groupCategory = _groupCategories.contains(acc.groupCategory) ? acc.groupCategory : 'Sundry Debtor';
+      _gstinController.text = acc.gstin ?? '';
+      _balanceController.text = acc.openingBalance.toString();
+      _balanceType = acc.balanceType;
+      _priceCategory = acc.priceCategory ?? 'A';
+      _selectedRoute = acc.route;
+      _selectedSalesman = acc.salesman;
+
+      _isCreditControlEnabled = acc.isCreditControlEnabled;
+      _creditLimitAmountController.text = acc.creditLimitAmount.toString();
+      _creditDaysController.text = acc.creditDaysLimit.toString();
+
+      _isPortalAccessEnabled = acc.isPortalAccessEnabled;
+      _usernameController.text = acc.loginUsername ?? '';
+      _passwordController.text = acc.loginPassword ?? '';
+
+      // Parse address if available
+      if (acc.address != null && acc.address!.isNotEmpty) {
+        String addr = acc.address!;
+        // Simple splitter based on standard format saved previously
+        try {
+          partsMap(String text, String key) {
+            if (text.contains(key)) {
+              return text.split(key).last.split(',').first.trim();
+            }
+            return '';
+          }
+          // Fallback assignment for raw string address handling
+          _houseNoController.text = addr.contains(',') ? addr.split(',').first.trim() : addr;
+        } catch (_) {}
+      }
+    }
   }
 
   Future<void> _loadMasterData() async {
@@ -216,17 +256,20 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       return;
     }
 
-    final existingAccount = await DatabaseHelper.isar.accounts
-        .filter()
-        .nameEqualTo(name, caseSensitive: false)
-        .findFirst();
+    // Check duplicate name only if creating new or changing name to an existing one
+    if (widget.accountToEdit == null || widget.accountToEdit!.name != name) {
+      final existingAccount = await DatabaseHelper.isar.accounts
+          .filter()
+          .nameEqualTo(name, caseSensitive: false)
+          .findFirst();
 
-    if (existingAccount != null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: "$name" naam ka account pehle se bana hua hai!'), backgroundColor: Colors.red),
-      );
-      return;
+      if (existingAccount != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: "$name" naam ka account pehle se bana hua hai!'), backgroundColor: Colors.red),
+        );
+        return;
+      }
     }
 
     if (phone.isNotEmpty) {
@@ -235,7 +278,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           .phoneEqualTo(phone)
           .findFirst();
 
-      if (existingByPhone != null) {
+      if (existingByPhone != null && (widget.accountToEdit == null || existingByPhone.id != widget.accountToEdit!.id)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: Mobile number "$phone" pehle se "${existingByPhone.name}" ke paas registered hai!'), backgroundColor: Colors.red),
@@ -244,32 +287,33 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       }
     }
 
-    final newAccount = Account()
-      ..name = name
-      ..groupCategory = _groupCategory
-      ..phone = phone.isEmpty ? null : phone
-      ..email = email.isEmpty ? null : email
-      ..address = (_groupCategory == 'Sundry Debtor' || _groupCategory == 'Sundry Creditor') ? address : null
-      ..route = _selectedRoute
-      ..salesman = _selectedSalesman
-      ..gstin = gstin.isEmpty ? null : gstin
-      ..priceCategory = _priceCategory
-      ..creditLimitAmount = creditLimitAmt
-      ..creditDaysLimit = creditDays
-      ..isCreditControlEnabled = _isCreditControlEnabled
-      ..openingBalance = openingBal
-      ..balanceType = _balanceType
-      ..isPortalAccessEnabled = _isPortalAccessEnabled
-      ..loginUsername = username.isEmpty ? null : username
-      ..loginPassword = password.isEmpty ? null : password;
+    // Use existing account ID if editing, otherwise let Isar auto-increment for new
+    final accountToSave = widget.accountToEdit ?? Account();
+    accountToSave.name = name;
+    accountToSave.groupCategory = _groupCategory;
+    accountToSave.phone = phone.isEmpty ? null : phone;
+    accountToSave.email = email.isEmpty ? null : email;
+    accountToSave.address = (_groupCategory == 'Sundry Debtor' || _groupCategory == 'Sundry Creditor') ? address : null;
+    accountToSave.route = _selectedRoute;
+    accountToSave.salesman = _selectedSalesman;
+    accountToSave.gstin = gstin.isEmpty ? null : gstin;
+    accountToSave.priceCategory = _priceCategory;
+    accountToSave.creditLimitAmount = creditLimitAmt;
+    accountToSave.creditDaysLimit = creditDays;
+    accountToSave.isCreditControlEnabled = _isCreditControlEnabled;
+    accountToSave.openingBalance = openingBal;
+    accountToSave.balanceType = _balanceType;
+    accountToSave.isPortalAccessEnabled = _isPortalAccessEnabled;
+    accountToSave.loginUsername = username.isEmpty ? null : username;
+    accountToSave.loginPassword = password.isEmpty ? null : password;
 
     await DatabaseHelper.isar.writeTxn(() async {
-      await DatabaseHelper.isar.accounts.put(newAccount);
+      await DatabaseHelper.isar.accounts.put(accountToSave);
     });
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Account "$name" safaltapurvak save ho gaya!'), backgroundColor: Colors.green),
+      SnackBar(content: Text('Account "$name" safaltapurvak update/save ho gaya!'), backgroundColor: Colors.green),
     );
 
     Navigator.pop(context, name);
@@ -278,10 +322,11 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   @override
   Widget build(BuildContext context) {
     bool isParty = (_groupCategory == 'Sundry Debtor' || _groupCategory == 'Sundry Creditor');
+    bool isEditing = widget.accountToEdit != null;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Account & Client Portal Setup'),
+        title: Text(isEditing ? 'Edit Account & Credentials' : 'Add Account & Client Portal Setup'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
@@ -422,7 +467,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                       child: TextField(controller: _cityController, decoration: const InputDecoration(labelText: 'City / District', border: OutlineInputBorder())),
                     ),
                     const SizedBox(width: 8),
-                    // ✅ State field made Searchable using SearchableField
                     Expanded(
                       child: SearchableField(
                         label: 'State',
@@ -667,7 +711,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
                   onPressed: _saveAccount,
-                  child: const Text('Save Account & Credentials', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: Text(isEditing ? 'Update Account & Credentials' : 'Save Account & Credentials', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
