@@ -596,7 +596,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                       ),
                       icon: const Icon(Icons.folder_open_rounded, size: 16),
                       label: const Text('Change Folder (Select Directory)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: _pickCustomBackupFolder, // 👈 Uses Flutter native folder picker with full permission
+                      onPressed: _pickCustomBackupFolder,
                     ),
                   ),
                 ],
@@ -641,7 +641,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                   SwitchListTile(
                     title: const Text('High-Priority Compulsory Reminder', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.redAccent)),
                     subtitle: const Text('Session security reminder prompt', style: TextStyle(fontSize: 12)),
-                    value: _compulsoryBackupPath.isNotEmpty ? true : _compulsoryBackupEnabled, // fixed reference
+                    value: _compulsoryBackupEnabled, // 👈 Fixed reference here
                     activeColor: Colors.red,
                     onChanged: (val) => setState(() => _compulsoryBackupEnabled = val),
                   ),
