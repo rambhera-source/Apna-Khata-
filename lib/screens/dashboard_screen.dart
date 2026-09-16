@@ -7,8 +7,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../database/database_helper.dart';
 import '../models/transaction_model.dart';
-import '../models/inventory_model.dart'; // 👈 Added missing inventory model
-import '../models/account.dart'; // 👈 Added missing account model
+import '../models/inventory_model.dart';
+import '../models/account.dart';
 
 import 'sales/sales_screen.dart';
 import 'sales/sales_return_screen.dart';
@@ -52,6 +52,177 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
+    // 🔥 Check on startup if database is empty and local backup exists
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndPromptRestoreIfEmpty();
+    });
+  }
+
+  // 🔍 Check if database has zero accounts/transactions, then prompt restore
+  Future<void> _checkAndPromptRestoreIfEmpty() async {
+    try {
+      final accountsCount = await DatabaseHelper.isar.accounts.count();
+      final txnsCount = await DatabaseHelper.isar.accountingTransactions.count();
+
+      // Agar database bilkul khali hai
+      if (accountsCount == 0 && txnsCount == 0) {
+        final directory = await getApplicationDocumentsDirectory();
+        final backupDir = Directory('${directory.path}/Orlife ERP Backups');
+
+        if (await backupDir.exists()) {
+          List<FileSystemEntity> files = backupDir.listSync();
+          List<File> jsonFiles = files.whereType<File>().where((e) => e.path.endsWith('.json')).toList();
+
+          if (jsonFiles.isNotEmpty) {
+            jsonFiles.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+            final latestFile = jsonFiles.first;
+            final formattedDate = DateFormat('dd MMM yyyy, hh:mm a').format(latestFile.statSync().modified);
+
+            if (!mounted) return;
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                title: Row(
+                  children: const [
+                    Icon(Icons.restore_rounded, color: Colors.teal, size: 26),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('Restore Backup Found', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+                  ],
+                ),
+                content: Text(
+                  'Your database is empty. A recent backup from $formattedDate was found in local storage. Would you like to restore it now?',
+                  style: const TextStyle(fontSize: 13, height: 1.3),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _restoreFromFile(latestFile);
+                    },
+                    child: const Text('Restore Now'),
+                  ),
+                ],
+              ),
+            );
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 📂 Helper to execute file restoration and refresh dashboard
+  Future<void> _restoreFromFile(File file) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          bool isCompleted = false;
+
+          if (!isCompleted) {
+            file.readAsString().then((jsonString) async {
+              Map<String, dynamic> backupData = jsonDecode(jsonString);
+              await DatabaseHelper.isar.writeTxn(() async {
+                if (backupData.containsKey('inventory')) {
+                  List invList = backupData['inventory'];
+                  for (var item in invList) {
+                    InventoryItem inv = InventoryItem()
+                      ..itemName = item['itemName'] ?? ''
+                      ..sku = item['sku']
+                      ..category = item['category'] ?? 'General'
+                      ..purchasePrice = item['purchasePrice'] ?? 0.0
+                      ..openingStock = item['openingStock'] ?? 0.0
+                      ..stockQuantity = item['stockQuantity'] ?? 0.0
+                      ..priceA = item['priceA'] ?? 0.0
+                      ..priceCategory = item['priceCategory'] ?? 'A'
+                      ..stockType = item['stockType'] ?? 'Fresh';
+                    await DatabaseHelper.isar.inventoryItems.put(inv);
+                  }
+                }
+
+                if (backupData.containsKey('accounts')) {
+                  List accList = backupData['accounts'];
+                  for (var item in accList) {
+                    Account acc = Account()
+                      ..name = item['name'] ?? ''
+                      ..groupCategory = item['groupCategory'] ?? 'Sundry Debtors'
+                      ..phone = item['phone']
+                      ..email = item['email']
+                      ..address = item['address']
+                      ..gstin = item['gstin']
+                      ..openingBalance = item['openingBalance'] ?? 0.0
+                      ..balanceType = item['balanceType'] ?? 'Dr';
+                    await DatabaseHelper.isar.accounts.put(acc);
+                  }
+                }
+
+                if (backupData.containsKey('transactions')) {
+                  List txnList = backupData['transactions'];
+                  for (var item in txnList) {
+                    AccountingTransaction txn = AccountingTransaction()
+                      ..date = DateTime.tryParse(item['date'] ?? '') ?? DateTime.now()
+                      ..voucherType = item['voucherType'] ?? 'Sales'
+                      ..voucherNumber = item['voucherNumber'] ?? ''
+                      ..partyName = item['partyName'] ?? ''
+                      ..cashOrBank = item['cashOrBank'] ?? 'Cash'
+                      ..amount = item['amount'] ?? 0.0
+                      ..notes = item['notes'];
+                    await DatabaseHelper.isar.accountingTransactions.put(txn);
+                  }
+                }
+              });
+
+              if (mounted) {
+                setDialogState(() {
+                  isCompleted = true;
+                });
+              }
+            });
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(isCompleted ? Icons.check_circle_rounded : Icons.hourglass_top_rounded, color: isCompleted ? Colors.green : Colors.teal, size: 26),
+                const SizedBox(width: 10),
+                Text(isCompleted ? 'Restore Successful' : 'Restoring Database...', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Text(
+              isCompleted ? 'Your database has been successfully restored from local backup.' : 'Please wait while we restore your data...',
+              style: const TextStyle(fontSize: 13),
+            ),
+            actions: [
+              if (isCompleted)
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _loadDashboardData(); // Refresh dashboard data
+                  },
+                  child: const Text('OK'),
+                ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _loadDashboardData() async {
@@ -172,7 +343,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Future<void> _performAutoBackupOnClose() async {
+  Future<void> _performDashboardBackup() async {
     try {
       final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
       final accounts = await DatabaseHelper.isar.accounts.where().findAll();
@@ -181,24 +352,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final Map<String, dynamic> backupData = {
         'version': '1.0',
         'timestamp': DateTime.now().toIso8601String(),
-        'inventory': inventoryItems.map((e) => {'itemName': e.itemName, 'sku': e.sku, 'stockQuantity': e.stockQuantity, 'purchasePrice': e.purchasePrice, 'priceA': e.priceA}).toList(),
-        'accounts': accounts.map((e) => {'name': e.name, 'groupCategory': e.groupCategory, 'phone': e.phone, 'openingBalance': e.openingBalance}).toList(),
-        'transactions': transactions.map((e) => {'date': e.date.toIso8601String(), 'voucherType': e.voucherType, 'voucherNumber': e.voucherNumber, 'partyName': e.partyName, 'amount': e.amount}).toList(),
+        'inventory': inventoryItems.map((e) => {'itemName': e.itemName, 'sku': e.sku, 'category': e.category, 'purchasePrice': e.purchasePrice, 'openingStock': e.openingStock, 'stockQuantity': e.stockQuantity, 'priceA': e.priceA, 'priceCategory': e.priceCategory, 'stockType': e.stockType}).toList(),
+        'accounts': accounts.map((e) => {'name': e.name, 'groupCategory': e.groupCategory, 'phone': e.phone, 'email': e.email, 'address': e.address, 'gstin': e.gstin, 'openingBalance': e.openingBalance, 'balanceType': e.balanceType}).toList(),
+        'transactions': transactions.map((e) => {'date': e.date.toIso8601String(), 'voucherType': e.voucherType, 'voucherNumber': e.voucherNumber, 'partyName': e.partyName, 'cashOrBank': e.cashOrBank, 'amount': e.amount, 'notes': e.notes}).toList(),
       };
 
       final directory = await getApplicationDocumentsDirectory();
-      final backupDir = Directory('${directory.path}/orlife_backups');
+      final backupDir = Directory('${directory.path}/Orlife ERP Backups');
       if (!await backupDir.exists()) {
         await backupDir.create(recursive: true);
       }
 
-      final file = File('${backupDir.path}/auto_backup_${DateTime.now().millisecondsSinceEpoch}.json');
-      await file.writeAsString(jsonEncode(backupData));
+      final dateStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final file = File('${backupDir.path}/orlife_erp_backup_$dateStr.json');
+      await file.writeAsBytes(utf8.encode(jsonEncode(backupData)));
     } catch (_) {}
   }
 
   Future<void> _triggerBackupAndExit() async {
-    bool shouldExit = false;
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -209,8 +380,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              shouldExit = true;
               Navigator.pop(context);
+              exit(0);
             },
             child: const Text('Exit without Backup', style: TextStyle(color: Colors.grey)),
           ),
@@ -226,62 +397,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
               showDialog(
                 context: context,
                 barrierDismissible: false,
-                builder: (context) => Dialog(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        CircularProgressIndicator(color: Colors.teal, strokeWidth: 3),
-                        SizedBox(width: 20),
-                        Text('Creating secure backup...', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                builder: (context) => StatefulBuilder(
+                  builder: (context, setDialogState) {
+                    bool isDone = false;
+
+                    if (!isDone) {
+                      _performDashboardBackup().then((_) {
+                        if (mounted) {
+                          setDialogState(() {
+                            isDone = true;
+                          });
+                        }
+                      });
+                    }
+
+                    return AlertDialog(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      title: Row(
+                        children: [
+                          Icon(isDone ? Icons.check_circle_rounded : Icons.hourglass_top_rounded, color: isDone ? Colors.green : Colors.teal, size: 26),
+                          const SizedBox(width: 10),
+                          Text(isDone ? 'Backup Successful' : 'Creating Backup...', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      content: Text(
+                        isDone ? 'Your data has been safely secured inside "Orlife ERP Backups".' : 'Please wait while we secure your data...',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      actions: [
+                        if (isDone)
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              exit(0);
+                            },
+                            child: const Text('OK'),
+                          ),
                       ],
-                    ),
-                  ),
+                    );
+                  },
                 ),
               );
-
-              await _performAutoBackupOnClose();
-              if (!mounted) return;
-              Navigator.pop(context);
-
-              await showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => AlertDialog(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  title: Row(
-                    children: const [
-                      Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
-                      SizedBox(width: 10),
-                      Text('Backup Successful', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
-                    ],
-                  ),
-                  content: const Text('Your data has been safely secured locally.', style: TextStyle(fontSize: 13)),
-                  actions: [
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Okay'),
-                    ),
-                  ],
-                ),
-              );
-
-              shouldExit = true;
-              if (!mounted) return;
-              Navigator.pop(context, true);
             },
             child: const Text('Backup & Exit'),
           ),
         ],
       ),
     );
-
-    if (shouldExit) {
-      exit(0);
-    }
   }
 
   Future<bool> _onWillPop() async {
