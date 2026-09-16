@@ -1,12 +1,22 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/product.dart';
 import 'package:accounting_app/models/order_model.dart';
-import '../searchable_field.dart'; // ✅ Updated relative import path
-import '../products/product_inventory_screen.dart'; // 🔥 Product Inventory Screen Imported
+import 'package:accounting_app/models/settings_model.dart';
+import '../searchable_field.dart';
+import '../account/add_account_screen.dart';
+import '../products/product_inventory_screen.dart';
 
 class OrdersManagementScreen extends StatefulWidget {
   const OrdersManagementScreen({super.key});
@@ -21,9 +31,26 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
   // Form Controllers & State
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _orderNoController = TextEditingController(text: 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
+  final TextEditingController _dateController = TextEditingController();
   
+  final TextEditingController _inlineSearchController = TextEditingController();
+  final TextEditingController _inlineQtyController = TextEditingController(text: '1');
+  final TextEditingController _inlinePriceController = TextEditingController(text: '0');
+  
+  final FocusNode _searchFocusNode = FocusNode();
+  final FocusNode _qtyFocusNode = FocusNode();
+  final FocusNode _priceFocusNode = FocusNode();
+  final FocusNode _freightFocusNode = FocusNode();
+  final FocusNode _saveButtonFocusNode = FocusNode();
+
+  List<Map<String, dynamic>> _presetChargesList = [];
+  final List<Map<String, dynamic>> _billChargesList = [];
+
+  DateTime _selectedDate = DateTime.now();
+
   List<String> _allAccounts = [];
   List<Product> _allProducts = [];
+  Product? _selectedInlineProduct;
   final List<Map<String, dynamic>> _orderItems = [];
 
   // Orders Management & Filter State
@@ -34,10 +61,14 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
   final Set<Id> _selectedOrderIds = {};
   bool _isSelectionMode = false;
 
+  bool _isGstActive = false;
+  String _companyGstin = '';
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _dateController.text = DateFormat('dd-MM-yyyy').format(_selectedDate);
     _loadData();
     _fetchOrders();
   }
@@ -47,26 +78,257 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     _tabController.dispose();
     _partyController.dispose();
     _orderNoController.dispose();
+    _dateController.dispose();
+    _inlineSearchController.dispose();
+    _inlineQtyController.dispose();
+    _inlinePriceController.dispose();
+    _searchFocusNode.dispose();
+    _qtyFocusNode.dispose();
+    _priceFocusNode.dispose();
+    _freightFocusNode.dispose();
+    _saveButtonFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _loadData() async {
     final accounts = await DatabaseHelper.isar.accounts.where().findAll();
     final products = await DatabaseHelper.isar.products.where().findAll();
+    final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
+
+    List<Map<String, dynamic>> loadedCharges = [];
+    loadedCharges.add({'name': 'Freight Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 30.0});
+    loadedCharges.add({'name': 'Discount', 'type': 'Less', 'mode': 'Fixed', 'value': 0.0});
+
+    if (settings != null) {
+      try {
+        for (var e in settings.extraCharges) {
+          try {
+            loadedCharges.add(Map<String, dynamic>.from(jsonDecode(e)));
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+
     setState(() {
       _allAccounts = accounts.map((a) => a.name).toList();
       _allProducts = products;
+      if (settings != null) {
+        _isGstActive = settings.isGstEnabled;
+        _companyGstin = settings.gstin ?? '';
+      }
+      _presetChargesList = loadedCharges;
     });
   }
 
-  // 📦 Open ProductInventoryScreen for Managing Inventory / Products
   void _navigateToInventoryScreen() async {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const ProductInventoryScreen()),
     );
-    // Refresh products list after returning from Inventory screen
     await _loadData();
+  }
+
+  void _navigateToAddNewParty() async {
+    final String? newPartyName = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddAccountScreen()),
+    );
+
+    await _loadData();
+
+    if (newPartyName != null && newPartyName.isNotEmpty) {
+      setState(() {
+        _partyController.text = newPartyName;
+      });
+    }
+  }
+
+  // 📅 Compact & Modern Date Picker with Manual Entry Support
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            primaryColor: Colors.amber.shade900,
+            colorScheme: ColorScheme.light(primary: Colors.amber.shade900),
+            buttonTheme: const ButtonThemeData(textTheme: ButtonTextTheme.primary),
+          ),
+          child: Center(
+            child: SizedBox(
+              width: 320,
+              height: 420,
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+        _dateController.text = DateFormat('dd-MM-yyyy').format(picked);
+      });
+    }
+  }
+
+  void _addInlineItemToOrder() {
+    if (_selectedInlineProduct == null) return;
+
+    int q = int.tryParse(_inlineQtyController.text) ?? 1;
+    double pr = double.tryParse(_inlinePriceController.text) ?? _selectedInlineProduct!.sellingPrice;
+
+    if (q <= 0 || pr < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Quantity aur Price valid hone chahiye!'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() {
+      int existingIndex = _orderItems.indexWhere((item) => item['name'] == _selectedInlineProduct!.name);
+
+      if (existingIndex != -1) {
+        _orderItems[existingIndex]['qty'] = (_orderItems[existingIndex]['qty'] as int) + q;
+        _orderItems[existingIndex]['price'] = pr;
+      } else {
+        _orderItems.add({
+          'name': _selectedInlineProduct!.name,
+          'qty': q,
+          'price': pr,
+        });
+      }
+
+      _selectedInlineProduct = null;
+      _inlineSearchController.clear();
+      _inlineQtyController.text = '1';
+      _inlinePriceController.text = '0';
+    });
+
+    Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
+  }
+
+  double get _subTotal {
+    return _orderItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
+  }
+
+  double get _billChargesTotal {
+    double total = 0.0;
+    for (var charge in _billChargesList) {
+      double qty = charge['qty'] is double ? charge['qty'] : double.tryParse(charge['qty'].toString()) ?? 1.0;
+      double rate = charge['rate'] is double ? charge['rate'] : double.tryParse(charge['rate'].toString()) ?? 0.0;
+      double amt = qty * rate;
+
+      if (charge['type'] == 'Less' || charge['name'].toString().toLowerCase().contains('discount')) {
+        total -= amt;
+      } else {
+        total += amt;
+      }
+    }
+    return total;
+  }
+
+  double get _grandTotal {
+    double total = _subTotal + _billChargesTotal;
+    return total < 0 ? 0 : total;
+  }
+
+  // 📄 PDF Generation for Preview, Share & Print
+  Future<void> _generateAndPrintOrShareOrder({required bool isShare}) async {
+    final partyName = _partyController.text.trim();
+    if (partyName.isEmpty || _orderItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
+      return;
+    }
+
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Sales Order / Booking Receipt', style: const pw.TextStyle(fontSize: 10)),
+                      if (_isGstActive && _companyGstin.isNotEmpty)
+                        pw.Text('GSTIN: $_companyGstin', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('SALES ORDER (PENDING)', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.amber900)),
+                      pw.Text('Order No: ${_orderNoController.text}'),
+                      pw.Text('Date: ${_dateController.text}'),
+                    ],
+                  ),
+                ],
+              ),
+              pw.Divider(thickness: 1.5, color: PdfColors.amber900),
+              pw.SizedBox(height: 10),
+              pw.Text('Customer Name: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 15),
+              pw.Table.fromTextArray(
+                headers: ['S.No', 'Item Description', 'Qty', 'Price (₹)', 'Total (₹)'],
+                data: List.generate(_orderItems.length, (index) {
+                  final item = _orderItems[index];
+                  double total = (item['qty'] as int) * (item['price'] as double);
+                  return [
+                    '${index + 1}',
+                    '${item['name']}',
+                    '${item['qty']}',
+                    '${item['price']}',
+                    '${total.toStringAsFixed(2)}',
+                  ];
+                }),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.amber900),
+                cellAlignment: pw.Alignment.centerLeft,
+              ),
+              pw.SizedBox(height: 20),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.end,
+                children: [
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.amber900), borderRadius: pw.BorderRadius.circular(4)),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
+                        for (var charge in _billChargesList)
+                          pw.Text('${charge['name']} (${charge['qty']} x ₹${charge['rate']}): ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
+                        pw.Divider(),
+                        pw.Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.amber900)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (isShare) {
+      final output = await getTemporaryDirectory();
+      final file = File('${output.path}/Order_${_orderNoController.text}.pdf');
+      await file.writeAsBytes(await pdf.save());
+      await Share.shareXFiles([XFile(file.path)], text: 'Sales Order #${_orderNoController.text} from ORLIFE. Total: ₹ ${_grandTotal.toStringAsFixed(2)}');
+    } else {
+      await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+    }
   }
 
   // 🔍 Fetch Orders Date-wise
@@ -90,76 +352,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     });
   }
 
-  // Add Item Dialog for Booking (Updated with Manage Inventory button)
-  void _addItemDialog() {
-    if (_allProducts.isEmpty) {
-      _navigateToInventoryScreen();
-      return;
-    }
-
-    Product selectedProduct = _allProducts.first;
-    final TextEditingController qtyController = TextEditingController(text: '1');
-    final TextEditingController priceController = TextEditingController(text: selectedProduct.sellingPrice.toString());
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Add Product to Order'),
-              TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: Colors.amber.shade900),
-                icon: const Icon(Icons.add_circle, size: 18),
-                label: const Text('Manage Inventory'),
-                onPressed: () {
-                  Navigator.pop(context);
-                  _navigateToInventoryScreen();
-                },
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<Product>(
-                value: _allProducts.contains(selectedProduct) ? selectedProduct : _allProducts.first,
-                items: _allProducts.map((p) => DropdownMenuItem(value: p, child: Text('${p.name} (Stock: ${p.stock})'))).toList(),
-                onChanged: (val) {
-                  setDialogState(() {
-                    selectedProduct = val!;
-                    priceController.text = selectedProduct.sellingPrice.toString();
-                  });
-                },
-                decoration: const InputDecoration(labelText: 'Product', border: OutlineInputBorder(), isDense: true),
-              ),
-              const SizedBox(height: 12),
-              TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder(), isDense: true)),
-              const SizedBox(height: 12),
-              TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true)),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade900, foregroundColor: Colors.white),
-              onPressed: () {
-                int q = int.tryParse(qtyController.text) ?? 1;
-                double pr = double.tryParse(priceController.text) ?? selectedProduct.sellingPrice;
-                setState(() {
-                  _orderItems.add({'name': selectedProduct.name, 'qty': q, 'price': pr});
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // 💾 Save New Order
   Future<void> _saveOrder() async {
     if (_partyController.text.isEmpty || _orderItems.isEmpty) {
@@ -170,7 +362,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     final newOrder = SalesOrder()
       ..orderNo = _orderNoController.text
       ..partyName = _partyController.text.trim()
-      ..date = DateTime.now()
+      ..date = _selectedDate
       ..status = 'Pending';
 
     List<OrderItemModel> itemModels = [];
@@ -194,13 +386,56 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
       _orderItems.clear();
       _orderNoController.text = 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
       _partyController.clear();
+      _billChargesList.clear();
     });
 
     _fetchOrders();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order Successfully Booked!'), backgroundColor: Colors.green));
     
-    // Switch to Orders List tab
-    _tabController.animateTo(1);
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle, color: Colors.amber, size: 28),
+            SizedBox(width: 10),
+            Text('Order Booked Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text('Order safalपूर्वक save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _tabController.animateTo(1);
+            },
+            child: const Text('Close', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            icon: const Icon(Icons.share, size: 16),
+            label: const Text('Share PDF'),
+            onPressed: () {
+              Navigator.pop(context);
+              _generateAndPrintOrShareOrder(isShare: true);
+              _tabController.animateTo(1);
+            },
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade900, foregroundColor: Colors.white),
+            icon: const Icon(Icons.print, size: 16),
+            label: const Text('Print'),
+            onPressed: () {
+              Navigator.pop(context);
+              _generateAndPrintOrShareOrder(isShare: false);
+              _tabController.animateTo(1);
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   // 🗑️ Delete Single Order
@@ -356,49 +591,490 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
         children: [
           // ================= TAB 1: BOOK NEW ORDER =================
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(10.0),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Top Bar (Order No & Date)
                 Row(
                   children: [
-                    Expanded(child: SearchableField(label: 'Party Name *', items: _allAccounts, controller: _partyController, onSelected: (v) {})),
-                    const SizedBox(width: 12),
-                    SizedBox(width: 150, child: TextField(controller: _orderNoController, decoration: const InputDecoration(labelText: 'Order No', border: OutlineInputBorder(), isDense: true))),
+                    Expanded(
+                      flex: 2,
+                      child: SizedBox(
+                        height: 40,
+                        child: TextField(
+                          controller: _orderNoController,
+                          style: const TextStyle(fontSize: 11),
+                          decoration: const InputDecoration(
+                            labelText: 'Order No',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 2,
+                      child: SizedBox(
+                        height: 40,
+                        child: TextField(
+                          controller: _dateController,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          decoration: InputDecoration(
+                            labelText: 'Date',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.calendar_today, size: 14, color: Colors.amber),
+                              onPressed: _selectDate,
+                              constraints: const BoxConstraints(),
+                              padding: const EdgeInsets.only(right: 4),
+                            ),
+                          ),
+                          onChanged: (val) {
+                            try {
+                              final parsedDate = DateFormat('dd-MM-yyyy').parse(val);
+                              setState(() {
+                                _selectedDate = parsedDate;
+                              });
+                            } catch (_) {}
+                          },
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 6),
+
+                // Customer / Party Name Selection
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Order Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    ElevatedButton.icon(onPressed: _addItemDialog, icon: const Icon(Icons.add, size: 16), label: const Text('Add Item')),
+                    Expanded(
+                      child: SizedBox(
+                        height: 40,
+                        child: SearchableField(
+                          label: 'Customer / Party Name *',
+                          items: _allAccounts,
+                          controller: _partyController,
+                          onSelected: (val) {
+                            _partyController.text = val;
+                            Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    SizedBox(
+                      height: 40,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.amber.shade900,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        ),
+                        icon: const Icon(Icons.person_add, size: 14),
+                        label: const Text('New', style: TextStyle(fontSize: 11)),
+                        onPressed: _navigateToAddNewParty,
+                      ),
+                    ),
                   ],
                 ),
+                const SizedBox(height: 6),
+
+                const Text('Order Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                const SizedBox(height: 2),
+
+                // 📦 Items List & Inline Product Search Bar inside Scrollable Expanded area
                 Expanded(
-                  child: _orderItems.isEmpty
-                      ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey)))
-                      : ListView.builder(
-                          itemCount: _orderItems.length,
-                          itemBuilder: (context, index) {
-                            final item = _orderItems[index];
-                            return Card(
-                              child: ListTile(
-                                title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('Qty: ${item['qty']} | Price: ₹ ${item['price']}'),
-                                trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _orderItems.removeAt(index))),
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      ...List.generate(_orderItems.length, (index) {
+                        final item = _orderItems[index];
+                        double total = (item['qty'] as int) * (item['price'] as double);
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          margin: const EdgeInsets.symmetric(vertical: 2),
+                          decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4)),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  '${index + 1}. ${item['name']}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                ),
                               ),
+                              SizedBox(
+                                width: 45,
+                                child: TextField(
+                                  controller: TextEditingController(text: item['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
+                                  keyboardType: TextInputType.number,
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                  decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
+                                  onChanged: (val) {
+                                    int? q = int.tryParse(val);
+                                    if (q != null && q > 0) {
+                                      setState(() => _orderItems[index]['qty'] = q);
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              SizedBox(
+                                width: 60,
+                                child: TextField(
+                                  controller: TextEditingController(text: item['price'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
+                                  keyboardType: TextInputType.number,
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                  decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
+                                  onChanged: (val) {
+                                    double? p = double.tryParse(val);
+                                    if (p != null && p >= 0) {
+                                      setState(() => _orderItems[index]['price'] = p);
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.amber)),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                onPressed: () => setState(() => _orderItems.removeAt(index)),
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.symmetric(horizontal: 2),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+
+                      const SizedBox(height: 4),
+
+                      // Inline Search Bar for Products
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.amber.shade200)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_selectedInlineProduct == null)
+                              Autocomplete<Product>(
+                                optionsBuilder: (TextEditingValue textEditingValue) {
+                                  if (textEditingValue.text.isEmpty) return _allProducts;
+                                  return _allProducts.where((item) =>
+                                    item.name.toLowerCase().contains(textEditingValue.text.toLowerCase())
+                                  );
+                                },
+                                displayStringForOption: (Product option) => '${option.name} (Stock: ${option.stock})',
+                                onSelected: (Product selection) {
+                                  int existingIndex = _orderItems.indexWhere((item) => item['name'] == selection.name);
+
+                                  if (existingIndex != -1) {
+                                    setState(() {
+                                      _orderItems[existingIndex]['qty'] = (_orderItems[existingIndex]['qty'] as int) + 1;
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('⚠️ ${selection.name} already in order. Quantity updated!'), duration: const Duration(seconds: 2)),
+                                    );
+                                    _inlineSearchController.clear();
+                                  } else {
+                                    setState(() {
+                                      _selectedInlineProduct = selection;
+                                      _inlinePriceController.text = selection.sellingPrice.toString();
+                                      _inlineQtyController.text = '1';
+                                    });
+                                    Future.delayed(const Duration(milliseconds: 100), () {
+                                      _qtyFocusNode.requestFocus();
+                                      _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
+                                    });
+                                  }
+                                },
+                                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                  if (_inlineSearchController.text.isNotEmpty && controller.text.isEmpty) {
+                                    controller.text = _inlineSearchController.text;
+                                  }
+                                  return TextField(
+                                    controller: controller,
+                                    focusNode: _searchFocusNode,
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Search Product Name to add...',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                      prefixIcon: Icon(Icons.search, size: 16),
+                                    ),
+                                    onChanged: (val) => _inlineSearchController.text = val,
+                                    onSubmitted: (val) {
+                                      if (val.trim().isEmpty) {
+                                        _freightFocusNode.requestFocus();
+                                      }
+                                    },
+                                  );
+                                },
+                                optionsViewBuilder: (context, onSelected, options) {
+                                  return Align(
+                                    alignment: Alignment.topLeft,
+                                    child: Material(
+                                      elevation: 4,
+                                      child: SizedBox(
+                                        width: 280,
+                                        height: 150,
+                                        child: ListView.builder(
+                                          padding: EdgeInsets.zero,
+                                          itemCount: options.length + 1,
+                                          itemBuilder: (context, index) {
+                                            if (index == 0) {
+                                              return ListTile(
+                                                tileColor: Colors.amber.shade100,
+                                                leading: const Icon(Icons.add_circle, color: Colors.amber, size: 16),
+                                                title: const Text('+ Manage Inventory / Products', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.amber)),
+                                                onTap: () async {
+                                                  Navigator.pop(context);
+                                                  _navigateToInventoryScreen();
+                                                },
+                                              );
+                                            }
+                                            final item = options.elementAt(index - 1);
+                                            return ListTile(
+                                              dense: true,
+                                              title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                              subtitle: Text('Stock: ${item.stock} | Price: ₹${item.sellingPrice}', style: const TextStyle(fontSize: 9)),
+                                              onTap: () => onSelected(item),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              )
+                            else
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      _selectedInlineProduct!.name,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amber),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  SizedBox(
+                                    width: 50,
+                                    child: TextField(
+                                      controller: _inlineQtyController,
+                                      focusNode: _qtyFocusNode,
+                                      keyboardType: TextInputType.number,
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                      decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
+                                      onTap: () => _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length),
+                                      onSubmitted: (_) {
+                                        _priceFocusNode.requestFocus();
+                                        _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length);
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  SizedBox(
+                                    width: 65,
+                                    child: TextField(
+                                      controller: _inlinePriceController,
+                                      focusNode: _priceFocusNode,
+                                      keyboardType: TextInputType.number,
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                      decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
+                                      onTap: () => _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length),
+                                      onSubmitted: (_) => _addInlineItemToOrder(),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, color: Colors.red, size: 16),
+                                    onPressed: () {
+                                      setState(() => _selectedInlineProduct = null);
+                                      _searchFocusNode.requestFocus();
+                                    },
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 6),
+                
+                // 📐 Bottom Summary & Save Order Button
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.amber.shade200)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                          Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+
+                      ...List.generate(_billChargesList.length, (index) {
+                        final charge = _billChargesList[index];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 1),
+                          child: Row(
+                            children: [
+                              Expanded(flex: 3, child: Text(charge['name'], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+                              SizedBox(
+                                width: 40,
+                                height: 26,
+                                child: TextField(
+                                  controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
+                                  keyboardType: TextInputType.number,
+                                  style: const TextStyle(fontSize: 10),
+                                  decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
+                                  onChanged: (val) {
+                                    charge['qty'] = double.tryParse(val) ?? 1.0;
+                                    setState(() {});
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              SizedBox(
+                                width: 50,
+                                height: 26,
+                                child: TextField(
+                                  controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
+                                  keyboardType: TextInputType.number,
+                                  style: const TextStyle(fontSize: 10),
+                                  decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
+                                  onChanged: (val) {
+                                    charge['rate'] = double.tryParse(val) ?? 0.0;
+                                    setState(() {});
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 12, color: Colors.red),
+                                onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+
+                      const SizedBox(height: 2),
+                      SizedBox(
+                        height: 32,
+                        child: Autocomplete<Map<String, dynamic>>(
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
+                            return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                          },
+                          displayStringForOption: (option) => option['name'],
+                          onSelected: (selection) {
+                            setState(() {
+                              _billChargesList.add({
+                                'name': selection['name'],
+                                'type': selection['type'],
+                                'mode': selection['mode'],
+                                'qty': 1.0,
+                                'rate': selection['value'] ?? 0.0,
+                              });
+                            });
+                          },
+                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                            return TextField(
+                              controller: controller,
+                              focusNode: _freightFocusNode,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: const InputDecoration(
+                                labelText: 'Add Freight / Charge...',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                prefixIcon: Icon(Icons.add_circle_outline, size: 14),
+                              ),
+                              onSubmitted: (val) {
+                                if (val.trim().isEmpty) {
+                                  FocusScope.of(context).requestFocus(_saveButtonFocusNode);
+                                }
+                              },
                             );
                           },
                         ),
-                ),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade900, foregroundColor: Colors.white),
-                    onPressed: _saveOrder,
-                    child: const Text('Save Order (Pending)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
+                        ],
+                      ),
+                    ],
                   ),
+                ),
+                const SizedBox(height: 6),
+
+                // Action Buttons (Preview, Share PDF, Save Order)
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 36,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
+                          icon: const Icon(Icons.preview, size: 14),
+                          label: const Text('Preview', style: TextStyle(fontSize: 11)),
+                          onPressed: () => _generateAndPrintOrShareOrder(isShare: false),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: SizedBox(
+                        height: 36,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
+                          icon: const Icon(Icons.share, size: 14),
+                          label: const Text('Share', style: TextStyle(fontSize: 11)),
+                          onPressed: () => _generateAndPrintOrShareOrder(isShare: true),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: SizedBox(
+                        height: 36,
+                        child: ElevatedButton(
+                          focusNode: _saveButtonFocusNode,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.amber.shade900,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                          ),
+                          onPressed: _saveOrder,
+                          child: const Text('Save Order', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -406,7 +1082,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
 
           // ================= TAB 2: MANAGE ORDERS =================
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(12.0),
             child: Column(
               children: [
                 Row(
@@ -418,12 +1094,12 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                           if (picked != null) { setState(() => _fromDate = picked); _fetchOrders(); }
                         },
                         child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'From Date', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_month, size: 20)),
-                          child: Text(DateFormat('dd-MM-yyyy').format(_fromDate), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          decoration: const InputDecoration(labelText: 'From Date', border: OutlineInputBorder(), isDense: true, prefixIcon: Icon(Icons.calendar_month, size: 18)),
+                          child: Text(DateFormat('dd-MM-yyyy').format(_fromDate), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: InkWell(
                         onTap: () async {
@@ -431,26 +1107,29 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                           if (picked != null) { setState(() => _toDate = picked); _fetchOrders(); }
                         },
                         child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'To Date', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_month, size: 20)),
-                          child: Text(DateFormat('dd-MM-yyyy').format(_toDate), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          decoration: const InputDecoration(labelText: 'To Date', border: OutlineInputBorder(), isDense: true, prefixIcon: Icon(Icons.calendar_month, size: 18)),
+                          child: Text(DateFormat('dd-MM-yyyy').format(_toDate), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade900, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
-                      onPressed: _fetchOrders,
-                      child: const Text('Filter'),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: 40,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade900, foregroundColor: Colors.white),
+                        onPressed: _fetchOrders,
+                        child: const Text('Filter', style: TextStyle(fontSize: 11)),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
 
                 Expanded(
                   child: _isLoadingOrders
                       ? const Center(child: CircularProgressIndicator())
                       : _ordersList.isEmpty
-                          ? const Center(child: Text('Is date range mein koi order nahi mila.', style: TextStyle(color: Colors.grey, fontSize: 15)))
+                          ? const Center(child: Text('Is date range mein koi order nahi mila.', style: TextStyle(color: Colors.grey, fontSize: 13)))
                           : ListView.builder(
                               itemCount: _ordersList.length,
                               itemBuilder: (context, index) {
@@ -461,7 +1140,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                                 return Card(
                                   elevation: 2,
                                   color: isSelected ? Colors.amber.shade100 : Colors.white,
-                                  margin: const EdgeInsets.symmetric(vertical: 6),
+                                  margin: const EdgeInsets.symmetric(vertical: 4),
                                   child: ListTile(
                                     leading: Checkbox(
                                       value: isSelected,
@@ -480,26 +1159,26 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                                     title: Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Text('Order No: ${order.orderNo}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        Text('Order No: ${order.orderNo}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                                         Chip(
-                                          label: Text(order.status, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                                          label: Text(order.status, style: const TextStyle(fontSize: 10, color: Colors.white)),
                                           backgroundColor: isPending ? Colors.amber.shade800 : Colors.green,
                                           padding: EdgeInsets.zero,
                                         ),
                                       ],
                                     ),
-                                    subtitle: Text('Party: ${order.partyName}\nDate: ${DateFormat('dd-MM-yyyy').format(order.date)}'),
+                                    subtitle: Text('Party: ${order.partyName}\nDate: ${DateFormat('dd-MM-yyyy').format(order.date)}', style: const TextStyle(fontSize: 11)),
                                     isThreeLine: true,
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
-                                          icon: const Icon(Icons.edit, color: Colors.blue),
-                                          tooltip: 'Modify Order Management',
+                                          icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
+                                          tooltip: 'Modify Order',
                                           onPressed: () => _editOrder(order),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.delete, color: Colors.red),
+                                          icon: const Icon(Icons.delete, color: Colors.red, size: 18),
                                           tooltip: 'Delete Order',
                                           onPressed: () => _deleteOrder(order),
                                         ),
