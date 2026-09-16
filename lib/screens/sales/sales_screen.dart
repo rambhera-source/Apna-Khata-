@@ -33,18 +33,14 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
-  final TextEditingController _freightSearchController = TextEditingController();
   
+  // 🔥 Permanent Focus Nodes
   final FocusNode _dateFocusNode = FocusNode();
   final FocusNode _partyFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
-  final FocusNode _freightFocusNode = FocusNode();
   final FocusNode _saveButtonFocusNode = FocusNode();
-
-  List<Map<String, dynamic>> _presetChargesList = [];
-  final List<Map<String, dynamic>> _billChargesList = [];
 
   DateTime _selectedDate = DateTime.now();
 
@@ -69,8 +65,9 @@ class _SalesScreenState extends State<SalesScreen> {
     _dateController.text = DateFormat('dd-MM-yyyy').format(_selectedDate);
     _loadDropdownDataAndSettings();
 
+    // 🔥 स्क्रीन खुलते ही सबसे पहला और पक्का फोकस 'Date' पर रहेगा
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _dateFocusNode.requestFocus();
+      FocusScope.of(context).requestFocus(_dateFocusNode);
     });
   }
 
@@ -79,20 +76,6 @@ class _SalesScreenState extends State<SalesScreen> {
     final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
 
-    List<Map<String, dynamic>> loadedCharges = [];
-    loadedCharges.add({'name': 'Freight Charge', 'type': 'Add', 'mode': 'Fixed', 'value': 30.0});
-    loadedCharges.add({'name': 'Discount', 'type': 'Less', 'mode': 'Fixed', 'value': 0.0});
-
-    if (settings != null) {
-      try {
-        for (var e in settings.extraCharges) {
-          try {
-            loadedCharges.add(Map<String, dynamic>.from(jsonDecode(e)));
-          } catch (_) {}
-        }
-      } catch (_) {}
-    }
-
     setState(() {
       _allAccountsList = accounts;
       _allInventoryItems = inventoryItems;
@@ -100,7 +83,6 @@ class _SalesScreenState extends State<SalesScreen> {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
       }
-      _presetChargesList = loadedCharges;
     });
   }
 
@@ -116,140 +98,7 @@ class _SalesScreenState extends State<SalesScreen> {
       setState(() {
         _partyController.text = newPartyName;
       });
-      _checkForPendingOrders(newPartyName);
     }
-  }
-
-  Future<void> _checkForPendingOrders(String partyName) async {
-    if (partyName.isEmpty) return;
-
-    final pendingOrders = await DatabaseHelper.isar.salesOrders
-        .filter()
-        .partyNameEqualTo(partyName, caseSensitive: false)
-        .and()
-        .statusEqualTo('Pending')
-        .findAll();
-
-    if (pendingOrders.isEmpty || !mounted) return;
-
-    Set<SalesOrder> selectedOrdersForBilling = {};
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Icon(Icons.bookmark_added_rounded, color: Colors.teal.shade800, size: 26),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Pending Orders Found (${pendingOrders.length})',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: 350,
-            height: 280,
-            child: ListView.builder(
-              itemCount: pendingOrders.length,
-              itemBuilder: (context, index) {
-                final order = pendingOrders[index];
-                final isChecked = selectedOrdersForBilling.contains(order);
-
-                return Container(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isChecked ? Colors.teal.shade50 : Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: isChecked ? Colors.teal.shade300 : Colors.grey.shade300),
-                  ),
-                  child: CheckboxListTile(
-                    dense: true,
-                    activeColor: Colors.teal,
-                    title: Text('Order No: ${order.orderNo}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    subtitle: Text('Date: ${DateFormat('dd-MM-yyyy').format(order.date)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                    value: isChecked,
-                    onChanged: (bool? value) {
-                      setDialogState(() {
-                        if (value == true) {
-                          selectedOrdersForBilling.add(order);
-                        } else {
-                          selectedOrdersForBilling.remove(order);
-                        }
-                      });
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Skip', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              onPressed: () {
-                if (selectedOrdersForBilling.isNotEmpty) {
-                  _loadItemsFromSelectedOrders(selectedOrdersForBilling);
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Load Into Bill'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _loadItemsFromSelectedOrders(Set<SalesOrder> orders) async {
-    for (var order in orders) {
-      await order.items.load();
-      for (var orderItem in order.items) {
-        final invMatch = _allInventoryItems.firstWhere(
-          (inv) => inv.itemName.toLowerCase() == orderItem.productName.toLowerCase(),
-          orElse: () => InventoryItem()
-            ..itemName = orderItem.productName
-            ..sku = '-'
-            ..priceA = orderItem.price
-            ..stockQuantity = 0,
-        );
-
-        bool isOutOfStock = invMatch.stockQuantity <= 0;
-
-        setState(() {
-          int existingIndex = _cartItems.indexWhere((item) => item['name'] == orderItem.productName);
-
-          if (existingIndex != -1) {
-            _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + orderItem.qty;
-          } else {
-            _cartItems.add({
-              'name': orderItem.productName,
-              'sku': invMatch.sku ?? '-',
-              'qty': orderItem.qty,
-              'price': orderItem.price,
-              'stockType': _globalStockType,
-              'isOutOfStock': isOutOfStock,
-            });
-          }
-        });
-      }
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pending order items successfully loaded into bill!'), backgroundColor: Colors.green),
-    );
   }
 
   Future<void> _selectDate() async {
@@ -264,6 +113,8 @@ class _SalesScreenState extends State<SalesScreen> {
         _selectedDate = picked;
         _dateController.text = DateFormat('dd-MM-yyyy').format(picked);
       });
+      // डेट चुनने के बाद फोकस पार्टी नेम पर भेजें
+      _partyFocusNode.requestFocus();
     }
   }
 
@@ -305,6 +156,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _inlinePriceController.text = '0';
     });
 
+    // आइटम ऐड होने के बाद फोकस वापस प्रोडक्ट सर्च पर फिक्स रहे
     Future.delayed(const Duration(milliseconds: 50), () {
       _searchFocusNode.requestFocus();
     });
@@ -314,32 +166,142 @@ class _SalesScreenState extends State<SalesScreen> {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  double get _billChargesTotal {
-    double total = 0.0;
-    for (var charge in _billChargesList) {
-      double qty = charge['qty'] is double ? charge['qty'] : double.tryParse(charge['qty'].toString()) ?? 1.0;
-      double rate = charge['rate'] is double ? charge['rate'] : double.tryParse(charge['rate'].toString()) ?? 0.0;
-      double amt = qty * rate;
-
-      if (charge['type'] == 'Less' || charge['name'].toString().toLowerCase().contains('discount')) {
-        total -= amt;
-      } else {
-        total += amt;
-      }
-    }
-    return total;
-  }
-
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    double taxableValue = _subTotal + _billChargesTotal;
-    if (taxableValue < 0) taxableValue = 0;
-    return taxableValue * (_gstRate / 100);
+    return _subTotal * (_gstRate / 100);
   }
 
   double get _grandTotal {
-    double total = _subTotal + _billChargesTotal + _taxAmount;
+    double total = _subTotal + _taxAmount;
     return total < 0 ? 0 : total;
+  }
+
+  // 🔥 Interactive Invoice Preview Dialog
+  void _showInvoicePreviewDialog() {
+    final partyName = _partyController.text.trim();
+    if (partyName.isEmpty || _cartItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⚠️ Pehle Party Name aur Items add karein!'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Invoice Preview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+            IconButton(
+              icon: const Icon(Icons.close, size: 20),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          height: 500,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Center(
+                  child: Column(
+                    children: [
+                      Text('ORLIFE Mobile Accessories', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text('Wholesale & Retail Mobile Parts', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+                const Divider(thickness: 1.5, height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Bill To: $partyName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text('Payment: $_paymentMode | Type: $_globalStockType', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('Inv No: ${_invoiceNoController.text}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        Text('Date: ${_dateController.text}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                  decoration: BoxDecoration(color: Colors.teal.shade700, borderRadius: BorderRadius.circular(4)),
+                  child: const Row(
+                    children: [
+                      SizedBox(width: 25, child: Text('S.N.', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+                      Expanded(flex: 3, child: Text('Item Name (SKU)', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+                      SizedBox(width: 35, child: Text('Qty', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                      SizedBox(width: 50, child: Text('Price', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                      SizedBox(width: 55, child: Text('Total', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ...List.generate(_cartItems.length, (index) {
+                  final item = _cartItems[index];
+                  double total = (item['qty'] as int) * (item['price'] as double);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 25, child: Text('${index + 1}', style: const TextStyle(fontSize: 11))),
+                        Expanded(flex: 3, child: Text('${item['name']} [${item['sku']}]', style: const TextStyle(fontSize: 11))),
+                        SizedBox(width: 35, child: Text('${item['qty']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
+                        SizedBox(width: 50, child: Text('₹${item['price']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.right)),
+                        SizedBox(width: 55, child: Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                      ],
+                    ),
+                  );
+                }),
+                const Divider(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+                        if (_isGstActive) Text('GST (${_gstRate}%): + ₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+                        const SizedBox(height: 4),
+                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.teal)),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            icon: const Icon(Icons.print, size: 16),
+            label: const Text('Print / PDF'),
+            onPressed: () {
+              Navigator.pop(context);
+              _generateAndPrintOrShareInvoice(isWhatsApp: false);
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _generateAndPrintOrShareInvoice({required bool isWhatsApp}) async {
@@ -409,8 +371,6 @@ class _SalesScreenState extends State<SalesScreen> {
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
-                        for (var charge in _billChargesList)
-                          pw.Text('${charge['name']} (${charge['qty']} x ₹${charge['rate']}): ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
                         if (_isGstActive) pw.Text('GST (${_gstRate.toStringAsFixed(1)}%): + ₹ ${_taxAmount.toStringAsFixed(2)}'),
                         pw.Divider(),
                         pw.Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
@@ -517,10 +477,9 @@ class _SalesScreenState extends State<SalesScreen> {
       _cartItems.clear();
       _partyController.clear();
       _invoiceNoController.text = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-      _billChargesList.clear();
     });
     Future.delayed(const Duration(milliseconds: 50), () {
-      _dateFocusNode.requestFocus();
+      FocusScope.of(context).requestFocus(_dateFocusNode);
     });
   }
 
@@ -551,7 +510,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        resizeToAvoidBottomInset: false, // 🔥 कीबोर्ड आने पर बटन्स को नीचे फिक्स रखने के लिए
+        resizeToAvoidBottomInset: false, // स्क्रीन को सिकुड़ने से रोकने के लिए
         appBar: AppBar(
           title: const Text('Sales Invoice'),
           backgroundColor: Colors.teal.shade800,
@@ -614,15 +573,15 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Date & Customer Autocomplete
+              // Date (With First Focus & dd-MM-yyyy format) & Customer Autocomplete
               Row(
                 children: [
                   SizedBox(
                     height: 40,
-                    width: 110,
+                    width: 120,
                     child: TextField(
                       controller: _dateController,
-                      focusNode: _dateFocusNode,
+                      focusNode: _dateFocusNode, // 🔥 सबसे पहला फोकस
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                       textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
@@ -637,6 +596,10 @@ class _SalesScreenState extends State<SalesScreen> {
                           padding: const EdgeInsets.only(right: 4),
                         ),
                       ),
+                      onTap: () {
+                        // क्लिक करते ही पूरी डेट सिलेक्ट हो जाए ताकि आसानी से एडिट हो सके
+                        _dateController.selection = TextSelection(baseOffset: 0, extentOffset: _dateController.text.length);
+                      },
                       onSubmitted: (_) {
                         _partyFocusNode.requestFocus();
                       },
@@ -659,7 +622,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         displayStringForOption: (Account option) => option.name,
                         onSelected: (Account selection) {
                           _partyController.text = selection.name;
-                          _checkForPendingOrders(selection.name);
                           Future.delayed(const Duration(milliseconds: 50), () {
                             _searchFocusNode.requestFocus();
                           });
@@ -680,7 +642,14 @@ class _SalesScreenState extends State<SalesScreen> {
                               prefixIcon: Icon(Icons.person, size: 16),
                             ),
                             onSubmitted: (_) {
-                              _searchFocusNode.requestFocus();
+                              if (_partyController.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('⚠️ Pehle Customer / Party Name bharein!'), backgroundColor: Colors.red),
+                                );
+                                _partyFocusNode.requestFocus();
+                              } else {
+                                _searchFocusNode.requestFocus();
+                              }
                             },
                           );
                         },
@@ -726,7 +695,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // 🔥 Professional Grid Table Header (Excel/ERP Style)
+              // Professional Grid Table Header
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(color: Colors.teal.shade800, borderRadius: BorderRadius.circular(4)),
@@ -744,7 +713,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 2),
 
-              // 🔥 Professional Items Table & Inline Search Grid
+              // Professional Items Table & Inline Search Grid
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
@@ -839,6 +808,9 @@ class _SalesScreenState extends State<SalesScreen> {
                           if (_selectedInlineProduct == null)
                             RawAutocomplete<InventoryItem>(
                               optionsBuilder: (TextEditingValue textEditingValue) {
+                                if (_partyController.text.trim().isEmpty) {
+                                  return const Iterable<InventoryItem>.empty();
+                                }
                                 if (textEditingValue.text.isEmpty) return _allInventoryItems;
                                 return _allInventoryItems.where((item) =>
                                   item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
@@ -871,6 +843,14 @@ class _SalesScreenState extends State<SalesScreen> {
                                     contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                     prefixIcon: Icon(Icons.search, size: 16),
                                   ),
+                                  onTap: () {
+                                    if (_partyController.text.trim().isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('⚠️ Kripya pehle Customer / Party Name bharein!'), backgroundColor: Colors.red),
+                                      );
+                                      _partyFocusNode.requestFocus();
+                                    }
+                                  },
                                 );
                               },
                               optionsViewBuilder: (context, onSelected, options) {
@@ -985,7 +965,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // 🔥 Fixed Bottom Action Buttons (Never moves up with keyboard)
+              // Fixed Bottom Action Buttons
               Row(
                 children: [
                   Expanded(
@@ -995,7 +975,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                         icon: const Icon(Icons.preview, size: 14),
                         label: const Text('Preview', style: TextStyle(fontSize: 11)),
-                        onPressed: () => _generateAndPrintOrShareInvoice(isWhatsApp: false),
+                        onPressed: _showInvoicePreviewDialog,
                       ),
                     ),
                   ),
