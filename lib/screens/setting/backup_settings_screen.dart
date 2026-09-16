@@ -36,6 +36,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     });
   }
 
+  // 📂 Safe Initial App Directory Path Setup
   Future<void> _loadInitialOrlifeBackupPath() async {
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -54,6 +55,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
+  // ✨ Native Folder Picker to select custom backup storage location safely
   Future<void> _pickCustomBackupFolder() async {
     try {
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
@@ -106,7 +108,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     } catch (_) {}
   }
 
-  // ✨ Fixed Live Progress Dialog with OK Button on 100% completion
+  // ✨ Live Progress Dialog with OK Button on 100% completion
   void _showLiveProgressDialog(String title, Future<void> Function(void Function(String status, double progress) updateProgress) action) async {
     String currentStatus = 'Initializing...';
     double currentProgress = 0.0;
@@ -313,7 +315,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     );
   }
 
-  // ☁️ Cloud Backups List Dialog with Date-wise Files
+  // ☁️ Cloud Backups List Dialog
   void _showCloudBackupsListDialog() {
     if (!_isGoogleDriveLinked) {
       _showResultDialog(isSuccess: false, title: 'Not Connected', message: 'Please link your Google Drive account first to restore from cloud.');
@@ -330,7 +332,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     });
   }
 
-  // 📂 Scan Local Storage and Show All Available Backups List for Restoration
+  // 📂 Scan Selected Storage Path and Show Available Backups List
   Future<void> _showLocalBackupsListDialog() async {
     try {
       if (_customBackupPath.isEmpty || _customBackupPath == 'Error loading path') {
@@ -349,7 +351,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       List<File> jsonFiles = files.whereType<File>().where((e) => e.path.endsWith('.json')).toList();
 
       if (jsonFiles.isEmpty) {
-        _showResultDialog(isSuccess: false, title: 'No Backups', message: 'No backup files found in "Orlife ERP Backups" folder.');
+        _showResultDialog(isSuccess: false, title: 'No Backups', message: 'No backup files found in selected folder.');
         return;
       }
 
@@ -370,7 +372,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Local Backups (Orlife ERP Backups)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+                  const Text('Local / Custom Backups', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
                 ],
               ),
@@ -530,13 +532,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     });
   }
 
-  void _importBackup() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json']);
-    if (result != null && result.files.single.path != null) {
-      await _restoreFromFile(File(result.files.single.path!));
-    }
-  }
-
   void _toggleGoogleDriveLink(bool connect) async {
     if (connect) {
       setState(() {
@@ -574,7 +569,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Current Backup Folder (Orlife ERP Backups):', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                  const Text('Current Backup Folder:', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   Container(
                     width: double.infinity,
@@ -600,8 +595,8 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                       ),
                       icon: const Icon(Icons.folder_open_rounded, size: 16),
-                      label: const Text('Change Folder', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: _pickCustomBackupFolder,
+                      label: const Text('Change Folder (Select Directory)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      onPressed: _pickCustomBackupFolder, // 👈 Uses Flutter native folder picker with full permission
                     ),
                   ),
                 ],
@@ -646,7 +641,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                   SwitchListTile(
                     title: const Text('High-Priority Compulsory Reminder', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.redAccent)),
                     subtitle: const Text('Session security reminder prompt', style: TextStyle(fontSize: 12)),
-                    value: _compulsoryBackupEnabled,
+                    value: _compulsoryBackupPath.isNotEmpty ? true : _compulsoryBackupEnabled, // fixed reference
                     activeColor: Colors.red,
                     onChanged: (val) => setState(() => _compulsoryBackupEnabled = val),
                   ),
