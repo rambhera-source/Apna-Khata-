@@ -12,14 +12,15 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _businessNameController = TextEditingController();
-  final _gstinController = TextEditingController();
   bool _isGstEnabled = false;
 
   List<String> _routes = [];
   List<String> _salesmen = [];
   
-  // Advanced Extra Charges List (Map structure)
+  // 🔥 Categories & Sub-Categories Map (Main Category -> List of Sub-Categories)
+  Map<String, List<String>> _productCategoriesMap = {};
+
+  List<double> _taxSlabs = [];
   List<Map<String, dynamic>> _extraCharges = [];
 
   @override
@@ -32,13 +33,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
     if (settings != null) {
       setState(() {
-        _businessNameController.text = settings.businessName;
-        _gstinController.text = settings.gstin ?? '';
         _isGstEnabled = settings.isGstEnabled;
         _routes = List.from(settings.routes);
         _salesmen = List.from(settings.salesmen);
         
-        // Safely decode JSON strings back to Maps
+        // Load categories map or default structure
+        if (settings.productCategories.isNotEmpty) {
+          // Backward compatibility or parsing if stored as JSON strings
+          for (var catStr in settings.productCategories) {
+            try {
+              var decoded = jsonDecode(catStr);
+              if (decoded is Map) {
+                String mainCat = decoded['main'] ?? 'General';
+                List<String> subs = List<String>.from(decoded['subs'] ?? []);
+                _productCategoriesMap[mainCat] = subs;
+              }
+            } catch (_) {
+              // Fallback if stored as plain string
+              _productCategoriesMap[catStr] = [];
+            }
+          }
+        } else {
+          _productCategoriesMap = {
+            'Accessories': ['Chargers', 'Cables', 'Power Banks', 'Neckbands'],
+            'Spare Parts': ['Batteries', 'Displays', 'Touch Glass'],
+            'General': ['Items'],
+          };
+        }
+            
+        _taxSlabs = settings.taxSlabs.isNotEmpty
+            ? List<double>.from(settings.taxSlabs)
+            : [0.0, 5.0, 12.0, 18.0, 28.0];
+        
         _extraCharges = settings.extraCharges.map((itemStr) {
           try {
             return Map<String, dynamic>.from(jsonDecode(itemStr));
@@ -54,41 +80,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ];
         }
       });
+    } else {
+      setState(() {
+        _productCategoriesMap = {
+          'Accessories': ['Chargers', 'Cables', 'Power Banks', 'Neckbands'],
+          'Spare Parts': ['Batteries', 'Displays', 'Touch Glass'],
+        };
+        _taxSlabs = [0.0, 5.0, 12.0, 18.0, 28.0];
+      });
     }
   }
 
   Future<void> _saveSettings() async {
-    final businessName = _businessNameController.text.trim();
-    final gstin = _gstinController.text.trim();
+    // Convert Map to List of JSON strings for Isar storage
+    List<String> encodedCategories = _productCategoriesMap.entries.map((entry) {
+      return jsonEncode({'main': entry.key, 'subs': entry.value});
+    }).toList();
 
-    if (businessName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya Business Name darj karein!')),
-      );
-      return;
-    }
-
-    // Convert Map list to JSON String list for Isar DB storage
     List<String> encodedCharges = _extraCharges.map((map) => jsonEncode(map)).toList();
 
     final existing = await DatabaseHelper.isar.companySettings.where().findFirst();
 
     await DatabaseHelper.isar.writeTxn(() async {
       if (existing != null) {
-        existing.businessName = businessName;
-        existing.gstin = gstin;
         existing.isGstEnabled = _isGstEnabled;
         existing.routes = _routes;
         existing.salesmen = _salesmen;
+        existing.productCategories = encodedCategories; 
+        existing.taxSlabs = _taxSlabs;                   
         existing.extraCharges = encodedCharges;
         await DatabaseHelper.isar.companySettings.put(existing);
       } else {
         final newSettings = CompanySettings()
-          ..businessName = businessName
-          ..gstin = gstin
+          ..businessName = 'ORLIFE'
           ..isGstEnabled = _isGstEnabled
           ..routes = _routes
           ..salesmen = _salesmen
+          ..productCategories = encodedCategories
+          ..taxSlabs = _taxSlabs
           ..extraCharges = encodedCharges;
         await DatabaseHelper.isar.companySettings.put(newSettings);
       }
@@ -100,9 +129,120 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // 🔥 Main Category & Sub-Category Dialog Manager
+  void _showMainCategoryDialog({String? mainCatToEdit}) {
+    final controller = TextEditingController(text: mainCatToEdit ?? '');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(mainCatToEdit == null ? 'Add Main Category' : 'Edit Main Category'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Main Category Name e.g. Accessories', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            onPressed: () {
+              String name = controller.text.trim();
+              if (name.isNotEmpty) {
+                setState(() {
+                  if (mainCatToEdit == null) {
+                    if (!_productCategoriesMap.containsKey(name)) {
+                      _productCategoriesMap[name] = [];
+                    }
+                  } else if (mainCatToEdit != name) {
+                    var subs = _productCategoriesMap.remove(mainCatToEdit) ?? [];
+                    _productCategoriesMap[name] = subs;
+                  }
+                });
+                _saveSettings();
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSubCategoryDialog(String mainCategory) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add Sub-Category to "$mainCategory"'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Sub-Category e.g. Chargers', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+            onPressed: () {
+              String subName = controller.text.trim();
+              if (subName.isNotEmpty) {
+                setState(() {
+                  if (_productCategoriesMap[mainCategory] == null) {
+                    _productCategoriesMap[mainCategory] = [];
+                  }
+                  if (!_productCategoriesMap[mainCategory]!.contains(subName)) {
+                    _productCategoriesMap[mainCategory]!.add(subName);
+                  }
+                });
+                _saveSettings();
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTaxDialog({double? taxToEdit, int? index}) {
+    final controller = TextEditingController(text: taxToEdit != null ? taxToEdit.toString() : '');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(taxToEdit == null ? 'Add Tax Slab (%)' : 'Edit Tax Slab'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Tax Percentage e.g. 18', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+            onPressed: () {
+              double? val = double.tryParse(controller.text.trim());
+              if (val != null && val >= 0) {
+                setState(() {
+                  if (taxToEdit == null) {
+                    if (!_taxSlabs.contains(val)) _taxSlabs.add(val);
+                  } else {
+                    _taxSlabs[index!] = val;
+                  }
+                  _taxSlabs.sort();
+                });
+                _saveSettings();
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showRouteDialog({String? routeToEdit, int? index}) {
     final controller = TextEditingController(text: routeToEdit ?? '');
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -138,7 +278,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showSalesmanDialog({String? salesmanToEdit, int? index}) {
     final controller = TextEditingController(text: salesmanToEdit ?? '');
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -197,8 +336,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   DropdownButtonFormField<String>(
                     value: selectedType,
                     items: const [
-                      DropdownMenuItem(value: 'Add', child: Text('Add (+) [Bill mein Jhudega]', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
-                      DropdownMenuItem(value: 'Less', child: Text('Less (-) [Bill se Ghatega]', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
+                      DropdownMenuItem(value: 'Add', child: Text('Add (+) [Bill mein Jhudega]', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12))),
+                      DropdownMenuItem(value: 'Less', child: Text('Less (-) [Bill se Ghatega]', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12))),
                     ],
                     onChanged: (val) => setDialogState(() => selectedType = val!),
                     decoration: const InputDecoration(labelText: 'Calculation Type', border: OutlineInputBorder()),
@@ -263,8 +402,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Company, GST & Master Settings'),
-        backgroundColor: Colors.blue,
+        title: const Text('GST & Master Setup'),
+        backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
       body: Padding(
@@ -273,57 +412,184 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextField(
-                controller: _businessNameController,
-                decoration: const InputDecoration(labelText: 'Business Name', border: OutlineInputBorder()),
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                color: Colors.teal.shade50,
+                child: Padding(
+                  padding: const EdgeInsets.all(4.0),
+                  child: SwitchListTile(
+                    title: const Text('Enable GST Billing Mode', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                    subtitle: const Text('ON rakhne par tax calculate hoga', style: TextStyle(fontSize: 11)),
+                    value: _isGstEnabled,
+                    activeColor: Colors.teal,
+                    onChanged: (bool value) {
+                      setState(() => _isGstEnabled = value);
+                      _saveSettings();
+                    },
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _gstinController,
-                decoration: const InputDecoration(labelText: 'GSTIN Number (Optional if GST Off)', border: OutlineInputBorder()),
+              const Divider(height: 32, thickness: 1),
+
+              // 🔥 1. Categories & Sub-Categories Master Section
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Manage Categories & Sub-Categories', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, minimumSize: const Size(80, 32)),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add Main Cat', style: TextStyle(fontSize: 11)),
+                    onPressed: () => _showMainCategoryDialog(),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              SwitchListTile(
-                title: const Text('Enable GST Billing Mode', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('ON rakhne par tax calculate hoga, OFF par simple bill banega'),
-                value: _isGstEnabled,
-                onChanged: (bool value) => setState(() => _isGstEnabled = value),
+              const SizedBox(height: 8),
+              _productCategoriesMap.isEmpty
+                  ? const Text('Koi category add nahi ki gayi hai.', style: TextStyle(color: Colors.grey, fontSize: 12))
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _productCategoriesMap.keys.length,
+                      itemBuilder: (context, index) {
+                        String mainCat = _productCategoriesMap.keys.elementAt(index);
+                        List<String> subCats = _productCategoriesMap[mainCat] ?? [];
+
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(mainCat, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal)),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        TextButton.icon(
+                                          style: TextButton.styleFrom(foregroundColor: Colors.teal, visualDensity: VisualDensity.compact),
+                                          icon: const Icon(Icons.add, size: 14),
+                                          label: const Text('Add Sub', style: TextStyle(fontSize: 11)),
+                                          onPressed: () => _showSubCategoryDialog(mainCat),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.edit, size: 16, color: Colors.blue),
+                                          onPressed: () => _showMainCategoryDialog(mainCatToEdit: mainCat),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                                          onPressed: () {
+                                            setState(() => _productCategoriesMap.remove(mainCat));
+                                            _saveSettings();
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 8),
+                                subCats.isEmpty
+                                    ? const Padding(
+                                        padding: EdgeInsets.only(left: 8.0, bottom: 4.0),
+                                        child: Text('No sub-categories added yet.', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                      )
+                                    : Wrap(
+                                        spacing: 4,
+                                        runSpacing: 2,
+                                        children: List.generate(subCats.length, (subIndex) {
+                                          return Chip(
+                                            label: Text(subCats[subIndex], style: const TextStyle(fontSize: 11)),
+                                            backgroundColor: Colors.teal.shade50,
+                                            deleteIcon: const Icon(Icons.close, size: 12),
+                                            onDeleted: () {
+                                              setState(() {
+                                                _productCategoriesMap[mainCat]!.removeAt(subIndex);
+                                              });
+                                              _saveSettings();
+                                            },
+                                          );
+                                        }),
+                                      ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+              const Divider(height: 32, thickness: 1),
+
+              // 🔥 2. Tax Slabs Master Section
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Manage Tax Slabs (GST %)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(80, 32)),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add Tax Slab', style: TextStyle(fontSize: 11)),
+                    onPressed: () => _showTaxDialog(),
+                  ),
+                ],
               ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: List.generate(_taxSlabs.length, (index) {
+                  return Chip(
+                    label: Text('${_taxSlabs[index]}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    backgroundColor: Colors.indigo.shade100,
+                    deleteIcon: const Icon(Icons.close, size: 14),
+                    onDeleted: () {
+                      setState(() => _taxSlabs.removeAt(index));
+                      _saveSettings();
+                    },
+                  );
+                }),
+              ),
+
               const Divider(height: 32, thickness: 1),
 
               // Routes Section
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Manage Routes / Areas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                  const Text('Manage Routes / Areas', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue)),
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, minimumSize: const Size(80, 32)),
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Route'),
+                    label: const Text('Add Route', style: TextStyle(fontSize: 11)),
                     onPressed: () => _showRouteDialog(),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _routes.isEmpty
-                  ? const Text('Koi route add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 13))
+                  ? const Text('Koi route add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 12))
                   : ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _routes.length,
                       itemBuilder: (context, index) {
                         return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 2),
                           child: ListTile(
-                            title: Text(_routes[index]),
+                            dense: true,
+                            title: Text(_routes[index], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                                  icon: const Icon(Icons.edit, size: 16, color: Colors.blue),
                                   onPressed: () => _showRouteDialog(routeToEdit: _routes[index], index: index),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                                  icon: const Icon(Icons.delete, size: 16, color: Colors.red),
                                   onPressed: () {
                                     setState(() => _routes.removeAt(index));
                                     _saveSettings();
@@ -342,35 +608,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Manage Salesmen / Users', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                  const Text('Manage Salesmen / Users', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue)),
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, minimumSize: const Size(80, 32)),
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Salesman'),
+                    label: const Text('Add Salesman', style: TextStyle(fontSize: 11)),
                     onPressed: () => _showSalesmanDialog(),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _salesmen.isEmpty
-                  ? const Text('Koi salesman add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 13))
+                  ? const Text('Koi salesman add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 12))
                   : ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _salesmen.length,
                       itemBuilder: (context, index) {
                         return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 2),
                           child: ListTile(
-                            title: Text(_salesmen[index]),
+                            dense: true,
+                            title: Text(_salesmen[index], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                                  icon: const Icon(Icons.edit, size: 16, color: Colors.blue),
                                   onPressed: () => _showSalesmanDialog(salesmanToEdit: _salesmen[index], index: index),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                                  icon: const Icon(Icons.delete, size: 16, color: Colors.red),
                                   onPressed: () {
                                     setState(() => _salesmen.removeAt(index));
                                     _saveSettings();
@@ -385,22 +653,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const Divider(height: 32, thickness: 1),
 
-              // Extra Charges & Discounts Master Section
+              // Extra Charges Section
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Manage Extra Charges & Discounts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+                  const Text('Extra Charges & Discounts', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, minimumSize: const Size(80, 32)),
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Charge'),
+                    label: const Text('Add Charge', style: TextStyle(fontSize: 11)),
                     onPressed: () => _showExtraChargeDialog(),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _extraCharges.isEmpty
-                  ? const Text('Koi extra charge add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 13))
+                  ? const Text('Koi extra charge add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 12))
                   : ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -409,23 +677,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         final charge = _extraCharges[index];
                         bool isAdd = charge['type'] == 'Add';
                         return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 2),
                           child: ListTile(
-                            title: Text(charge['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('Type: ${charge['type']} | Mode: ${charge['mode']} | Value: ${charge['value']}'),
+                            dense: true,
+                            title: Text(charge['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            subtitle: Text('Type: ${charge['type']} | Mode: ${charge['mode']} | Value: ${charge['value']}', style: const TextStyle(fontSize: 10)),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Chip(
-                                  label: Text(isAdd ? '+ Add' : '- Less', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                                  label: Text(isAdd ? '+ Add' : '- Less', style: const TextStyle(color: Colors.white, fontSize: 10)),
                                   backgroundColor: isAdd ? Colors.green : Colors.red,
                                   visualDensity: VisualDensity.compact,
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.edit, size: 18, color: Colors.teal),
+                                  icon: const Icon(Icons.edit, size: 16, color: Colors.teal),
                                   onPressed: () => _showExtraChargeDialog(chargeToEdit: charge, index: index),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                                  icon: const Icon(Icons.delete, size: 16, color: Colors.red),
                                   onPressed: () {
                                     setState(() => _extraCharges.removeAt(index));
                                     _saveSettings();
@@ -438,16 +708,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       },
                     ),
 
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                  onPressed: _saveSettings,
-                  child: const Text('Save All Settings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
