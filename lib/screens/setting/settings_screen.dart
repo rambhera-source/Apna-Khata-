@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import '../../database/database_helper.dart';
 import '../../models/settings_model.dart';
-import 'category_management_screen.dart'; // <-- नई फ़ाइल का इम्पोर्ट
+import 'category_management_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -16,7 +16,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isGstEnabled = false;
 
   List<String> _routes = [];
-  List<String> _salesmen = [];
   List<double> _taxSlabs = [];
   List<Map<String, dynamic>> _extraCharges = [];
 
@@ -32,7 +31,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _isGstEnabled = settings.isGstEnabled;
         _routes = List.from(settings.routes);
-        _salesmen = List.from(settings.salesmen);
             
         _taxSlabs = settings.taxSlabs.isNotEmpty
             ? List<double>.from(settings.taxSlabs)
@@ -69,7 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (existing != null) {
         existing.isGstEnabled = _isGstEnabled;
         existing.routes = _routes;
-        existing.salesmen = _salesmen;
+        // salesmen को यहाँ से हटा दिया गया है
         existing.taxSlabs = _taxSlabs;                   
         existing.extraCharges = encodedCharges;
         await DatabaseHelper.isar.companySettings.put(existing);
@@ -78,7 +76,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ..businessName = 'ORLIFE'
           ..isGstEnabled = _isGstEnabled
           ..routes = _routes
-          ..salesmen = _salesmen
           ..taxSlabs = _taxSlabs
           ..extraCharges = encodedCharges;
         await DatabaseHelper.isar.companySettings.put(newSettings);
@@ -150,41 +147,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _routes.add(name);
                   } else {
                     _routes[index!] = name;
-                  }
-                });
-                _saveSettings();
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSalesmanDialog({String? salesmanToEdit, int? index}) {
-    final controller = TextEditingController(text: salesmanToEdit ?? '');
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(salesmanToEdit == null ? 'Add New Salesman' : 'Edit Salesman'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Salesman / User Name', border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-            onPressed: () {
-              String name = controller.text.trim();
-              if (name.isNotEmpty) {
-                setState(() {
-                  if (salesmanToEdit == null) {
-                    _salesmen.add(name);
-                  } else {
-                    _salesmen[index!] = name;
                   }
                 });
                 _saveSettings();
@@ -319,7 +281,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Divider(height: 32, thickness: 1),
 
-              // 🔥 Categories Management Shortcut Button
               Card(
                 elevation: 1,
                 child: ListTile(
@@ -378,7 +339,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, minimumSize: const Size(80, 32)),
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Route', style: TextStyle(fontSize: 11)),
+                    label: const Text('Route Add Karein', style: TextStyle(fontSize: 11)),
                     onPressed: () => _showRouteDialog(),
                   ),
                 ],
@@ -407,55 +368,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   icon: const Icon(Icons.delete, size: 16, color: Colors.red),
                                   onPressed: () {
                                     setState(() => _routes.removeAt(index));
-                                    _saveSettings();
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-
-              const Divider(height: 32, thickness: 1),
-
-              // Salesmen Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Manage Salesmen / Users', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue)),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, minimumSize: const Size(80, 32)),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Salesman', style: TextStyle(fontSize: 11)),
-                    onPressed: () => _showSalesmanDialog(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              _salesmen.isEmpty
-                  ? const Text('Koi salesman add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 12))
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _salesmen.length,
-                      itemBuilder: (context, index) {
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 2),
-                          child: ListTile(
-                            dense: true,
-                            title: Text(_salesmen[index], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit, size: 16, color: Colors.blue),
-                                  onPressed: () => _showSalesmanDialog(salesmanToEdit: _salesmen[index], index: index),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, size: 16, color: Colors.red),
-                                  onPressed: () {
-                                    setState(() => _salesmen.removeAt(index));
                                     _saveSettings();
                                   },
                                 ),
@@ -511,10 +423,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.delete, size: 16, color: Colors.red),
-                                  onPressed: () {
-                                    setState(() => _extraCharges.removeAt(index));
-                                    _saveSettings();
-                                  },
+                                  onPressed: () => setState(() => _extraCharges.removeAt(index)),
                                 ),
                               ],
                             ),
