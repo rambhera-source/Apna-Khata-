@@ -1,6 +1,10 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/database_helper.dart';
 import '../models/transaction_model.dart';
@@ -167,23 +171,116 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // ✨ ऐप क्लोज करने से पहले साइलेंट बैकअप लेने का फंक्शन
+  Future<void> _performAutoBackupOnClose() async {
+    try {
+      final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
+      final accounts = await DatabaseHelper.isar.accounts.where().findAll();
+      final transactions = await DatabaseHelper.isar.accountingTransactions.where().findAll();
+
+      final Map<String, dynamic> backupData = {
+        'version': '1.0',
+        'timestamp': DateTime.now().toIso8601String(),
+        'inventory': inventoryItems.map((e) => {'itemName': e.itemName, 'sku': e.sku, 'stockQuantity': e.stockQuantity, 'purchasePrice': e.purchasePrice, 'priceA': e.priceA}).toList(),
+        'accounts': accounts.map((e) => {'name': e.name, 'groupCategory': e.groupCategory, 'phone': e.phone, 'openingBalance': e.openingBalance}).toList(),
+        'transactions': transactions.map((e) => {'date': e.date.toIso8601String(), 'voucherType': e.voucherType, 'voucherNumber': e.voucherNumber, 'partyName': e.partyName, 'amount': e.amount}).toList(),
+      };
+
+      final directory = await getApplicationDocumentsDirectory();
+      final backupDir = Directory('${directory.path}/orlife_backups');
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
+      }
+
+      final file = File('${backupDir.path}/auto_backup_${DateTime.now().millisecondsSinceEpoch}.json');
+      await file.writeAsString(jsonEncode(backupData));
+    } catch (_) {}
+  }
+
+  // 🛡️ केवल होम स्क्रीन पर बैक बटन दबाने पर ऐप एग्जिट और बैकअप प्रॉम्प्ट
   Future<bool> _onWillPop() async {
-    bool shouldExit = await showDialog(
+    bool shouldExit = false;
+    await showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('Exit App?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Kya aap waqai ERP app से bahar jana chahte hain?', style: TextStyle(fontSize: 13)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Exit & Secure Backup?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: const Text('Would you like to take an automated backup before closing the app?', style: TextStyle(fontSize: 13, color: Colors.black87)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+          TextButton(
+            onPressed: () {
+              shouldExit = true;
+              Navigator.pop(context);
+            },
+            child: const Text('Exit without Backup', style: TextStyle(color: Colors.grey)),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes, Exit'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.pop(context);
+              
+              // 🔄 प्रोसेसिंग डायलॉग
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => Dialog(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        CircularProgressIndicator(color: Colors.teal, strokeWidth: 3),
+                        SizedBox(width: 20),
+                        Text('Creating secure backup...', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+
+              await _performAutoBackupOnClose();
+              if (!mounted) return;
+              Navigator.pop(context); // प्रोग्रेस बंद करें
+
+              // ✅ सफलता का स्मार्ट पॉप-अप
+              await showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => AlertDialog(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  title: Row(
+                    children: const [
+                      Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+                      SizedBox(width: 10),
+                      Text('Backup Successful', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+                    ],
+                  ),
+                  content: const Text('Your data has been safely secured locally.', style: TextStyle(fontSize: 13)),
+                  actions: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Okay'),
+                    ),
+                  ],
+                ),
+              );
+
+              shouldExit = true;
+              if (!mounted) return;
+              Navigator.pop(context, true);
+            },
+            child: const Text('Backup & Exit'),
           ),
         ],
       ),
-    ) ?? false;
+    );
 
     return shouldExit;
   }
@@ -355,7 +452,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 16),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween, // 👈 Fixed
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('Quick Operations & Masters', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
                           IconButton(
