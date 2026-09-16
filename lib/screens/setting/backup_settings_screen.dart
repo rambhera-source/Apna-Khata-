@@ -108,11 +108,12 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     } catch (_) {}
   }
 
-  // ✨ Live Progress Dialog with OK Button on 100% completion
-  void _showLiveProgressDialog(String title, Future<void> Function(void Function(String status, double progress) updateProgress) action) async {
+  // ✨ Live Progress Dialog with OK & Share Button on 100% completion
+  void _showLiveProgressDialog(String title, Future<File?> Function(void Function(String status, double progress) updateProgress) action) async {
     String currentStatus = 'Initializing...';
     double currentProgress = 0.0;
     bool isCompleted = false;
+    File? generatedBackupFile;
 
     showDialog(
       context: context,
@@ -132,8 +133,9 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
           }
 
           if (currentProgress == 0.0 && currentStatus == 'Initializing...') {
-            action(update).then((_) {
+            action(update).then((file) {
               if (mounted) {
+                generatedBackupFile = file;
                 setDialogState(() {
                   currentProgress = 1.0;
                   currentStatus = 'Completed Successfully!';
@@ -178,7 +180,23 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
               ],
             ),
             actions: [
-              if (isCompleted)
+              if (isCompleted) ...[
+                if (generatedBackupFile != null)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.share, size: 16),
+                    label: const Text('Share File'),
+                    onPressed: () async {
+                      await Share.shareXFiles(
+                        [XFile(generatedBackupFile!.path)],
+                        text: 'ORLIFE ERP Secure Backup File (${DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now())})',
+                      );
+                    },
+                  ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal,
@@ -188,6 +206,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                   onPressed: () => Navigator.pop(context),
                   child: const Text('OK'),
                 ),
+              ],
             ],
           );
         },
@@ -329,6 +348,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       await Future.delayed(const Duration(seconds: 1));
       updateProgress('Sync complete!', 1.0);
       await Future.delayed(const Duration(milliseconds: 300));
+      return null;
     });
   }
 
@@ -466,6 +486,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
 
       updateProgress('Backup Completed Successfully!', 1.0);
       await Future.delayed(const Duration(milliseconds: 400));
+      return file; // Return the generated file for sharing
     });
   }
 
@@ -529,6 +550,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
 
       updateProgress('Restore Completed Successfully!', 1.0);
       await Future.delayed(const Duration(milliseconds: 400));
+      return null;
     });
   }
 
@@ -641,7 +663,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                   SwitchListTile(
                     title: const Text('High-Priority Compulsory Reminder', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.redAccent)),
                     subtitle: const Text('Session security reminder prompt', style: TextStyle(fontSize: 12)),
-                    value: _compulsoryBackupEnabled, // 👈 Fixed reference here
+                    value: _compulsoryBackupEnabled,
                     activeColor: Colors.red,
                     onChanged: (val) => setState(() => _compulsoryBackupEnabled = val),
                   ),
@@ -663,7 +685,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  icon: const Icon(Icons.upload_file_rounded, size: 18),
+                  icon: constIcon(Icons.upload_file_rounded, size: 18),
                   label: const Text('Export Backup', style: TextStyle(fontSize: 13)),
                   onPressed: _exportBackup,
                 ),
