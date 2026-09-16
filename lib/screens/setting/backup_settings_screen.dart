@@ -20,7 +20,6 @@ class BackupSettingsScreen extends StatefulWidget {
 }
 
 class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
-  String _storageMode = 'Local (Offline Isar DB)';
   bool _autoBackupEnabled = true;
   bool _compulsoryBackupEnabled = true;
   bool _isGoogleDriveLinked = false;
@@ -226,7 +225,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.between,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween, // 👈 Fixed
                 children: [
                   const Text('Select Backup to Restore', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
