@@ -300,17 +300,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             };
 
             return AlertDialog(
-              title: const Text('Customize Home Shortcuts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              content: SizedBox(
-                width: double.maxFinite,
-                height: 350,
-                child: ListView(
-                  children: allAvailableMenus.keys.map((menuTitle) {
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: const [
+                  Icon(Icons.tune_rounded, color: Colors.teal, size: 24),
+                  SizedBox(width: 10),
+                  Text('Customize Home Shortcuts', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Container(
+                width: MediaQuery.of(context).size.width * 0.8,
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.55,
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: allAvailableMenus.keys.length,
+                  itemBuilder: (context, index) {
+                    String menuTitle = allAvailableMenus.keys.elementAt(index);
+                    IconData menuIcon = allAvailableMenus.values.elementAt(index);
                     bool isSelected = _selectedQuickMenus.contains(menuTitle);
+
                     return CheckboxListTile(
-                      title: Text(menuTitle, style: const TextStyle(fontSize: 13)),
+                      secondary: Icon(menuIcon, color: isSelected ? Colors.teal : Colors.grey, size: 20),
+                      title: Text(menuTitle, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                       value: isSelected,
                       activeColor: Colors.teal,
+                      dense: true,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       onChanged: (bool? value) {
                         setDialogState(() {
                           if (value == true) {
@@ -322,12 +339,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         setState(() {});
                       },
                     );
-                  }).toList(),
+                  },
                 ),
               ),
               actions: [
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Done'),
                 ),
