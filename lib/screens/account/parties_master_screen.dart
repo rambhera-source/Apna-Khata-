@@ -72,7 +72,6 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
   void _confirmBulkDelete() async {
     if (_selectedPartyIds.isEmpty) return;
 
-    // Filter out parties that have transactions
     List<Account> deletableParties = [];
     List<String> skippedParties = [];
 
@@ -147,7 +146,7 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
         builder: (context) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: const Text('Cannot Delete Party', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red)),
-          content: Text('Transaction available! "${party.name}" ke naam par transactions maujood hain. Aap is account ko delete nahi kar sakte.', style: const TextStyle(fontSize: 13)),
+          content: Text('Transaction available! "${party.name}" ke naam par transactions maujood hain. Aap is account को delete nahi kar sakte.', style: const TextStyle(fontSize: 13)),
           actions: [
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, minimumSize: const Size(60, 32)),
@@ -499,7 +498,8 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
                       items: _filterCategories.map((cat) {
                         return DropdownMenuItem(
                           value: cat,
-                          child: Text(cat == 'All' ? '📂 All (${_partiesList.length})' : '📂 $cat', style: const TextStyle(fontSize: 12)),
+                          // 🔥 'All' की जगह अब 'All Categories' दिखेगा
+                          child: Text(cat == 'All' ? '📂 All Categories (${_partiesList.length})' : '📂 $cat', style: const TextStyle(fontSize: 12)),
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -544,74 +544,73 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
                           final party = filteredParties[index];
                           bool isSelected = _selectedPartyIds.contains(party.id);
 
-                          return Card(
-                            elevation: 1,
-                            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                              child: Row(
-                                children: [
-                                  Checkbox(
-                                    value: isSelected,
-                                    activeColor: Colors.teal,
-                                    onChanged: (bool? value) {
-                                      setState(() {
-                                        if (value == true) {
-                                          _selectedPartyIds.add(party.id);
-                                        } else {
-                                          _selectedPartyIds.remove(party.id);
-                                          _isSelectAll = false;
-                                        }
-                                      });
-                                    },
-                                  ),
-                                  CircleAvatar(
-                                    radius: 16,
-                                    backgroundColor: Colors.teal.shade100,
-                                    child: Text(
-                                      party.name.isNotEmpty ? party.name[0].toUpperCase() : 'A',
-                                      style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontSize: 12),
+                          return InkWell(
+                            onTap: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => AddAccountScreen(accountToEdit: party),
+                                ),
+                              );
+                              _loadParties();
+                            },
+                            child: Card(
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    Checkbox(
+                                      value: isSelected,
+                                      activeColor: Colors.teal,
+                                      onChanged: (bool? value) {
+                                        setState(() {
+                                          if (value == true) {
+                                            _selectedPartyIds.add(party.id);
+                                          } else {
+                                            _selectedPartyIds.remove(party.id);
+                                            _isSelectAll = false;
+                                          }
+                                        });
+                                      },
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(party.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                        const SizedBox(height: 2),
-                                        Text('${party.groupCategory} | Ph: ${party.phone ?? 'N/A'}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                      ],
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            party.name,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            'Ph: ${party.phone ?? 'N/A'}',
+                                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  Text(
-                                    '₹${party.openingBalance} ${party.balanceType}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                      color: party.balanceType == 'Dr' ? Colors.red : Colors.green,
+                                    Text(
+                                      '₹${party.openingBalance} ${party.balanceType}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                        color: party.balanceType == 'Dr' ? Colors.red.shade700 : Colors.green.shade700,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.blue, size: 16),
-                                    constraints: const BoxConstraints(),
-                                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                                    onPressed: () async {
-                                      await Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (context) => const AddAccountScreen()),
-                                      );
-                                      _loadParties();
-                                    },
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red, size: 16),
-                                    constraints: const BoxConstraints(),
-                                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                                    onPressed: () => _confirmDelete(party),
-                                  ),
-                                ],
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                      tooltip: 'Delete Party',
+                                      constraints: const BoxConstraints(),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      onPressed: () => _confirmDelete(party),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           );
