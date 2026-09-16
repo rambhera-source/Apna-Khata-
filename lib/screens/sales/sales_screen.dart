@@ -35,6 +35,9 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
   final TextEditingController _freightSearchController = TextEditingController();
   
+  // 🔥 Focus Nodes for Complete Keyboard Flow (Starting from Date)
+  final FocusNode _dateFocusNode = FocusNode();
+  final FocusNode _partyFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
@@ -66,6 +69,11 @@ class _SalesScreenState extends State<SalesScreen> {
     super.initState();
     _dateController.text = DateFormat('dd-MM-yyyy').format(_selectedDate);
     _loadDropdownDataAndSettings();
+
+    // 🔥 1. Screen khulte hi sabse pehle focus Date par jaye
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _dateFocusNode.requestFocus();
+    });
   }
 
   Future<void> _loadDropdownDataAndSettings() async {
@@ -252,22 +260,6 @@ class _SalesScreenState extends State<SalesScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: Colors.teal.shade800,
-            colorScheme: ColorScheme.light(primary: Colors.teal.shade800),
-            buttonTheme: const ButtonThemeData(textTheme: ButtonTextTheme.primary),
-          ),
-          child: Center(
-            child: SizedBox(
-              width: 320,
-              height: 420,
-              child: child,
-            ),
-          ),
-        );
-      },
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
@@ -315,7 +307,10 @@ class _SalesScreenState extends State<SalesScreen> {
       _inlinePriceController.text = '0';
     });
 
-    Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
+    // 🔥 Item add hone ke baad focus wapas Product Search par jaye
+    Future.delayed(const Duration(milliseconds: 50), () {
+      _searchFocusNode.requestFocus();
+    });
   }
 
   double get _subTotal {
@@ -526,6 +521,10 @@ class _SalesScreenState extends State<SalesScreen> {
       _invoiceNoController.text = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
       _billChargesList.clear();
     });
+    // Bill clear hone ke baad wapas Date par focus bhej dein
+    Future.delayed(const Duration(milliseconds: 50), () {
+      _dateFocusNode.requestFocus();
+    });
   }
 
   Future<bool> _onWillPop() async {
@@ -536,11 +535,11 @@ class _SalesScreenState extends State<SalesScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Discard Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Kya aap waqai is sales bill ko exit karna chahte hain? Aapke add kiye gaye items hat jayenge.', style: TextStyle(fontSize: 13)),
+        content: const Text('Kya aap waqai is sales bill ko exit karna chahte hain?', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, elevation: 0),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Yes, Exit'),
           ),
@@ -618,7 +617,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Date Input & Customer Searchable Autocomplete (Stable Dropdown on Keyboard Hide via TapRegion)
+              // Date Input (Starting Focus) & Customer Searchable Autocomplete
               Row(
                 children: [
                   SizedBox(
@@ -626,7 +625,9 @@ class _SalesScreenState extends State<SalesScreen> {
                     width: 110,
                     child: TextField(
                       controller: _dateController,
+                      focusNode: _dateFocusNode, // 🔥 1. Date par sabse pehle focus
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
                         labelText: 'Date',
                         border: const OutlineInputBorder(),
@@ -639,13 +640,9 @@ class _SalesScreenState extends State<SalesScreen> {
                           padding: const EdgeInsets.only(right: 4),
                         ),
                       ),
-                      onChanged: (val) {
-                        try {
-                          final parsedDate = DateFormat('dd-MM-yyyy').parse(val);
-                          setState(() {
-                            _selectedDate = parsedDate;
-                          });
-                        } catch (_) {}
+                      onSubmitted: (_) {
+                        // 🔥 Date par Enter dabate hi focus Party Name par jaye
+                        _partyFocusNode.requestFocus();
                       },
                     ),
                   ),
@@ -653,76 +650,81 @@ class _SalesScreenState extends State<SalesScreen> {
                   Expanded(
                     child: SizedBox(
                       height: 40,
-                      child: TapRegion(
-                        onTapOutside: (_) {}, // Keeps dropdown open when keyboard minimizes
-                        child: RawAutocomplete<Account>(
-                          optionsBuilder: (TextEditingValue textEditingValue) {
-                            if (textEditingValue.text.isEmpty) {
-                              return _allAccountsList;
-                            }
-                            return _allAccountsList.where((acc) => 
-                              acc.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) || 
-                              (acc.phone != null && acc.phone!.contains(textEditingValue.text))
-                            );
-                          },
-                          displayStringForOption: (Account option) => option.name,
-                          onSelected: (Account selection) {
-                            _partyController.text = selection.name;
-                            _checkForPendingOrders(selection.name);
-                            Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
-                          },
-                          textEditingController: _partyController,
-                          focusNode: FocusNode(),
-                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                            return TextField(
-                              controller: controller,
-                              focusNode: focusNode,
-                              style: const TextStyle(fontSize: 12),
-                              decoration: const InputDecoration(
-                                labelText: 'Customer / Party Name *',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                prefixIcon: Icon(Icons.person, size: 16),
-                              ),
-                            );
-                          },
-                          optionsViewBuilder: (context, onSelected, options) {
-                            return Align(
-                              alignment: Alignment.topLeft,
-                              child: Material(
-                                elevation: 4,
-                                child: SizedBox(
-                                  width: 300,
-                                  height: 200,
-                                  child: ListView.builder(
-                                    padding: EdgeInsets.zero,
-                                    itemCount: options.length + 1,
-                                    itemBuilder: (context, index) {
-                                      if (index == 0) {
-                                        return ListTile(
-                                          tileColor: Colors.teal.shade50,
-                                          leading: const Icon(Icons.person_add, color: Colors.teal, size: 16),
-                                          title: const Text('+ Add New Party / Customer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
-                                          onTap: () {
-                                            _navigateToAddNewParty();
-                                          },
-                                        );
-                                      }
-                                      final acc = options.elementAt(index - 1);
+                      child: RawAutocomplete<Account>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return _allAccountsList;
+                          }
+                          return _allAccountsList.where((acc) => 
+                            acc.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) || 
+                            (acc.phone != null && acc.phone!.contains(textEditingValue.text))
+                          );
+                        },
+                        displayStringForOption: (Account option) => option.name,
+                        onSelected: (Account selection) {
+                          _partyController.text = selection.name;
+                          _checkForPendingOrders(selection.name);
+                          
+                          // 🔥 2. Party select hote hi focus Product Search par jaye
+                          Future.delayed(const Duration(milliseconds: 50), () {
+                            _searchFocusNode.requestFocus();
+                          });
+                        },
+                        textEditingController: _partyController,
+                        focusNode: _partyFocusNode, // 🔥 Party Focus Node
+                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            style: const TextStyle(fontSize: 12),
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Customer / Party Name *',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              prefixIcon: Icon(Icons.person, size: 16),
+                            ),
+                            onSubmitted: (_) {
+                              _searchFocusNode.requestFocus();
+                            },
+                          );
+                        },
+                        optionsViewBuilder: (context, onSelected, options) {
+                          return Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 4,
+                              child: SizedBox(
+                                width: 300,
+                                height: 200,
+                                child: ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: options.length + 1,
+                                  itemBuilder: (context, index) {
+                                    if (index == 0) {
                                       return ListTile(
-                                        dense: true,
-                                        title: Text(acc.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                                        subtitle: Text('Ph: ${acc.phone ?? "N/A"} | Group: ${acc.groupCategory}', style: const TextStyle(fontSize: 9)),
-                                        onTap: () => onSelected(acc),
+                                        tileColor: Colors.teal.shade50,
+                                        leading: const Icon(Icons.person_add, color: Colors.teal, size: 16),
+                                        title: const Text('+ Add New Party / Customer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
+                                        onTap: () {
+                                          _navigateToAddNewParty();
+                                        },
                                       );
-                                    },
-                                  ),
+                                    }
+                                    final acc = options.elementAt(index - 1);
+                                    return ListTile(
+                                      dense: true,
+                                      title: Text(acc.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                      subtitle: Text('Ph: ${acc.phone ?? "N/A"} | Group: ${acc.groupCategory}', style: const TextStyle(fontSize: 9)),
+                                      onTap: () => onSelected(acc),
+                                    );
+                                  },
                                 ),
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -733,7 +735,7 @@ class _SalesScreenState extends State<SalesScreen> {
               const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               const SizedBox(height: 2),
 
-              // 📦 Items List & Inline Product Search Bar inside Scrollable Expanded area
+              // Items List & Inline Product Search Bar
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
@@ -754,21 +756,15 @@ class _SalesScreenState extends State<SalesScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    '${index + 1}. ${item['name']}',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87),
-                                  ),
-                                  Text(
-                                    'SKU: ${item['sku']}${isOutOfStock ? " (No Stock)" : ""}',
-                                    style: TextStyle(fontSize: 9, color: isOutOfStock ? Colors.red.shade700 : Colors.grey),
-                                  ),
+                                  Text('${index + 1}. ${item['name']}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87)),
+                                  Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                 ],
                               ),
                             ),
                             SizedBox(
                               width: 45,
                               child: TextField(
-                                controller: TextEditingController(text: item['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
+                                controller: TextEditingController(text: item['qty'].toString())..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                 decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
@@ -784,7 +780,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             SizedBox(
                               width: 60,
                               child: TextField(
-                                controller: TextEditingController(text: item['price'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
+                                controller: TextEditingController(text: item['price'].toString())..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                 decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
@@ -811,7 +807,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
                     const SizedBox(height: 4),
 
-                    // Stable RawAutocomplete for Inventory Items with TapRegion
+                    // Product Search / Inline Item Section
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
@@ -819,100 +815,87 @@ class _SalesScreenState extends State<SalesScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (_selectedInlineProduct == null)
-                            TapRegion(
-                              onTapOutside: (_) {}, // Keeps product list open when keyboard minimizes
-                              child: RawAutocomplete<InventoryItem>(
-                                optionsBuilder: (TextEditingValue textEditingValue) {
-                                  if (textEditingValue.text.isEmpty) return _allInventoryItems;
-                                  return _allInventoryItems.where((item) =>
-                                    item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                                    (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
-                                  );
-                                },
-                                displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
-                                onSelected: (InventoryItem selection) {
-                                  int existingIndex = _cartItems.indexWhere((item) => item['name'] == selection.itemName);
-
-                                  if (existingIndex != -1) {
-                                    setState(() {
-                                      _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + 1;
-                                    });
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('⚠️ ${selection.itemName} already in bill. Quantity updated!'), duration: const Duration(seconds: 2)),
-                                    );
-                                    _inlineSearchController.clear();
-                                  } else {
-                                    setState(() {
-                                      _selectedInlineProduct = selection;
-                                      _inlinePriceController.text = selection.priceA.toString();
-                                      _inlineQtyController.text = '1';
-                                    });
-                                    Future.delayed(const Duration(milliseconds: 100), () {
-                                      _qtyFocusNode.requestFocus();
-                                      _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
-                                    });
-                                  }
-                                },
-                                textEditingController: _inlineSearchController,
-                                focusNode: _searchFocusNode,
-                                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                  return TextField(
-                                    controller: controller,
-                                    focusNode: focusNode,
-                                    style: const TextStyle(fontSize: 12),
-                                    decoration: const InputDecoration(
-                                      labelText: 'Search Product Name or SKU to add...',
-                                      border: OutlineInputBorder(),
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                      prefixIcon: Icon(Icons.search, size: 16),
-                                    ),
-                                    onSubmitted: (val) {
-                                      if (val.trim().isEmpty) {
-                                        _freightFocusNode.requestFocus();
-                                      }
-                                    },
-                                  );
-                                },
-                                optionsViewBuilder: (context, onSelected, options) {
-                                  return Align(
-                                    alignment: Alignment.topLeft,
-                                    child: Material(
-                                      elevation: 4,
-                                      child: SizedBox(
-                                        width: 280,
-                                        height: 150,
-                                        child: ListView.builder(
-                                          padding: EdgeInsets.zero,
-                                          itemCount: options.length + 1,
-                                          itemBuilder: (context, index) {
-                                            if (index == 0) {
-                                              return ListTile(
-                                                tileColor: Colors.teal.shade100,
-                                                leading: const Icon(Icons.add_circle, color: Colors.teal, size: 16),
-                                                title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
-                                                onTap: () async {
-                                                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
-                                                  await _loadDropdownDataAndSettings();
-                                                },
-                                              );
-                                            }
-                                            final item = options.elementAt(index - 1);
-                                            bool isOutOfStock = item.stockQuantity <= 0;
-
+                            RawAutocomplete<InventoryItem>(
+                              optionsBuilder: (TextEditingValue textEditingValue) {
+                                if (textEditingValue.text.isEmpty) return _allInventoryItems;
+                                return _allInventoryItems.where((item) =>
+                                  item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                                  (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
+                                );
+                              },
+                              displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
+                              onSelected: (InventoryItem selection) {
+                                setState(() {
+                                  _selectedInlineProduct = selection;
+                                  _inlinePriceController.text = selection.priceA.toString();
+                                  _inlineQtyController.text = '1';
+                                });
+                                
+                                // 🔥 3. Product select hote hi focus Qty par jaye
+                                Future.delayed(const Duration(milliseconds: 50), () {
+                                  _qtyFocusNode.requestFocus();
+                                  _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
+                                });
+                              },
+                              textEditingController: _inlineSearchController,
+                              focusNode: _searchFocusNode, // 🔥 Product Search Focus Node
+                              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                return TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  style: const TextStyle(fontSize: 12),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Search Product Name or SKU to add...',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    prefixIcon: Icon(Icons.search, size: 16),
+                                  ),
+                                  onSubmitted: (val) {
+                                    if (val.trim().isEmpty) {
+                                      _freightFocusNode.requestFocus();
+                                    }
+                                  },
+                                );
+                              },
+                              optionsViewBuilder: (context, onSelected, options) {
+                                return Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Material(
+                                    elevation: 4,
+                                    child: SizedBox(
+                                      width: 280,
+                                      height: 150,
+                                      child: ListView.builder(
+                                        padding: EdgeInsets.zero,
+                                        itemCount: options.length + 1,
+                                        itemBuilder: (context, index) {
+                                          if (index == 0) {
                                             return ListTile(
-                                              dense: true,
-                                              title: Text(item.itemName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87)),
-                                              subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: TextStyle(fontSize: 9, color: isOutOfStock ? Colors.red.shade700 : Colors.grey)),
-                                              onTap: () => onSelected(item),
+                                              tileColor: Colors.teal.shade100,
+                                              leading: const Icon(Icons.add_circle, color: Colors.teal, size: 16),
+                                              title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
+                                              onTap: () async {
+                                                await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
+                                                await _loadDropdownDataAndSettings();
+                                              },
                                             );
-                                          },
-                                        ),
+                                          }
+                                          final item = options.elementAt(index - 1);
+                                          bool isOutOfStock = item.stockQuantity <= 0;
+
+                                          return ListTile(
+                                            dense: true,
+                                            title: Text(item.itemName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87)),
+                                            subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: TextStyle(fontSize: 9, color: isOutOfStock ? Colors.red.shade700 : Colors.grey)),
+                                            onTap: () => onSelected(item),
+                                          );
+                                        },
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
+                                  ),
+                                );
+                              },
                             )
                           else
                             Row(
@@ -930,12 +913,14 @@ class _SalesScreenState extends State<SalesScreen> {
                                   width: 50,
                                   child: TextField(
                                     controller: _inlineQtyController,
-                                    focusNode: _qtyFocusNode,
+                                    focusNode: _qtyFocusNode, // 🔥 Qty Focus Node
                                     keyboardType: TextInputType.number,
+                                    textInputAction: TextInputAction.next,
                                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                     decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
                                     onTap: () => _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length),
                                     onSubmitted: (_) {
+                                      // 🔥 4. Qty par Enter dabane par focus Price par jaye
                                       _priceFocusNode.requestFocus();
                                       _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length);
                                     },
@@ -946,12 +931,16 @@ class _SalesScreenState extends State<SalesScreen> {
                                   width: 65,
                                   child: TextField(
                                     controller: _inlinePriceController,
-                                    focusNode: _priceFocusNode,
+                                    focusNode: _priceFocusNode, // 🔥 Price Focus Node
                                     keyboardType: TextInputType.number,
+                                    textInputAction: TextInputAction.done,
                                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                     decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
                                     onTap: () => _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length),
-                                    onSubmitted: (_) => _addInlineItemToCart(),
+                                    onSubmitted: (_) {
+                                      // 🔥 5. Price par Enter dabate hi item add ho aur focus wapas Product Search par jaye
+                                      _addInlineItemToCart();
+                                    },
                                   ),
                                 ),
                                 IconButton(
@@ -971,7 +960,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const Divider(height: 6),
               
-              // 📐 Bottom Summary & Action Buttons
+              // Bottom Summary & Action Buttons
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
@@ -986,129 +975,6 @@ class _SalesScreenState extends State<SalesScreen> {
                       ],
                     ),
                     const SizedBox(height: 2),
-
-                    ...List.generate(_billChargesList.length, (index) {
-                      final charge = _billChargesList[index];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1),
-                        child: Row(
-                          children: [
-                            Expanded(flex: 3, child: Text(charge['name'], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
-                            SizedBox(
-                              width: 40,
-                              height: 26,
-                              child: TextField(
-                                controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
-                                keyboardType: TextInputType.number,
-                                style: const TextStyle(fontSize: 10),
-                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
-                                onChanged: (val) {
-                                  charge['qty'] = double.tryParse(val) ?? 1.0;
-                                  setState(() {});
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                            SizedBox(
-                              width: 50,
-                              height: 26,
-                              child: TextField(
-                                controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
-                                keyboardType: TextInputType.number,
-                                style: const TextStyle(fontSize: 10),
-                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
-                                onChanged: (val) {
-                                  charge['rate'] = double.tryParse(val) ?? 0.0;
-                                  setState(() {});
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 12, color: Colors.red),
-                              onPressed: () => setState(() => _billChargesList.removeAt(index)),
-                              constraints: const BoxConstraints(),
-                              padding: EdgeInsets.zero,
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-
-                    const SizedBox(height: 2),
-                    SizedBox(
-                      height: 32,
-                      child: TapRegion(
-                        onTapOutside: (_) {},
-                        child: RawAutocomplete<Map<String, dynamic>>(
-                          optionsBuilder: (TextEditingValue textEditingValue) {
-                            if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
-                            return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
-                          },
-                          displayStringForOption: (option) => option['name'],
-                          onSelected: (selection) {
-                            setState(() {
-                              _billChargesList.add({
-                                'name': selection['name'],
-                                'type': selection['type'],
-                                'mode': selection['mode'],
-                                'qty': 1.0,
-                                'rate': selection['value'] ?? 0.0,
-                              });
-                            });
-                            _freightSearchController.clear();
-                          },
-                          textEditingController: _freightSearchController,
-                          focusNode: _freightFocusNode,
-                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                            return TextField(
-                              controller: controller,
-                              focusNode: focusNode,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: const InputDecoration(
-                                labelText: 'Add Freight / Charge...',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                prefixIcon: Icon(Icons.add_circle_outline, size: 14),
-                              ),
-                              onSubmitted: (val) {
-                                if (val.trim().isEmpty) {
-                                  FocusScope.of(context).requestFocus(_saveButtonFocusNode);
-                                }
-                              },
-                            );
-                          },
-                          optionsViewBuilder: (context, onSelected, options) {
-                            return Align(
-                              alignment: Alignment.topLeft,
-                              child: Material(
-                                elevation: 4,
-                                child: SizedBox(
-                                  width: 240,
-                                  height: 120,
-                                  child: ListView.builder(
-                                    padding: EdgeInsets.zero,
-                                    itemCount: options.length,
-                                    itemBuilder: (context, index) {
-                                      final opt = options.elementAt(index);
-                                      return ListTile(
-                                        dense: true,
-                                        title: Text(opt['name'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                        onTap: () => onSelected(opt),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -1120,7 +986,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Action Buttons (Preview, WhatsApp, Save Bill)
+              // Action Buttons
               Row(
                 children: [
                   Expanded(
@@ -1176,6 +1042,8 @@ class _SalesScreenState extends State<SalesScreen> {
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
     _freightSearchController.dispose();
+    _dateFocusNode.dispose();
+    _partyFocusNode.dispose();
     _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
