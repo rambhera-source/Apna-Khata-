@@ -27,14 +27,18 @@ class SalesReturnScreen extends StatefulWidget {
 class _SalesReturnScreenState extends State<SalesReturnScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _returnNoController = TextEditingController(text: 'SRN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
+  final TextEditingController _dateController = TextEditingController();
   
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
+  final TextEditingController _freightSearchController = TextEditingController();
   
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
+  final FocusNode _freightFocusNode = FocusNode();
+  final FocusNode _saveButtonFocusNode = FocusNode();
 
   List<Map<String, dynamic>> _presetChargesList = [];
   final List<Map<String, dynamic>> _billChargesList = [];
@@ -58,6 +62,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   @override
   void initState() {
     super.initState();
+    _dateController.text = DateFormat('dd-MM-yyyy').format(_selectedDate);
     _loadDropdownDataAndSettings();
   }
 
@@ -106,16 +111,34 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     }
   }
 
+  // 📅 Compact & Modern Date Picker with Manual Entry Support
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            primaryColor: Colors.green.shade800,
+            colorScheme: ColorScheme.light(primary: Colors.green.shade800),
+            buttonTheme: const ButtonThemeData(textTheme: ButtonTextTheme.primary),
+          ),
+          child: Center(
+            child: SizedBox(
+              width: 320,
+              height: 420,
+              child: child,
+            ),
+          ),
+        );
+      },
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
+        _dateController.text = DateFormat('dd-MM-yyyy').format(picked);
       });
     }
   }
@@ -126,9 +149,9 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     int q = int.tryParse(_inlineQtyController.text) ?? 1;
     double pr = double.tryParse(_inlinePriceController.text) ?? _selectedInlineProduct!.purchasePrice;
 
-    if (q <= 0 || pr <= 0) {
+    if (q <= 0 || pr < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quantity aur Price > 0 honi chahiye!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Quantity aur Price valid hone chahiye!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -219,7 +242,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                     children: [
                       pw.Text(_isGstActive ? 'CREDIT NOTE (GST)' : 'SALES RETURN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
                       pw.Text('Return No: ${_returnNoController.text}'),
-                      pw.Text('Date: ${DateFormat('dd-MM-yy').format(_selectedDate)}'),
+                      pw.Text('Date: ${_dateController.text}'),
                     ],
                   ),
                 ],
@@ -409,23 +432,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
           title: Text(_isGstActive ? 'Sales Return (GST)' : 'Sales Return'),
           backgroundColor: Colors.green.shade800,
           foregroundColor: Colors.white,
-          actions: [
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Center(
-                child: GestureDetector(
-                  onTap: _selectDate,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.calendar_today, size: 16),
-                      const SizedBox(width: 4),
-                      Text(DateFormat('dd-MMM-yy').format(_selectedDate), style: const TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
         ),
         body: Padding(
           padding: const EdgeInsets.all(10.0),
@@ -487,22 +493,30 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                 children: [
                   SizedBox(
                     height: 40,
-                    width: 90,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        side: BorderSide(color: Colors.grey.shade400),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    width: 110,
+                    child: TextField(
+                      controller: _dateController,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        labelText: 'Date',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_today, size: 14, color: Colors.green),
+                          onPressed: _selectDate,
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.only(right: 4),
+                        ),
                       ),
-                      onPressed: _selectDate,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.calendar_today, size: 12, color: Colors.green),
-                          const SizedBox(width: 3),
-                          Text(DateFormat('dd-MM-yy').format(_selectedDate), style: const TextStyle(color: Colors.black87, fontSize: 10, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
+                      onChanged: (val) {
+                        try {
+                          final parsedDate = DateFormat('dd-MM-yyyy').parse(val);
+                          setState(() {
+                            _selectedDate = parsedDate;
+                          });
+                        } catch (_) {}
+                      },
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -519,6 +533,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                         displayStringForOption: (Account option) => option.name,
                         onSelected: (Account selection) {
                           _partyController.text = selection.name;
+                          Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
                         },
                         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                           if (_partyController.text.isNotEmpty && controller.text.isEmpty) {
@@ -699,7 +714,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                                 }
                                 return TextField(
                                   controller: controller,
-                                  focusNode: focusNode,
+                                  focusNode: _searchFocusNode,
                                   style: const TextStyle(fontSize: 12),
                                   decoration: const InputDecoration(
                                     labelText: 'Search Product Name or SKU to return...',
@@ -709,6 +724,11 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                                     prefixIcon: Icon(Icons.search, size: 16),
                                   ),
                                   onChanged: (val) => _inlineSearchController.text = val,
+                                  onSubmitted: (val) {
+                                    if (val.trim().isEmpty) {
+                                      _freightFocusNode.requestFocus();
+                                    }
+                                  },
                                 );
                               },
                               optionsViewBuilder: (context, onSelected, options) {
@@ -893,7 +913,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                           return TextField(
                             controller: controller,
-                            focusNode: focusNode,
+                            focusNode: _freightFocusNode,
                             style: const TextStyle(fontSize: 11),
                             decoration: const InputDecoration(
                               labelText: 'Add Freight / Charge...',
@@ -902,6 +922,11 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                               contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                               prefixIcon: Icon(Icons.add_circle_outline, size: 14),
                             ),
+                            onSubmitted: (val) {
+                              if (val.trim().isEmpty) {
+                                FocusScope.of(context).requestFocus(_saveButtonFocusNode);
+                              }
+                            },
                           );
                         },
                       ),
@@ -949,6 +974,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                     child: SizedBox(
                       height: 36,
                       child: ElevatedButton(
+                        focusNode: _saveButtonFocusNode,
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade800, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                         onPressed: _saveSalesReturnTransaction,
                         child: const Text('Save Return', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
@@ -968,12 +994,16 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   void dispose() {
     _partyController.dispose();
     _returnNoController.dispose();
+    _dateController.dispose();
     _inlineSearchController.dispose();
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
+    _freightSearchController.dispose();
     _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
+    _freightFocusNode.dispose();
+    _saveButtonFocusNode.dispose();
     super.dispose();
   }
 }
