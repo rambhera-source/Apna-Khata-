@@ -166,12 +166,11 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     return total < 0 ? 0 : total;
   }
 
-  // 🔥 Interactive Invoice Preview Dialog
   void _showReturnPreviewDialog() {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('⚠️ Pehle Party Name aur Return Items add karein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Pehle Party Name aur Return Items add karein!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -294,7 +293,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     );
   }
 
-  // 🔥 Professional PDF Generation for Sales Return
   Future<void> _generateAndPrintOrShareReturn({required bool isWhatsApp}) async {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) return;
@@ -450,11 +448,10 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
         ..voucherNumber = _returnNoController.text
         ..partyName = _partyController.text.trim()
         ..cashOrBank = 'Cash'
-        ..amount = -_grandTotal // 👈 यहाँ माइनस (-) कर दिया गया है ताकि लेजर में अमाउंट कम (Less) हो जाए
+        ..amount = -_grandTotal
         ..notes = 'Sales Return Bill';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
-      // Sales return me stock wapas inventory me judta hai
       for (var cartItem in _cartItems) {
         String prodName = cartItem['name'];
         double returnedQty = (cartItem['qty'] as int).toDouble();
@@ -480,7 +477,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             Text('Return Saved Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('Sales return safalपूर्वक save ho gaya hai aur stock inventory me update kar diya gaya hai.', style: TextStyle(fontSize: 13)),
+        content: const Text('Sales return safalpurvak save ho gaya hai aur stock inventory me update kar diya gaya hai.', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () {
@@ -563,7 +560,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Bar (Return No & Stock Type)
               Row(
                 children: [
                   Expanded(
@@ -601,8 +597,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                 ],
               ),
               const SizedBox(height: 6),
-
-              // Date & Customer Autocomplete
               Row(
                 children: [
                   SizedBox(
@@ -669,7 +663,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                             onSubmitted: (_) {
                               if (_partyController.text.trim().isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('⚠️ Pehle Customer / Party Name bharein!'), backgroundColor: Colors.red),
+                                  const SnackBar(content: Text('Pehle Customer / Party Name bharein!'), backgroundColor: Colors.red),
                                 );
                                 _partyFocusNode.requestFocus();
                               } else {
@@ -719,8 +713,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                 ],
               ),
               const SizedBox(height: 6),
-
-              // Professional Grid Table Header
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(color: Colors.orange.shade800, borderRadius: BorderRadius.circular(4)),
@@ -737,8 +729,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                 ),
               ),
               const SizedBox(height: 2),
-
-              // Professional Items Table & Inline Search Grid
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
@@ -819,10 +809,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                         ),
                       );
                     }),
-
                     const SizedBox(height: 6),
-
-                    // Inline Product Search Bar
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.orange.shade200)),
@@ -870,7 +857,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                                   onTap: () {
                                     if (_partyController.text.trim().isEmpty) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('⚠️ Kripya pehle Customer / Party Name bharein!'), backgroundColor: Colors.red),
+                                        const SnackBar(content: Text('Kripya pehle Customer / Party Name bharein!'), backgroundColor: Colors.red),
                                       );
                                       _partyFocusNode.requestFocus();
                                     }
@@ -961,8 +948,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                 ),
               ),
               const Divider(height: 6),
-              
-              // Bottom Summary
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.orange.shade200)),
@@ -975,8 +960,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                 ),
               ),
               const SizedBox(height: 6),
-
-              // Fixed Bottom Action Buttons
               Row(
                 children: [
                   Expanded(
