@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/transaction_model.dart';
-import 'package:accounting_app/screens/searchable_field.dart'; // ✅ Correct package import path
+import 'package:accounting_app/screens/searchable_field.dart';
 
 class VoucherEntryScreen extends StatefulWidget {
   const VoucherEntryScreen({super.key});
@@ -160,17 +160,44 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
     });
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$_voucherType Voucher ($_voucherNumber) safaltapurvak save ho gaya!'), backgroundColor: Colors.green),
-    );
 
-    _partyController.clear();
-    _debitController.clear();
-    _creditController.clear();
-    _amountController.clear();
-    _notesController.clear();
-    _generateVoucherNumber();
-    setState(() {});
+    // ✨ Smart & Short Success Popup ("Saved Successfully!")
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle_rounded, color: Colors.teal, size: 28),
+            SizedBox(width: 10),
+            Text('Saved Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text('$_voucherType Voucher ($_voucherNumber) has been saved.', style: const TextStyle(fontSize: 13)),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                _partyController.clear();
+                _debitController.clear();
+                _creditController.clear();
+                _amountController.clear();
+                _notesController.clear();
+                _generateVoucherNumber();
+              });
+            },
+            child: const Text('Okay'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -214,14 +241,15 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.receipt_long, color: Colors.grey),
+                    Icon(Icons.receipt_long, color: themeColor, size: 18),
                     const SizedBox(width: 10),
-                    const Text('Voucher Type:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Voucher Type:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(width: 15),
                     Expanded(
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _voucherType,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
                           items: const [
                             DropdownMenuItem(value: 'Payment', child: Text('Payment (Dr)', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
                             DropdownMenuItem(value: 'Receipt', child: Text('Receipt (Cr)', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold))),
@@ -250,11 +278,13 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Voucher Date',
                           border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.calendar_today, size: 20),
+                          isDense: true,
+                          prefixIcon: Icon(Icons.calendar_today, size: 18),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                         ),
                         child: Text(
                           DateFormat('dd-MM-yyyy').format(_selectedDate),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                       ),
                     ),
@@ -267,11 +297,13 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Voucher No (Auto)',
                         border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.confirmation_number, size: 20),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.confirmation_number, size: 18),
                         filled: true,
                         fillColor: Colors.black12,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                       ),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                   ),
                 ],
@@ -296,10 +328,13 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   decoration: InputDecoration(
                     labelText: 'Amount (₹) *',
                     border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.currency_rupee),
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.currency_rupee, size: 18),
                     fillColor: themeColor.withOpacity(0.08),
                     filled: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                   ),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                   onSubmitted: (_) {
                     FocusScope.of(context).requestFocus(_modeFocusNode);
                   },
@@ -310,13 +345,15 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   value: _paymentMode,
                   focusNode: _modeFocusNode,
                   items: _paymentModes.map((mode) {
-                    return DropdownMenuItem(value: mode, child: Text(mode, style: const TextStyle(fontWeight: FontWeight.bold)));
+                    return DropdownMenuItem(value: mode, child: Text(mode, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)));
                   }).toList(),
                   onChanged: (val) => setState(() => _paymentMode = val!),
                   decoration: const InputDecoration(
                     labelText: 'Mode of Payment / Receipt *',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.payment),
+                    isDense: true,
+                    prefixIcon: Icon(Icons.payment, size: 18),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                   ),
                 ),
 
@@ -325,13 +362,15 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   DropdownButtonFormField<String>(
                     value: _selectedBank,
                     items: _bankList.map((bank) {
-                      return DropdownMenuItem(value: bank, child: Text(bank));
+                      return DropdownMenuItem(value: bank, child: Text(bank, style: const TextStyle(fontSize: 13)));
                     }).toList(),
                     onChanged: (val) => setState(() => _selectedBank = val!),
                     decoration: const InputDecoration(
                       labelText: 'Select Bank Account *',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.account_balance),
+                      isDense: true,
+                      prefixIcon: Icon(Icons.account_balance, size: 18),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                     ),
                   ),
                 ] else if (_paymentMode.contains('UPI')) ...[
@@ -339,13 +378,15 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   DropdownButtonFormField<String>(
                     value: _selectedUpiApp,
                     items: _upiList.map((upi) {
-                      return DropdownMenuItem(value: upi, child: Text(upi));
+                      return DropdownMenuItem(value: upi, child: Text(upi, style: const TextStyle(fontSize: 13)));
                     }).toList(),
                     onChanged: (val) => setState(() => _selectedUpiApp = val!),
                     decoration: const InputDecoration(
                       labelText: 'Select UPI App / QR *',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.phone_android),
+                      isDense: true,
+                      prefixIcon: Icon(Icons.phone_android, size: 18),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                     ),
                   ),
                 ] else if (_paymentMode == 'Third Party Gateway') ...[
@@ -353,13 +394,15 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   DropdownButtonFormField<String>(
                     value: _selectedThirdParty,
                     items: _thirdPartyList.map((tp) {
-                      return DropdownMenuItem(value: tp, child: Text(tp));
+                      return DropdownMenuItem(value: tp, child: Text(tp, style: const TextStyle(fontSize: 13)));
                     }).toList(),
                     onChanged: (val) => setState(() => _selectedThirdParty = val!),
                     decoration: const InputDecoration(
                       labelText: 'Select Third Party Portal *',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.cloud_sync),
+                      isDense: true,
+                      prefixIcon: Icon(Icons.cloud_sync, size: 18),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                     ),
                   ),
                 ],
@@ -385,10 +428,13 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                   decoration: InputDecoration(
                     labelText: 'Amount (₹) *',
                     border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.currency_rupee),
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.currency_rupee, size: 18),
                     fillColor: Colors.purple.shade50,
                     filled: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                   ),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                 ),
               ],
               const SizedBox(height: 16),
@@ -400,23 +446,26 @@ class _VoucherEntryScreenState extends State<VoucherEntryScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Narration / Remarks (Optional)',
                   border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.note),
+                  isDense: true,
+                  prefixIcon: Icon(Icons.note, size: 18),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                 ),
+                style: const TextStyle(fontSize: 13),
                 onSubmitted: (_) => _saveVoucher(),
               ),
               const SizedBox(height: 24),
 
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 45,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: themeColor,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   onPressed: _saveVoucher,
-                  child: Text('Save $_voucherType Entry', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: Text('Save $_voucherType Entry', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
