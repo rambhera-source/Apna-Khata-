@@ -33,6 +33,7 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
+  
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
@@ -166,13 +167,23 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     setState(() {
-      _cartItems.add({
-        'name': _selectedInlineProduct!.itemName,
-        'sku': _selectedInlineProduct!.sku ?? '-',
-        'qty': q,
-        'price': pr,
-        'stockType': _globalStockType,
-      });
+      // 🔍 Check if product already exists in cart
+      int existingIndex = _cartItems.indexWhere((item) => item['name'] == _selectedInlineProduct!.itemName);
+
+      if (existingIndex != -1) {
+        // Agar product pehle se hai toh quantity badha dein
+        _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + q;
+        _cartItems[existingIndex]['price'] = pr; // Update with latest price if needed
+      } else {
+        // Naya item add karein
+        _cartItems.add({
+          'name': _selectedInlineProduct!.itemName,
+          'sku': _selectedInlineProduct!.sku ?? '-',
+          'qty': q,
+          'price': pr,
+          'stockType': _globalStockType,
+        });
+      }
 
       _selectedInlineProduct = null;
       _inlineSearchController.clear();
@@ -563,191 +574,231 @@ class _SalesScreenState extends State<SalesScreen> {
               const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 4),
 
+              // 🔥 Scrollable Area containing both the existing items list AND the dynamic bottom search bar
               Expanded(
-                child: Column(
+                child: ListView(
+                  padding: EdgeInsets.zero,
                   children: [
-                    Expanded(
-                      child: _cartItems.isEmpty
-                          ? const Center(child: Text('Koi item add nahi kiya gaya hai.', style: TextStyle(color: Colors.grey, fontSize: 12)))
-                          : ListView.builder(
-                              itemCount: _cartItems.length,
-                              itemBuilder: (context, index) {
-                                final item = _cartItems[index];
-                                double total = (item['qty'] as int) * (item['price'] as double);
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                  margin: const EdgeInsets.symmetric(vertical: 2),
-                                  decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4)),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        flex: 3,
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text('${index + 1}. ${item['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                            Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                          ],
-                                        ),
-                                      ),
-                                      SizedBox(
-                                        width: 50,
-                                        child: TextField(
-                                          controller: TextEditingController(text: item['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
-                                          keyboardType: TextInputType.number,
-                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
-                                          onChanged: (val) {
-                                            int? q = int.tryParse(val);
-                                            if (q != null && q > 0) {
-                                              setState(() => _cartItems[index]['qty'] = q);
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      SizedBox(
-                                        width: 65,
-                                        child: TextField(
-                                          controller: TextEditingController(text: item['price'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
-                                          keyboardType: TextInputType.number,
-                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                          decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
-                                          onChanged: (val) {
-                                            double? p = double.tryParse(val);
-                                            if (p != null && p >= 0) {
-                                              setState(() => _cartItems[index]['price'] = p);
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red, size: 16),
-                                        onPressed: () => setState(() => _cartItems.removeAt(index)),
-                                        constraints: const BoxConstraints(),
-                                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
+                    // 1. Added Items List
+                    ...List.generate(_cartItems.length, (index) {
+                      final item = _cartItems[index];
+                      double total = (item['qty'] as int) * (item['price'] as double);
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        margin: const EdgeInsets.symmetric(vertical: 2),
+                        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4)),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('${index + 1}. ${item['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                ],
+                              ),
                             ),
-                    ),
+                            SizedBox(
+                              width: 50,
+                              child: TextField(
+                                controller: TextEditingController(text: item['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
+                                keyboardType: TextInputType.number,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
+                                onChanged: (val) {
+                                  int? q = int.tryParse(val);
+                                  if (q != null && q > 0) {
+                                    setState(() => _cartItems[index]['qty'] = q);
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            SizedBox(
+                              width: 65,
+                              child: TextField(
+                                controller: TextEditingController(text: item['price'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
+                                keyboardType: TextInputType.number,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
+                                onChanged: (val) {
+                                  double? p = double.tryParse(val);
+                                  if (p != null && p >= 0) {
+                                    setState(() => _cartItems[index]['price'] = p);
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                              onPressed: () => setState(() => _cartItems.removeAt(index)),
+                              constraints: const BoxConstraints(),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+
                     const SizedBox(height: 4),
 
+                    // 2. Dynamic Search Bar / Qty / Price Input (Always right below the items list)
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Autocomplete<InventoryItem>(
-                            optionsBuilder: (TextEditingValue textEditingValue) {
-                              if (textEditingValue.text.isEmpty) return const Iterable<InventoryItem>.empty();
-                              return _allInventoryItems.where((item) =>
-                                item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                                (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
-                              );
-                            },
-                            displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
-                            onSelected: (InventoryItem selection) {
-                              setState(() {
-                                _selectedInlineProduct = selection;
-                                _inlinePriceController.text = selection.priceA.toString();
-                              });
-                              Future.delayed(const Duration(milliseconds: 100), () => _qtyFocusNode.requestFocus());
-                            },
-                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                              if (_inlineSearchController.text.isNotEmpty && controller.text.isEmpty) {
-                                controller.text = _inlineSearchController.text;
-                              }
-                              return TextField(
-                                controller: controller,
-                                focusNode: focusNode,
-                                style: const TextStyle(fontSize: 12),
-                                decoration: InputDecoration(
-                                  labelText: 'Search Product Name or SKU to add...',
-                                  border: const OutlineInputBorder(),
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                  prefixIcon: const Icon(Icons.search, size: 16),
-                                ),
-                                onChanged: (val) => _inlineSearchController.text = val,
-                              );
-                            },
-                            optionsViewBuilder: (context, onSelected, options) {
-                              return Align(
-                                alignment: Alignment.topLeft,
-                                child: Material(
-                                  elevation: 4,
-                                  child: SizedBox(
-                                    width: 280,
-                                    height: 150,
-                                    child: ListView.builder(
-                                      padding: EdgeInsets.zero,
-                                      itemCount: options.length + 1,
-                                      itemBuilder: (context, index) {
-                                        if (index == options.length) {
+                          if (_selectedInlineProduct == null)
+                            Autocomplete<InventoryItem>(
+                              optionsBuilder: (TextEditingValue textEditingValue) {
+                                if (textEditingValue.text.isEmpty) return const Iterable<InventoryItem>.empty();
+                                return _allInventoryItems.where((item) =>
+                                  item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                                  (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
+                                );
+                              },
+                              displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
+                              onSelected: (InventoryItem selection) {
+                                // 🔍 Check if already exists in cart
+                                int existingIndex = _cartItems.indexWhere((item) => item['name'] == selection.itemName);
+
+                                if (existingIndex != -1) {
+                                  // Agar pehle se hai, toh naya row banane ke bajay wahan focus kar dein aur qty badha dein
+                                  setState(() {
+                                    _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + 1;
+                                  });
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('⚠️ ${selection.itemName} already in bill. Quantity updated!'), duration: const Duration(seconds: 2)),
+                                  );
+                                  _inlineSearchController.clear();
+                                } else {
+                                  setState(() {
+                                    _selectedInlineProduct = selection;
+                                    _inlinePriceController.text = selection.priceA.toString();
+                                    _inlineQtyController.text = '1';
+                                  });
+                                  Future.delayed(const Duration(milliseconds: 100), () {
+                                    _qtyFocusNode.requestFocus();
+                                    _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
+                                  });
+                                }
+                              },
+                              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                if (_inlineSearchController.text.isNotEmpty && controller.text.isEmpty) {
+                                  controller.text = _inlineSearchController.text;
+                                }
+                                return TextField(
+                                  controller: controller,
+                                  focusNode: _searchFocusNode,
+                                  style: const TextStyle(fontSize: 12),
+                                  decoration: InputDecoration(
+                                    labelText: 'Search Product Name or SKU to add...',
+                                    border: const OutlineInputBorder(),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    prefixIcon: const Icon(Icons.search, size: 16),
+                                  ),
+                                  onChanged: (val) => _inlineSearchController.text = val,
+                                );
+                              },
+                              optionsViewBuilder: (context, onSelected, options) {
+                                return Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Material(
+                                    elevation: 4,
+                                    child: SizedBox(
+                                      width: 280,
+                                      height: 150,
+                                      child: ListView.builder(
+                                        padding: EdgeInsets.zero,
+                                        itemCount: options.length + 1,
+                                        itemBuilder: (context, index) {
+                                          if (index == options.length) {
+                                            return ListTile(
+                                              tileColor: Colors.teal.shade100,
+                                              leading: const Icon(Icons.add_circle, color: Colors.teal, size: 16),
+                                              title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
+                                              onTap: () async {
+                                                await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
+                                                await _loadDropdownDataAndSettings();
+                                              },
+                                            );
+                                          }
+                                          final item = options.elementAt(index);
                                           return ListTile(
-                                            tileColor: Colors.teal.shade100,
-                                            leading: const Icon(Icons.add_circle, color: Colors.teal, size: 16),
-                                            title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
-                                            onTap: () async {
-                                              await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
-                                              await _loadDropdownDataAndSettings();
-                                            },
+                                            dense: true,
+                                            title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                            subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9)),
+                                            onTap: () => onSelected(item),
                                           );
-                                        }
-                                        final item = options.elementAt(index);
-                                        return ListTile(
-                                          dense: true,
-                                          title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                                          subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9)),
-                                          onTap: () => onSelected(item),
-                                        );
-                                      },
+                                        },
+                                      ),
                                     ),
                                   ),
-                                ),
-                              );
-                            },
-                          ),
-                          if (_selectedInlineProduct != null) ...[
-                            const SizedBox(height: 6),
+                                );
+                              },
+                            )
+                          else
                             Row(
                               children: [
                                 Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    _selectedInlineProduct!.itemName,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                SizedBox(
+                                  width: 60,
                                   child: TextField(
                                     controller: _inlineQtyController,
                                     focusNode: _qtyFocusNode,
                                     keyboardType: TextInputType.number,
-                                    style: const TextStyle(fontSize: 12),
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                                     decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(6)),
-                                    onSubmitted: (_) => _priceFocusNode.requestFocus(),
+                                    onTap: () {
+                                      _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
+                                    },
+                                    onSubmitted: (_) {
+                                      _priceFocusNode.requestFocus();
+                                      _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length);
+                                    },
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                Expanded(
+                                const SizedBox(width: 6),
+                                SizedBox(
+                                  width: 75,
                                   child: TextField(
                                     controller: _inlinePriceController,
                                     focusNode: _priceFocusNode,
                                     keyboardType: TextInputType.number,
-                                    style: const TextStyle(fontSize: 12),
-                                    decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(6)),
-                                    onSubmitted: (_) => _addInlineItemToCart(),
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                    decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(6)),
+                                    onTap: () {
+                                      _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length);
+                                    },
+                                    onSubmitted: (_) {
+                                      _addInlineItemToCart();
+                                    },
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-                                  onPressed: _addInlineItemToCart,
-                                  child: const Text('Add', style: TextStyle(fontSize: 11)),
+                                IconButton(
+                                  icon: const Icon(Icons.close, color: Colors.red, size: 18),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedInlineProduct = null;
+                                    });
+                                    _searchFocusNode.requestFocus();
+                                  },
                                 ),
                               ],
                             ),
-                          ],
                         ],
                       ),
                     ),
