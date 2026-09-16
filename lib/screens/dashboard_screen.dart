@@ -11,7 +11,7 @@ import '../models/inventory_model.dart';
 import '../models/account.dart';
 
 import 'sales/sales_screen.dart';
-import 'sales/sales_return_screen.dart'; // 👈 Correct import path for Sales Return screen
+import 'sales/sales_return_screen.dart';
 import 'purchase/purchase_screen.dart';
 import 'purchase/purchase_return_screen.dart';
 import 'reports/daybook_screen.dart';
