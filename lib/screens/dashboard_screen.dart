@@ -11,7 +11,7 @@ import '../models/inventory_model.dart';
 import '../models/account.dart';
 
 import 'sales/sales_screen.dart';
-import 'sales/sales_return_screen.dart';
+import 'sales/sales_return_screen.dart'; // 👈 Correct import path for Sales Return screen
 import 'purchase/purchase_screen.dart';
 import 'purchase/purchase_return_screen.dart';
 import 'reports/daybook_screen.dart';
@@ -52,19 +52,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
-    // 🔥 Check on startup if database is empty and local backup exists
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndPromptRestoreIfEmpty();
     });
   }
 
-  // 🔍 Check if database has zero accounts/transactions, then prompt restore
   Future<void> _checkAndPromptRestoreIfEmpty() async {
     try {
       final accountsCount = await DatabaseHelper.isar.accounts.count();
       final txnsCount = await DatabaseHelper.isar.accountingTransactions.count();
 
-      // Agar database bilkul khali hai
       if (accountsCount == 0 && txnsCount == 0) {
         final directory = await getApplicationDocumentsDirectory();
         final backupDir = Directory('${directory.path}/Orlife ERP Backups');
@@ -121,7 +118,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {}
   }
 
-  // 📂 Helper to execute file restoration and refresh dashboard
   Future<void> _restoreFromFile(File file) async {
     showDialog(
       context: context,
@@ -214,7 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   onPressed: () {
                     Navigator.pop(context);
-                    _loadDashboardData(); // Refresh dashboard data
+                    _loadDashboardData();
                   },
                   child: const Text('OK'),
                 ),
