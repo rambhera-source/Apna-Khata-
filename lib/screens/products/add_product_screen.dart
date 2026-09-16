@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/inventory_model.dart';
+import 'package:accounting_app/models/settings_model.dart';
 
 class AddProductScreen extends StatefulWidget {
   final InventoryItem? itemToEdit;
@@ -24,8 +26,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _purchasePriceController = TextEditingController(text: '0');
   final _tierPriceController = TextEditingController(text: '0');
 
-  String _selectedCategory = 'General';
-  List<String> _availableCategories = ['General', 'Charger', 'Power Bank', 'Cable', 'Neckband', 'Speaker'];
+  // 🔥 Categories & Tax Slabs state
+  Map<String, List<String>> _categoriesMap = {};
+  String? _selectedMainCategory;
+  String? _selectedSubCategory;
+
+  List<double> _availableTaxSlabs = [0.0, 5.0, 12.0, 18.0, 28.0];
+  double _selectedTaxRate = 18.0;
 
   final List<String> _priceCategories = List.generate(26, (index) => String.fromCharCode(65 + index));
   String _selectedPriceTier = 'A';
@@ -33,72 +40,176 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCategories();
-    _initializeEditData();
+    _loadMastersAndEditData();
   }
 
-  Future<void> _loadCategories() async {
-    final items = await DatabaseHelper.isar.inventoryItems.where().findAll();
-    Set<String> cats = items.map((e) => e.category ?? 'General').where((c) => c.trim().isNotEmpty).toSet();
-    setState(() {
-      for (var c in cats) {
-        if (!_availableCategories.contains(c)) {
-          _availableCategories.add(c);
+  Future<void> _loadMastersAndEditData() async {
+    final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
+    Map<String, List<String>> loadedCats = {};
+    List<double> loadedTaxes = [0.0, 5.0, 12.0, 18.0, 28.0];
+
+    if (settings != null) {
+      if (settings.productCategories.isNotEmpty) {
+        for (var catStr in settings.productCategories) {
+          try {
+            var decoded = jsonDecode(catStr);
+            if (decoded is Map) {
+              String mainCat = decoded['main'] ?? 'General';
+              List<String> subs = List<String>.from(decoded['subs'] ?? []);
+              loadedCats[mainCat] = subs;
+            }
+          } catch (_) {
+            loadedCats[catStr] = [];
+          }
         }
       }
-      if (widget.itemToEdit != null && widget.itemToEdit!.category != null) {
-        _selectedCategory = widget.itemToEdit!.category!;
-        if (!_availableCategories.contains(_selectedCategory)) {
-          _availableCategories.add(_selectedCategory);
+      if (settings.taxSlabs.isNotEmpty) {
+        loadedTaxes = List<double>.from(settings.taxSlabs);
+      }
+    }
+
+    if (loadedCats.isEmpty) {
+      loadedCats = {
+        'Accessories': ['Chargers', 'Cables', 'Power Banks'],
+        'Spare Parts': ['Batteries', 'Displays'],
+      };
+    }
+
+    setState(() {
+      _categoriesMap = loadedCats;
+      _availableTaxSlabs = loadedTaxes;
+
+      if (widget.itemToEdit != null) {
+        final item = widget.itemToEdit!;
+        _nameController.text = item.itemName;
+        _skuController.text = item.sku ?? '';
+        _hsnController.text = item.hsnCode ?? '';
+        _taxController.text = (item.taxRate ?? 18.0).toString();
+        _selectedTaxRate = item.taxRate ?? 18.0;
+        _barcodeController.text = item.barcode ?? '';
+        _printNameController.text = item.printName ?? '';
+        _openingStockController.text = (item.openingStock ?? 0).toString();
+        _closingStockController.text = item.stockQuantity.toString();
+        _purchasePriceController.text = item.purchasePrice.toString();
+        _selectedPriceTier = item.priceCategory ?? 'A';
+        _tierPriceController.text = item.priceA.toString();
+
+        // Match category
+        String fullCat = item.category ?? 'General General';
+        if (fullCat.contains(' > ')) {
+          var parts = fullCat.split(' > ');
+          _selectedMainCategory = parts[0];
+          _selectedSubCategory = parts[1];
+        } else {
+          _selectedMainCategory = _categoriesMap.keys.isNotEmpty ? _categoriesMap.keys.first : 'General';
+          _selectedSubCategory = fullCat;
+        }
+      } else {
+        _selectedMainCategory = _categoriesMap.keys.isNotEmpty ? _categoriesMap.keys.first : null;
+        if (_selectedMainCategory != null && _categoriesMap[_selectedMainCategory!]!.isNotEmpty) {
+          _selectedSubCategory = _categoriesMap[_selectedMainCategory!]!.first;
         }
       }
     });
   }
 
-  void _initializeEditData() {
-    if (widget.itemToEdit != null) {
-      final item = widget.itemToEdit!;
-      _nameController.text = item.itemName;
-      _skuController.text = item.sku ?? '';
-      _hsnController.text = item.hsnCode ?? '';
-      _taxController.text = (item.taxRate ?? 18.0).toString();
-      _barcodeController.text = item.barcode ?? '';
-      _printNameController.text = item.printName ?? '';
-      _openingStockController.text = (item.openingStock ?? 0).toString();
-      _closingStockController.text = item.stockQuantity.toString();
-      _purchasePriceController.text = item.purchasePrice.toString();
-      _selectedPriceTier = item.priceCategory ?? 'A';
-      _tierPriceController.text = item.priceA.toString();
-    }
+  Future<void> _saveMasterSettingsToDb() async {
+    List<String> encodedCategories = _categoriesMap.entries.map((entry) {
+      return jsonEncode({'main': entry.key, 'subs': entry.value});
+    }).toList();
+
+    final settings = await DatabaseHelper.isar.companySettings.where().findFirst() ?? CompanySettings();
+    await DatabaseHelper.isar.writeTxn(() async {
+      settings.productCategories = encodedCategories;
+      settings.taxSlabs = _availableTaxSlabs;
+      await DatabaseHelper.isar.companySettings.put(settings);
+    });
   }
 
-  void _showAddCategoryDialog() {
-    final controller = TextEditingController();
+  // 🔥 Quick Add Category Dialog from Product Screen
+  void _showQuickAddCategoryDialog() {
+    final mainController = TextEditingController();
+    final subController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add New Category'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Category Name', border: OutlineInputBorder()),
+        title: const Text('Add New Category & Sub-Category'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: mainController,
+              decoration: const InputDecoration(labelText: 'Main Category (e.g. Accessories)', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: subController,
+              decoration: const InputDecoration(labelText: 'Sub-Category (e.g. Chargers)', border: OutlineInputBorder()),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
             onPressed: () {
-              String newCat = controller.text.trim();
-              if (newCat.isNotEmpty) {
+              String main = mainController.text.trim();
+              String sub = subController.text.trim();
+              if (main.isNotEmpty && sub.isNotEmpty) {
                 setState(() {
-                  if (!_availableCategories.contains(newCat)) {
-                    _availableCategories.add(newCat);
+                  if (!_categoriesMap.containsKey(main)) {
+                    _categoriesMap[main] = [];
                   }
-                  _selectedCategory = newCat;
+                  if (!_categoriesMap[main]!.contains(sub)) {
+                    _categoriesMap[main]!.add(sub);
+                  }
+                  _selectedMainCategory = main;
+                  _selectedSubCategory = sub;
                 });
+                _saveMasterSettingsToDb();
               }
               Navigator.pop(context);
             },
-            child: const Text('Add & Select'),
+            child: const Text('Save & Select'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🔥 Quick Add Tax Slab Dialog
+  void _showQuickAddTaxDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Tax Slab (%)'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Tax Percentage e.g. 12', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+            onPressed: () {
+              double? val = double.tryParse(controller.text.trim());
+              if (val != null && val >= 0) {
+                setState(() {
+                  if (!_availableTaxSlabs.contains(val)) {
+                    _availableTaxSlabs.add(val);
+                    _availableTaxSlabs.sort();
+                  }
+                  _selectedTaxRate = val;
+                  _taxController.text = val.toString();
+                });
+                _saveMasterSettingsToDb();
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Save & Select'),
           ),
         ],
       ),
@@ -125,20 +236,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     if (isDuplicate) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle से मौजूद है!'), backgroundColor: Colors.red),
       );
       return;
     }
+
+    String finalCategory = '${_selectedMainCategory ?? "General"} > ${_selectedSubCategory ?? "General"}';
 
     await DatabaseHelper.isar.writeTxn(() async {
       InventoryItem item = widget.itemToEdit ?? InventoryItem();
       item.itemName = name;
       item.sku = sku;
       item.hsnCode = _hsnController.text.trim().isEmpty ? null : _hsnController.text.trim();
-      item.taxRate = double.tryParse(_taxController.text) ?? 18.0;
+      item.taxRate = double.tryParse(_taxController.text) ?? _selectedTaxRate;
       item.barcode = _barcodeController.text.trim().isEmpty ? null : _barcodeController.text.trim();
       item.printName = _printNameController.text.trim().isEmpty ? null : _printNameController.text.trim();
-      item.category = _selectedCategory;
+      item.category = finalCategory;
       item.openingStock = double.tryParse(_openingStockController.text) ?? 0.0;
       item.stockQuantity = double.tryParse(_closingStockController.text) ?? 0.0;
       item.purchasePrice = double.tryParse(_purchasePriceController.text) ?? 0.0;
@@ -174,6 +287,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   Widget build(BuildContext context) {
     bool isEditing = widget.itemToEdit != null;
+    List<String> subCategories = (_selectedMainCategory != null && _categoriesMap.containsKey(_selectedMainCategory))
+        ? _categoriesMap[_selectedMainCategory!]!
+        : [];
 
     return Scaffold(
       appBar: AppBar(
@@ -229,39 +345,74 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+
+              // 🔥 Main Category & Sub-Category Selection with Quick Add Button
               Row(
                 children: [
                   Expanded(
-                    flex: 2,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: _availableCategories.contains(_selectedCategory) ? _selectedCategory : 'General',
-                            items: _availableCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                            onChanged: (val) => setState(() => _selectedCategory = val ?? 'General'),
-                            decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.add_circle, color: Colors.teal, size: 30),
-                          onPressed: _showAddCategoryDialog,
-                          tooltip: 'Add Category',
-                        ),
-                      ],
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedMainCategory,
+                      hint: const Text('Main Category'),
+                      items: _categoriesMap.keys.map((cat) => DropdownMenuItem(value: cat, child: Text(cat, style: const TextStyle(fontSize: 12)))).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedMainCategory = val;
+                          var subs = _categoriesMap[val!] ?? [];
+                          _selectedSubCategory = subs.isNotEmpty ? subs.first : null;
+                        });
+                      },
+                      decoration: const InputDecoration(labelText: 'Main Category', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
-                    child: TextField(
-                      controller: _taxController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Tax (%)', border: OutlineInputBorder()),
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedSubCategory,
+                      hint: const Text('Sub-Category'),
+                      items: subCategories.map((sub) => DropdownMenuItem(value: sub, child: Text(sub, style: const TextStyle(fontSize: 12)))).toList(),
+                      onChanged: (val) => setState(() => _selectedSubCategory = val),
+                      decoration: const InputDecoration(labelText: 'Sub-Category', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle, color: Colors.teal, size: 28),
+                    onPressed: _showQuickAddCategoryDialog,
+                    tooltip: 'Add New Category',
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
+
+              // 🔥 Tax Slab Selection with Quick Add Button
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<double>(
+                      value: _availableTaxSlabs.contains(_selectedTaxRate) ? _selectedTaxRate : 18.0,
+                      items: _availableTaxSlabs.map((tax) => DropdownMenuItem(value: tax, child: Text('$tax% GST', style: const TextStyle(fontSize: 12)))).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedTaxRate = val ?? 18.0;
+                          _taxController.text = _selectedTaxRate.toString();
+                        });
+                      },
+                      decoration: const InputDecoration(labelText: 'Tax Rate (%)', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle, color: Colors.indigo, size: 28),
+                    onPressed: _showQuickAddTaxDialog,
+                    tooltip: 'Add Tax Slab',
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
               Row(
                 children: [
                   Expanded(
