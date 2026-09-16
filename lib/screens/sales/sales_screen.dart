@@ -9,15 +9,14 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
-import 'package:accounting_app/database/database_helper.dart';
-import 'package:accounting_app/models/account.dart';
-import 'package:accounting_app/models/transaction_model.dart';
-import 'package:accounting_app/models/order_model.dart';
-import 'package:accounting_app/models/settings_model.dart'; 
-import 'package:accounting_app/models/inventory_model.dart';
-import 'package:accounting_app/screens/searchable_field.dart';
-import 'package:accounting_app/screens/account/add_account_screen.dart';        
-import 'package:accounting_app/screens/products/product_inventory_screen.dart';
+import '../../database/database_helper.dart';
+import '../../models/account.dart';
+import '../../models/transaction_model.dart';
+import '../../models/order_model.dart';
+import '../../models/settings_model.dart'; 
+import '../../models/inventory_model.dart';
+import 'accounting/add_account_screen.dart';        // 👈 Correct relative path for AddAccountScreen
+import 'products/product_inventory_screen.dart'; // 👈 Correct relative path for ProductInventoryScreen
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -43,7 +42,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   DateTime _selectedDate = DateTime.now();
 
-  List<String> _allAccounts = [];
+  List<Account> _allAccountsList = [];
   List<InventoryItem> _allInventoryItems = [];
   InventoryItem? _selectedInlineProduct;
   
@@ -87,7 +86,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     setState(() {
-      _allAccounts = accounts.map((a) => a.name).toList();
+      _allAccountsList = accounts;
       _allInventoryItems = inventoryItems;
       if (settings != null) {
         _isGstActive = settings.isGstEnabled;
@@ -166,22 +165,22 @@ class _SalesScreenState extends State<SalesScreen> {
       return;
     }
 
+    bool isOutOfStock = _selectedInlineProduct!.stockQuantity <= 0;
+
     setState(() {
-      // 🔍 Check if product already exists in cart
       int existingIndex = _cartItems.indexWhere((item) => item['name'] == _selectedInlineProduct!.itemName);
 
       if (existingIndex != -1) {
-        // Agar product pehle se hai toh quantity badha dein
         _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + q;
-        _cartItems[existingIndex]['price'] = pr; // Update with latest price if needed
+        _cartItems[existingIndex]['price'] = pr;
       } else {
-        // Naya item add karein
         _cartItems.add({
           'name': _selectedInlineProduct!.itemName,
           'sku': _selectedInlineProduct!.sku ?? '-',
           'qty': q,
           'price': pr,
           'stockType': _globalStockType,
+          'isOutOfStock': isOutOfStock, // 👈 Track stock status in cart
         });
       }
 
@@ -431,6 +430,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: const Text('Sales Invoice'),
           backgroundColor: Colors.teal.shade800,
@@ -454,27 +454,28 @@ class _SalesScreenState extends State<SalesScreen> {
           ],
         ),
         body: Padding(
-          padding: const EdgeInsets.all(12.0),
+          padding: const EdgeInsets.all(10.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Top Bar (Invoice No, Stock Type, Payment Mode)
               Row(
                 children: [
                   Expanded(
                     flex: 2,
                     child: SizedBox(
-                      height: 42,
+                      height: 40,
                       child: TextField(
                         controller: _invoiceNoController,
                         readOnly: true,
-                        style: const TextStyle(fontSize: 12),
+                        style: const TextStyle(fontSize: 11),
                         decoration: InputDecoration(
                           labelText: 'Invoice No',
                           border: const OutlineInputBorder(),
                           isDense: true,
                           filled: true,
                           fillColor: Colors.grey.shade200,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                         ),
                       ),
                     ),
@@ -483,12 +484,12 @@ class _SalesScreenState extends State<SalesScreen> {
                   Expanded(
                     flex: 2,
                     child: SizedBox(
-                      height: 42,
+                      height: 40,
                       child: DropdownButtonFormField<String>(
                         value: _globalStockType,
-                        items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type, style: const TextStyle(fontSize: 12)))).toList(),
+                        items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type, style: const TextStyle(fontSize: 11)))).toList(),
                         onChanged: (val) => setState(() => _globalStockType = val!),
-                        decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10)),
+                        decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8)),
                       ),
                     ),
                   ),
@@ -496,97 +497,136 @@ class _SalesScreenState extends State<SalesScreen> {
                   Expanded(
                     flex: 2,
                     child: SizedBox(
-                      height: 42,
+                      height: 40,
                       child: DropdownButtonFormField<String>(
                         value: _paymentMode,
                         items: _paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))).toList(),
                         onChanged: (val) => setState(() => _paymentMode = val!),
-                        decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10)),
+                        decoration: const InputDecoration(labelText: 'Payment', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8)),
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
 
+              // Date & Customer Searchable Autocomplete
               Row(
                 children: [
-                  Expanded(
-                    flex: 2,
-                    child: SizedBox(
-                      height: 42,
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          side: BorderSide(color: Colors.grey.shade400),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        ),
-                        onPressed: _selectDate,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.calendar_today, size: 13, color: Colors.teal),
-                            const SizedBox(width: 4),
-                            Text(
-                              DateFormat('dd-MM-yy').format(_selectedDate),
-                              style: const TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
+                  SizedBox(
+                    height: 40,
+                    width: 90,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        side: BorderSide(color: Colors.grey.shade400),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                      onPressed: _selectDate,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.calendar_today, size: 12, color: Colors.teal),
+                          const SizedBox(width: 3),
+                          Text(DateFormat('dd-MM-yy').format(_selectedDate), style: const TextStyle(color: Colors.black87, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ],
                       ),
                     ),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
-                    flex: 5,
                     child: SizedBox(
-                      height: 42,
-                      child: SearchableField(
-                        label: 'Customer / Party Name *',
-                        items: _allAccounts,
-                        controller: _partyController,
-                        onSelected: (val) {
-                          _partyController.text = val;
-                          _checkForPendingOrders(val);
+                      height: 40,
+                      child: Autocomplete<Account>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return _allAccountsList;
+                          }
+                          return _allAccountsList.where((acc) => acc.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) || (acc.phone != null && acc.phone!.contains(textEditingValue.text)));
+                        },
+                        displayStringForOption: (Account option) => option.name,
+                        onSelected: (Account selection) {
+                          _partyController.text = selection.name;
+                          _checkForPendingOrders(selection.name);
+                        },
+                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                          if (_partyController.text.isNotEmpty && controller.text.isEmpty) {
+                            controller.text = _partyController.text;
+                          }
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            style: const TextStyle(fontSize: 12),
+                            decoration: const InputDecoration(
+                              labelText: 'Customer / Party Name *',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              prefixIcon: Icon(Icons.person, size: 16),
+                            ),
+                            onChanged: (val) => _partyController.text = val,
+                          );
+                        },
+                        optionsViewBuilder: (context, onSelected, options) {
+                          return Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 4,
+                              child: SizedBox(
+                                width: 300,
+                                height: 200,
+                                child: ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: options.length + 1,
+                                  itemBuilder: (context, index) {
+                                    if (index == 0) {
+                                      return ListTile(
+                                        tileColor: Colors.teal.shade50,
+                                        leading: const Icon(Icons.person_add, color: Colors.teal, size: 16),
+                                        title: const Text('+ Add New Party / Customer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          _navigateToAddNewParty();
+                                        },
+                                      );
+                                    }
+                                    final acc = options.elementAt(index - 1);
+                                    return ListTile(
+                                      dense: true,
+                                      title: Text(acc.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                      subtitle: Text('Ph: ${acc.phone ?? "N/A"} | Group: ${acc.groupCategory}', style: const TextStyle(fontSize: 9)),
+                                      onTap: () => onSelected(acc),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          );
                         },
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  SizedBox(
-                    height: 42,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal.shade700, 
-                        foregroundColor: Colors.white, 
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                      ),
-                      icon: const Icon(Icons.person_add, size: 14),
-                      label: const Text('New', style: TextStyle(fontSize: 11)),
-                      onPressed: _navigateToAddNewParty,
-                    ),
-                  ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
 
-              const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(height: 4),
+              const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const SizedBox(height: 2),
 
-              // 🔥 Scrollable Area containing both the existing items list AND the dynamic bottom search bar
+              // 📦 Items List & Inline Product Search Bar inside Scrollable Expanded area
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    // 1. Added Items List
                     ...List.generate(_cartItems.length, (index) {
                       final item = _cartItems[index];
                       double total = (item['qty'] as int) * (item['price'] as double);
+                      bool isOutOfStock = item['isOutOfStock'] ?? false;
+
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                         margin: const EdgeInsets.symmetric(vertical: 2),
-                        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4)),
+                        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: isOutOfStock ? Colors.red.shade300 : Colors.grey.shade300), borderRadius: BorderRadius.circular(4)),
                         child: Row(
                           children: [
                             Expanded(
@@ -594,13 +634,26 @@ class _SalesScreenState extends State<SalesScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('${index + 1}. ${item['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                  Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                  Text(
+                                    '${index + 1}. ${item['name']}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                      color: isOutOfStock ? Colors.red : Colors.black87, // 👈 Red font in cart if out of stock
+                                    ),
+                                  ),
+                                  Text(
+                                    'SKU: ${item['sku']}${isOutOfStock ? " (No Stock)" : ""}',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: isOutOfStock ? Colors.red.shade700 : Colors.grey, // 👈 Red subtitle in cart if out of stock
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
                             SizedBox(
-                              width: 50,
+                              width: 45,
                               child: TextField(
                                 controller: TextEditingController(text: item['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
                                 keyboardType: TextInputType.number,
@@ -616,7 +669,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             ),
                             const SizedBox(width: 4),
                             SizedBox(
-                              width: 65,
+                              width: 60,
                               child: TextField(
                                 controller: TextEditingController(text: item['price'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
                                 keyboardType: TextInputType.number,
@@ -631,12 +684,12 @@ class _SalesScreenState extends State<SalesScreen> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
+                            Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red, size: 16),
                               onPressed: () => setState(() => _cartItems.removeAt(index)),
                               constraints: const BoxConstraints(),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
                             ),
                           ],
                         ),
@@ -645,9 +698,9 @@ class _SalesScreenState extends State<SalesScreen> {
 
                     const SizedBox(height: 4),
 
-                    // 2. Dynamic Search Bar / Qty / Price Input (Always right below the items list)
+                    // Inline Search Bar for Inventory Items with Stock Check & Red Text Styling
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -655,7 +708,7 @@ class _SalesScreenState extends State<SalesScreen> {
                           if (_selectedInlineProduct == null)
                             Autocomplete<InventoryItem>(
                               optionsBuilder: (TextEditingValue textEditingValue) {
-                                if (textEditingValue.text.isEmpty) return const Iterable<InventoryItem>.empty();
+                                if (textEditingValue.text.isEmpty) return _allInventoryItems;
                                 return _allInventoryItems.where((item) =>
                                   item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
                                   (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
@@ -663,11 +716,9 @@ class _SalesScreenState extends State<SalesScreen> {
                               },
                               displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
                               onSelected: (InventoryItem selection) {
-                                // 🔍 Check if already exists in cart
                                 int existingIndex = _cartItems.indexWhere((item) => item['name'] == selection.itemName);
 
                                 if (existingIndex != -1) {
-                                  // Agar pehle se hai, toh naya row banane ke bajay wahan focus kar dein aur qty badha dein
                                   setState(() {
                                     _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + 1;
                                   });
@@ -676,6 +727,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                   );
                                   _inlineSearchController.clear();
                                 } else {
+                                  bool isOutOfStock = selection.stockQuantity <= 0;
                                   setState(() {
                                     _selectedInlineProduct = selection;
                                     _inlinePriceController.text = selection.priceA.toString();
@@ -693,14 +745,14 @@ class _SalesScreenState extends State<SalesScreen> {
                                 }
                                 return TextField(
                                   controller: controller,
-                                  focusNode: _searchFocusNode,
+                                  focusNode: focusNode,
                                   style: const TextStyle(fontSize: 12),
-                                  decoration: InputDecoration(
+                                  decoration: const InputDecoration(
                                     labelText: 'Search Product Name or SKU to add...',
-                                    border: const OutlineInputBorder(),
+                                    border: OutlineInputBorder(),
                                     isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                    prefixIcon: const Icon(Icons.search, size: 16),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    prefixIcon: Icon(Icons.search, size: 16),
                                   ),
                                   onChanged: (val) => _inlineSearchController.text = val,
                                 );
@@ -717,22 +769,38 @@ class _SalesScreenState extends State<SalesScreen> {
                                         padding: EdgeInsets.zero,
                                         itemCount: options.length + 1,
                                         itemBuilder: (context, index) {
-                                          if (index == options.length) {
+                                          if (index == 0) {
                                             return ListTile(
                                               tileColor: Colors.teal.shade100,
                                               leading: const Icon(Icons.add_circle, color: Colors.teal, size: 16),
-                                              title: const Text('Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
+                                              title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
                                               onTap: () async {
+                                                Navigator.pop(context);
                                                 await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
                                                 await _loadDropdownDataAndSettings();
                                               },
                                             );
                                           }
-                                          final item = options.elementAt(index);
+                                          final item = options.elementAt(index - 1);
+                                          bool isOutOfStock = item.stockQuantity <= 0;
+
                                           return ListTile(
                                             dense: true,
-                                            title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                                            subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9)),
+                                            title: Text(
+                                              item.itemName,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 11,
+                                                color: isOutOfStock ? Colors.red : Colors.black87,
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              'SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}',
+                                              style: TextStyle(
+                                                fontSize: 9,
+                                                color: isOutOfStock ? Colors.red.shade700 : Colors.grey,
+                                              ),
+                                            ),
                                             onTap: () => onSelected(item),
                                           );
                                         },
@@ -749,51 +817,47 @@ class _SalesScreenState extends State<SalesScreen> {
                                   flex: 3,
                                   child: Text(
                                     _selectedInlineProduct!.itemName,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: _selectedInlineProduct!.stockQuantity <= 0 ? Colors.red : Colors.teal,
+                                    ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 4),
                                 SizedBox(
-                                  width: 60,
+                                  width: 50,
                                   child: TextField(
                                     controller: _inlineQtyController,
                                     focusNode: _qtyFocusNode,
                                     keyboardType: TextInputType.number,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                    decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(6)),
-                                    onTap: () {
-                                      _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
-                                    },
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                    decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
+                                    onTap: () => _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length),
                                     onSubmitted: (_) {
                                       _priceFocusNode.requestFocus();
                                       _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length);
                                     },
                                   ),
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 4),
                                 SizedBox(
-                                  width: 75,
+                                  width: 65,
                                   child: TextField(
                                     controller: _inlinePriceController,
                                     focusNode: _priceFocusNode,
                                     keyboardType: TextInputType.number,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                    decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(6)),
-                                    onTap: () {
-                                      _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length);
-                                    },
-                                    onSubmitted: (_) {
-                                      _addInlineItemToCart();
-                                    },
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                    decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
+                                    onTap: () => _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length),
+                                    onSubmitted: (_) => _addInlineItemToCart(),
                                   ),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.red, size: 18),
+                                  icon: const Icon(Icons.close, color: Colors.red, size: 16),
                                   onPressed: () {
-                                    setState(() {
-                                      _selectedInlineProduct = null;
-                                    });
+                                    setState(() => _selectedInlineProduct = null);
                                     _searchFocusNode.requestFocus();
                                   },
                                 ),
@@ -805,61 +869,64 @@ class _SalesScreenState extends State<SalesScreen> {
                   ],
                 ),
               ),
-              const Divider(height: 8),
+              const Divider(height: 6),
               
+              // 📐 Compact Bottom Summary & Fixed Action Buttons
               Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6)),
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
 
                     ...List.generate(_billChargesList.length, (index) {
                       final charge = _billChargesList[index];
                       return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        padding: const EdgeInsets.symmetric(vertical: 1),
                         child: Row(
                           children: [
-                            Expanded(flex: 3, child: Text(charge['name'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                            Expanded(flex: 3, child: Text(charge['name'], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
                             SizedBox(
-                              width: 50,
+                              width: 40,
+                              height: 26,
                               child: TextField(
                                 controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
                                 keyboardType: TextInputType.number,
-                                style: const TextStyle(fontSize: 11),
-                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
+                                style: const TextStyle(fontSize: 10),
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
                                 onChanged: (val) {
                                   charge['qty'] = double.tryParse(val) ?? 1.0;
                                   setState(() {});
                                 },
                               ),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 3),
                             SizedBox(
-                              width: 60,
+                              width: 50,
+                              height: 26,
                               child: TextField(
                                 controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
                                 keyboardType: TextInputType.number,
-                                style: const TextStyle(fontSize: 11),
-                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
+                                style: const TextStyle(fontSize: 10),
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
                                 onChanged: (val) {
                                   charge['rate'] = double.tryParse(val) ?? 0.0;
                                   setState(() {});
                                 },
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 3),
+                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                             IconButton(
-                              icon: const Icon(Icons.close, size: 14, color: Colors.red),
+                              icon: const Icon(Icons.close, size: 12, color: Colors.red),
                               onPressed: () => setState(() => _billChargesList.removeAt(index)),
                               constraints: const BoxConstraints(),
                               padding: EdgeInsets.zero,
@@ -869,101 +936,90 @@ class _SalesScreenState extends State<SalesScreen> {
                       );
                     }),
 
-                    const SizedBox(height: 4),
-                    Autocomplete<Map<String, dynamic>>(
-                      optionsBuilder: (TextEditingValue textEditingValue) {
-                        if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
-                        return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
-                      },
-                      displayStringForOption: (option) => option['name'],
-                      onSelected: (selection) {
-                        setState(() {
-                          _billChargesList.add({
-                            'name': selection['name'],
-                            'type': selection['type'],
-                            'mode': selection['mode'],
-                            'qty': 1.0,
-                            'rate': selection['value'] ?? 0.0,
+                    const SizedBox(height: 2),
+                    SizedBox(
+                      height: 32,
+                      child: Autocomplete<Map<String, dynamic>>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
+                          return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                        },
+                        displayStringForOption: (option) => option['name'],
+                        onSelected: (selection) {
+                          setState(() {
+                            _billChargesList.add({
+                              'name': selection['name'],
+                              'type': selection['type'],
+                              'mode': selection['mode'],
+                              'qty': 1.0,
+                              'rate': selection['value'] ?? 0.0,
+                            });
                           });
-                        });
-                      },
-                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                        return TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          style: const TextStyle(fontSize: 12),
-                          decoration: const InputDecoration(
-                            labelText: 'Add Freight / Charge...',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            prefixIcon: Icon(Icons.add_circle_outline, size: 16),
-                          ),
-                        );
-                      },
-                      optionsViewBuilder: (context, onSelected, options) {
-                        return Align(
-                          alignment: Alignment.topLeft,
-                          child: Material(
-                            elevation: 4,
-                            child: SizedBox(
-                              width: 240,
-                              height: 120,
-                              child: ListView.builder(
-                                padding: EdgeInsets.zero,
-                                itemCount: options.length,
-                                itemBuilder: (context, index) {
-                                  final opt = options.elementAt(index);
-                                  return ListTile(
-                                    dense: true,
-                                    title: Text(opt['name'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                    onTap: () => onSelected(opt),
-                                  );
-                                },
-                              ),
+                        },
+                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: const InputDecoration(
+                              labelText: 'Add Freight / Charge...',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              prefixIcon: Icon(Icons.add_circle_outline, size: 14),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
 
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
                       ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
 
+              // Action Buttons (Preview, WhatsApp, Save Bill)
               Row(
                 children: [
                   Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8)),
-                      icon: const Icon(Icons.preview, size: 14),
-                      label: const Text('Preview', style: TextStyle(fontSize: 12)),
-                      onPressed: () => _generateAndPrintOrShareInvoice(isWhatsApp: false),
+                    child: SizedBox(
+                      height: 36,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
+                        icon: const Icon(Icons.preview, size: 14),
+                        label: const Text('Preview', style: TextStyle(fontSize: 11)),
+                        onPressed: () => _generateAndPrintOrShareInvoice(isWhatsApp: false),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8)),
-                      icon: const Icon(Icons.share, size: 14),
-                      label: const Text('WhatsApp', style: TextStyle(fontSize: 12)),
-                      onPressed: () => _generateAndPrintOrShareInvoice(isWhatsApp: true),
+                    child: SizedBox(
+                      height: 36,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
+                        icon: const Icon(Icons.share, size: 14),
+                        label: const Text('WhatsApp', style: TextStyle(fontSize: 11)),
+                        onPressed: () => _generateAndPrintOrShareInvoice(isWhatsApp: true),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade800, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8)),
-                      onPressed: _saveSalesTransaction,
-                      child: const Text('Save Bill', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    child: SizedBox(
+                      height: 36,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade800, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
+                        onPressed: _saveSalesTransaction,
+                        child: const Text('Save Bill', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
                     ),
                   ),
                 ],
