@@ -69,7 +69,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     _loadDropdownDataAndSettings();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _dateFocusNode.requestFocus();
+      FocusScope.of(context).requestFocus(_dateFocusNode);
     });
   }
 
@@ -118,7 +118,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     }
   }
 
-  // 📅 Compact & Modern Date Picker with Manual Entry Support
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -147,6 +146,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
         _selectedDate = picked;
         _dateController.text = DateFormat('dd-MM-yyyy').format(picked);
       });
+      _partyFocusNode.requestFocus();
     }
   }
 
@@ -319,7 +319,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+                        pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)), // Fixed const issue
                         for (var charge in _billChargesList)
                           Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         if (_isGstActive) Text('GST (18%): + ₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
@@ -449,7 +449,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            const pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)),
+                            pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)), // Fixed const issue
                             pw.Text('₹ ${_subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
@@ -458,8 +458,8 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
-                              pw.Text('${charge['name']}:', style: const pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                              pw.Text('${charge['name']}:', style: pw.TextStyle(fontSize: 11)),
+                              pw.Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
                         ],
@@ -468,16 +468,16 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
-                              const pw.Text('CGST (9%):', style: pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${(_taxAmount / 2).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                              pw.Text('CGST (9%):', style: pw.TextStyle(fontSize: 11)), // Fixed const issue
+                              pw.Text('₹ ${(_taxAmount / 2).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
                           pw.SizedBox(height: 4),
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
-                              const pw.Text('SGST (9%):', style: pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${(_taxAmount / 2).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                              pw.Text('SGST (9%):', style: pw.TextStyle(fontSize: 11)), // Fixed const issue
+                              pw.Text('₹ ${(_taxAmount / 2).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
                         ],
@@ -600,7 +600,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       _billChargesList.clear();
     });
     Future.delayed(const Duration(milliseconds: 50), () {
-      _dateFocusNode.requestFocus();
+      FocusScope.of(context).requestFocus(_dateFocusNode);
     });
   }
 
@@ -712,6 +712,9 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                           padding: const EdgeInsets.only(right: 4),
                         ),
                       ),
+                      onTap: () {
+                        _dateController.selection = TextSelection(baseOffset: 0, extentOffset: _dateController.text.length);
+                      },
                       onSubmitted: (_) {
                         _partyFocusNode.requestFocus();
                       },
@@ -871,7 +874,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                             SizedBox(
                               width: 45,
                               child: TextField(
-                                controller: TextEditingController(text: item['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
+                                controller: TextEditingController(text: item['qty'].toString())..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                 textAlign: TextAlign.center,
@@ -890,7 +893,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                             SizedBox(
                               width: 60,
                               child: TextField(
-                                controller: TextEditingController(text: item['price'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
+                                controller: TextEditingController(text: item['price'].toString())..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                 textAlign: TextAlign.right,
@@ -1073,15 +1076,150 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const Divider(height: 6),
               
-              // Bottom Summary
+              // Freight & Discount Charges Section
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                    Text('Return Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blue)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+
+                    ...List.generate(_billChargesList.length, (index) {
+                      final charge = _billChargesList[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 1),
+                        child: Row(
+                          children: [
+                            Expanded(flex: 3, child: Text(charge['name'], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
+                            SizedBox(
+                              width: 40,
+                              height: 26,
+                              child: TextField(
+                                controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
+                                keyboardType: TextInputType.number,
+                                style: const TextStyle(fontSize: 10),
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
+                                onChanged: (val) {
+                                  charge['qty'] = double.tryParse(val) ?? 1.0;
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            SizedBox(
+                              width: 50,
+                              height: 26,
+                              child: TextField(
+                                controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
+                                keyboardType: TextInputType.number,
+                                style: const TextStyle(fontSize: 10),
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
+                                onChanged: (val) {
+                                  charge['rate'] = double.tryParse(val) ?? 0.0;
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 12, color: Colors.red),
+                              onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+
+                    const SizedBox(height: 2),
+                    SizedBox(
+                      height: 32,
+                      child: TapRegion(
+                        onTapOutside: (_) {},
+                        child: RawAutocomplete<Map<String, dynamic>>(
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
+                            return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                          },
+                          displayStringForOption: (option) => option['name'],
+                          onSelected: (selection) {
+                            setState(() {
+                              _billChargesList.add({
+                                'name': selection['name'],
+                                'type': selection['type'],
+                                'mode': selection['mode'],
+                                'qty': 1.0,
+                                'rate': selection['value'] ?? 0.0,
+                              });
+                            });
+                            _freightSearchController.clear();
+                          },
+                          textEditingController: _freightSearchController,
+                          focusNode: _freightFocusNode,
+                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                            return TextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: const InputDecoration(
+                                labelText: 'Add Freight / Discount Charge...',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                prefixIcon: Icon(Icons.add_circle_outline, size: 14),
+                              ),
+                              onSubmitted: (val) {
+                                if (val.trim().isEmpty) {
+                                  FocusScope.of(context).requestFocus(_saveButtonFocusNode);
+                                }
+                              },
+                            );
+                          },
+                          optionsViewBuilder: (context, onSelected, options) {
+                            return Align(
+                              alignment: Alignment.topLeft,
+                              child: Material(
+                                elevation: 4,
+                                child: SizedBox(
+                                  width: 240,
+                                  height: 120,
+                                  child: ListView.builder(
+                                    padding: EdgeInsets.zero,
+                                    itemCount: options.length,
+                                    itemBuilder: (context, index) {
+                                      final opt = options.elementAt(index);
+                                      return ListTile(
+                                        dense: true,
+                                        title: Text(opt['name'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        onTap: () => onSelected(opt),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blue)),
+                      ],
+                    ),
                   ],
                 ),
               ),
