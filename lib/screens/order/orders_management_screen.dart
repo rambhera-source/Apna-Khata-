@@ -1023,7 +1023,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
+                          Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
                         ],
                       ),
                     ],
