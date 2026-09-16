@@ -26,7 +26,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
   bool _isGoogleDriveLinked = false;
   String _linkedGoogleAccount = 'Not Connected';
   
-  // 📁 Custom Backup Folder Path Variable
   String _customBackupPath = '';
 
   @override
@@ -38,7 +37,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     });
   }
 
-  // 📂 डिफ़ॉल्ट या सेवेन्द्र पाथ लोड करें
   Future<void> _loadInitialBackupPath() async {
     final directory = await getApplicationDocumentsDirectory();
     setState(() {
@@ -46,7 +44,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     });
   }
 
-  // 📁 यूजर द्वारा कस्टम फोल्डर चुनने का फंक्शन
   Future<void> _pickCustomBackupFolder() async {
     try {
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
@@ -65,7 +62,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
-  // ✨ Startup पर कूल और प्रीमियम रिस्टोर प्रॉम्प्ट
   Future<void> _checkForExistingLocalBackupOnStartup() async {
     try {
       final backupDir = Directory(_customBackupPath);
@@ -106,7 +102,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     } catch (_) {}
   }
 
-  // ✨ प्रीमियम प्रोग्रेस/प्रोसेसिंग डायलॉग
   void _showProcessingDialog(String message) {
     showDialog(
       context: context,
@@ -128,7 +123,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     );
   }
 
-  // ✨ प्रीमियम सक्सेस / फेलर पॉप-अप
   void _showResultDialog({required bool isSuccess, required String title, required String message}) {
     showDialog(
       context: context,
@@ -157,7 +151,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     );
   }
 
-  // ✨ जेनेरिक स्मार्ट डायलॉग
   void _showSmartDialog({
     required String title,
     required String subtitle,
@@ -201,7 +194,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     );
   }
 
-  // 📂 डेट-वाइज बैकअप लिस्ट देखने का प्रीमियम बॉटम शीट
   Future<void> _showLocalBackupsListDialog() async {
     try {
       final backupDir = Directory(_customBackupPath);
@@ -289,7 +281,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
-  // 📤 App Close पर ऑटो-बैकअप (कस्टम फोल्डर में)
   Future<void> _performAutoBackupOnClose() async {
     try {
       final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
@@ -505,7 +496,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
         body: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
-            // 📁 Custom Backup Folder Path Section
             const Text('Backup Storage Path / Folder', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
             const SizedBox(height: 8),
             Card(
