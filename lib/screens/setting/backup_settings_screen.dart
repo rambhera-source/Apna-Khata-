@@ -486,7 +486,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
 
       updateProgress('Backup Completed Successfully!', 1.0);
       await Future.delayed(const Duration(milliseconds: 400));
-      return file; // Return the generated file for sharing
+      return file;
     });
   }
 
@@ -685,7 +685,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  icon: constIcon(Icons.upload_file_rounded, size: 18),
+                  icon: const Icon(Icons.upload_file_rounded, size: 18),
                   label: const Text('Export Backup', style: TextStyle(fontSize: 13)),
                   onPressed: _exportBackup,
                 ),
