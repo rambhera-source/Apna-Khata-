@@ -26,7 +26,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _purchasePriceController = TextEditingController(text: '0');
   final _tierPriceController = TextEditingController(text: '0');
 
-  // 🔥 Single Unified Categories List state
   List<String> _flattenedCategories = [];
   String? _selectedCategory;
 
@@ -42,6 +41,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _loadMastersAndEditData();
   }
 
+  // 🔥 Database से Categories और Tax Slabs को लोड करना
   Future<void> _loadMastersAndEditData() async {
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
     List<String> loadedFlatCats = [];
@@ -143,7 +143,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     });
   }
 
-  // 🔥 Quick Add Category Dialog (Combined Main > Sub)
+  // Quick Add Category Dialog inside Product Screen
   void _showQuickAddCategoryDialog() {
     final mainController = TextEditingController();
     final subController = TextEditingController();
@@ -357,7 +357,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 12),
 
-              // 🔥 Single Unified Category Search/Dropdown with Quick Add Button
               Row(
                 children: [
                   Expanded(
@@ -410,7 +409,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 12),
 
-              // 🔥 Tax Slab Selection with Quick Add Button
               Row(
                 children: [
                   Expanded(
