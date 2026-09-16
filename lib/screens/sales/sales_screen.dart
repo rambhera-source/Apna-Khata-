@@ -30,7 +30,6 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _invoiceNoController = TextEditingController(text: 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
-  // Inline Product Search & Input Controllers with FocusNodes for smooth flow
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
@@ -97,10 +96,10 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  void _navigateToAddNewPartyWithPreFill(String partyName) async {
+  void _navigateToAddNewParty() async {
     final String? newPartyName = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => AddAccountScreen(initialName: partyName)),
+      MaterialPageRoute(builder: (context) => const AddAccountScreen()),
     );
 
     await _loadDropdownDataAndSettings();
@@ -339,7 +338,6 @@ class _SalesScreenState extends State<SalesScreen> {
 
     if (!mounted) return;
 
-    // ✨ Bill Saved Success Dialog with Share & Print options
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -449,7 +447,6 @@ class _SalesScreenState extends State<SalesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Invoice No, Stock Type & Payment Mode Row
               Row(
                 children: [
                   Expanded(
@@ -501,7 +498,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 8),
 
-              // 2. Date Selection & Customer Row
               Row(
                 children: [
                   Expanded(
@@ -534,75 +530,36 @@ class _SalesScreenState extends State<SalesScreen> {
                     flex: 5,
                     child: SizedBox(
                       height: 42,
-                      child: Autocomplete<String>(
-                        optionsBuilder: (TextEditingValue textEditingValue) {
-                          if (textEditingValue.text.isEmpty) {
-                            return const Iterable<String>.empty();
-                          }
-                          return _allAccounts.where((acc) => acc.toLowerCase().contains(textEditingValue.text.toLowerCase()));
-                        },
-                        onSelected: (String selection) {
-                          _partyController.text = selection;
-                          _checkForPendingOrders(selection);
-                        },
-                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                          if (_partyController.text.isNotEmpty && controller.text.isEmpty) {
-                            controller.text = _partyController.text;
-                          }
-                          return TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            decoration: InputDecoration(
-                              labelText: 'Customer / Party Name *',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-                              suffixIcon: const Icon(Icons.arrow_drop_down, size: 20),
-                            ),
-                            onChanged: (val) => _partyController.text = val,
-                          );
-                        },
-                        optionsViewBuilder: (context, onSelected, options) {
-                          return Align(
-                            alignment: Alignment.topLeft,
-                            child: Material(
-                              elevation: 4,
-                              child: SizedBox(
-                                width: 280,
-                                height: 160,
-                                child: ListView.builder(
-                                  padding: EdgeInsets.zero,
-                                  itemCount: options.length + 1,
-                                  itemBuilder: (context, index) {
-                                    if (index == options.length) {
-                                      return ListTile(
-                                        tileColor: Colors.teal.shade50,
-                                        leading: const Icon(Icons.person_add, color: Colors.teal, size: 16),
-                                        title: Text('Add New: "${_partyController.text}"', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
-                                        onTap: () => _navigateToAddNewPartyWithPreFill(_partyController.text),
-                                      );
-                                    }
-                                    final opt = options.elementAt(index);
-                                    return ListTile(
-                                      dense: true,
-                                      title: Text(opt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                      onTap: () => onSelected(opt),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                          );
+                      child: SearchableField(
+                        label: 'Customer / Party Name *',
+                        items: _allAccounts,
+                        controller: _partyController,
+                        onSelected: (val) {
+                          _partyController.text = val;
+                          _checkForPendingOrders(val);
                         },
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    height: 42,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade700, 
+                        foregroundColor: Colors.white, 
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                      icon: const Icon(Icons.person_add, size: 14),
+                      label: const Text('New', style: TextStyle(fontSize: 11)),
+                      onPressed: _navigateToAddNewParty,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
 
-              // 3. Items List with Dynamic Inline Search at the bottom
               const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 4),
 
@@ -680,7 +637,6 @@ class _SalesScreenState extends State<SalesScreen> {
                     ),
                     const SizedBox(height: 4),
 
-                    // Inline Product Search Bar
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
@@ -800,7 +756,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const Divider(height: 8),
               
-              // 5. Bottom Calculation & Grand Total (Flexible Freight/Charges)
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6)),
@@ -876,7 +831,6 @@ class _SalesScreenState extends State<SalesScreen> {
                             'name': selection['name'],
                             'type': selection['type'],
                             'mode': selection['mode'],
-                            // 🔥 Flexible default values (User can modify freely)
                             'qty': 1.0,
                             'rate': selection['value'] ?? 0.0,
                           });
@@ -934,7 +888,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 8),
 
-              // Action Buttons
               Row(
                 children: [
                   Expanded(
