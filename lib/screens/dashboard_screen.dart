@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../database/database_helper.dart';
 import '../models/transaction_model.dart';
+import '../models/inventory_model.dart'; // 👈 Added missing inventory model
+import '../models/account.dart'; // 👈 Added missing account model
 
 import 'sales/sales_screen.dart';
 import 'sales/sales_return_screen.dart';
@@ -195,7 +197,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {}
   }
 
-  // ✨ स्मार्ट बैकअप और एग्जिट प्रोसेस
   Future<void> _triggerBackupAndExit() async {
     bool shouldExit = false;
     await showDialog(
@@ -243,7 +244,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               await _performAutoBackupOnClose();
               if (!mounted) return;
-              Navigator.pop(context); // प्रोग्रेस बंद करें
+              Navigator.pop(context);
 
               await showDialog(
                 context: context,
@@ -279,7 +280,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     if (shouldExit) {
-      exit(0); // PC / Mobile ऐप पूरी तरह से बंद हो जाएगी
+      exit(0);
     }
   }
 
@@ -395,13 +396,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                 },
               ),
-              // 🚪 PC और Mobile दोनों के लिए Sidebar में सबसे नीचे 'Exit App' का ऑप्शन
               ListTile(
                 leading: const Icon(Icons.exit_to_app, color: Colors.red),
                 title: const Text('Exit App', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                 onTap: () {
-                  Navigator.pop(context); // Drawer बंद करें
-                  _triggerBackupAndExit(); // बैकअप और एग्जिट ट्रिगर करें
+                  Navigator.pop(context);
+                  _triggerBackupAndExit();
                 },
               ),
             ],
@@ -495,7 +495,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             case 'Parties':
                               return _buildMenuCard(context, 'Parties', Icons.people, Colors.indigo, const PartiesMasterScreen());
                             case 'Inventory':
-                            return _buildMenuCard(context, 'Inventory', Icons.inventory_2, Colors.purple, const ProductInventoryScreen());
+                              return _buildMenuCard(context, 'Inventory', Icons.inventory_2, Colors.purple, const ProductInventoryScreen());
                             case 'Day Book':
                               return _buildMenuCard(context, 'Day Book', Icons.book, Colors.brown, const DayBookScreen());
                             case 'Ledger':
