@@ -111,7 +111,6 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     }
   }
 
-  // 📅 Compact & Modern Date Picker with Manual Entry Support
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -357,7 +356,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             Text('Sales Return Saved!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('Sales return safalपूर्वक save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
+        content: const Text('Sales return safalpurvak save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () {
@@ -408,7 +407,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Discard Return Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Kya aap waqai is sales return bill ko exit karna chahte hain?', style: TextStyle(fontSize: 13)),
+        content: const Text('Kya aap waqai is sales return bill को exit karna chahte hain?', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
@@ -750,7 +749,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                                                 title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.green)),
                                                 onTap: () async {
                                                   Navigator.pop(context);
-                                                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
+                                                  await Navigator.path(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
                                                   await _loadDropdownDataAndSettings();
                                                 },
                                               );
@@ -890,11 +889,33 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                         ),
                       );
                     }),
+                  ],
+                ),
+              ),
 
-                    const SizedBox(height: 2),
-                    SizedBox(
-                      height: 32,
-                      child: TapRegion(
-                        onTapOutside: (_) {},
-                        child: RawAutocomplete<Map<String, dynamic>>,
-                        // ...
+              const SizedBox(height: 6),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.green)),
+                  ElevatedButton.icon(
+                    focusNode: _saveButtonFocusNode,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade800,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                    icon: const Icon(Icons.save, size: 16),
+                    label: const Text('Save Return', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: _saveSalesReturnTransaction,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
