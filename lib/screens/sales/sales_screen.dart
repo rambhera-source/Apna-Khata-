@@ -61,9 +61,6 @@ class _SalesScreenState extends State<SalesScreen> {
   String _companyGstin = '';
   double _gstRate = 18.0;
 
-  List<SalesOrder> _pendingOrdersList = [];
-  SalesOrder? _selectedPendingOrder;
-
   @override
   void initState() {
     super.initState();
@@ -117,20 +114,140 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
+  // 🔍 Check and Show Premium Pending Orders Popup Dialog
   Future<void> _checkForPendingOrders(String partyName) async {
     if (partyName.isEmpty) return;
 
-    final orders = await DatabaseHelper.isar.salesOrders
+    final pendingOrders = await DatabaseHelper.isar.salesOrders
         .filter()
         .partyNameEqualTo(partyName, caseSensitive: false)
         .and()
         .statusEqualTo('Pending')
         .findAll();
 
-    setState(() {
-      _pendingOrdersList = orders;
-      _selectedPendingOrder = orders.isNotEmpty ? orders.first : null;
-    });
+    if (pendingOrders.isEmpty || !mounted) return;
+
+    // Track selected orders inside the popup dialog
+    Set<SalesOrder> selectedOrdersForBilling = {};
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.bookmark_added_rounded, color: Colors.teal.shade800, size: 26),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Pending Orders Found (${pendingOrders.length})',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 350,
+            height: 280,
+            child: ListView.builder(
+              itemCount: pendingOrders.length,
+              itemBuilder: (context, index) {
+                final order = pendingOrders[index];
+                final isChecked = selectedOrdersForBilling.contains(order);
+
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isChecked ? Colors.teal.shade50 : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isChecked ? Colors.teal.shade300 : Colors.grey.shade300),
+                  ),
+                  child: CheckboxListTile(
+                    dense: true,
+                    activeColor: Colors.teal,
+                    title: Text('Order No: ${order.orderNo}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    subtitle: Text('Date: ${DateFormat('dd-MM-yyyy').format(order.date)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    value: isChecked,
+                    onChanged: (bool? value) {
+                      setDialogState(() {
+                        if (value == true) {
+                          selectedOrdersForBilling.add(order);
+                        } else {
+                          selectedOrdersForBilling.remove(order);
+                        }
+                      });
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Skip', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                if (selectedOrdersForBilling.isNotEmpty) {
+                  _loadItemsFromSelectedOrders(selectedOrdersForBilling);
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Load Into Bill'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 📦 Load Products from Selected Pending Orders into Cart
+  void _loadItemsFromSelectedOrders(Set<SalesOrder> orders) async {
+    for (var order in orders) {
+      await order.items.load();
+      for (var orderItem in order.items) {
+        // Find matching inventory item for stock info & SKU
+        final invMatch = _allInventoryItems.firstWhere(
+          (inv) => inv.itemName.toLowerCase() == orderItem.productName.toLowerCase(),
+          orElse: () => InventoryItem()
+            ..itemName = orderItem.productName
+            ..sku = '-'
+            ..priceA = orderItem.price
+            ..stockQuantity = 0,
+        );
+
+        bool isOutOfStock = invMatch.stockQuantity <= 0;
+
+        setState(() {
+          int existingIndex = _cartItems.indexWhere((item) => item['name'] == orderItem.productName);
+
+          if (existingIndex != -1) {
+            _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + orderItem.qty;
+          } else {
+            _cartItems.add({
+              'name': orderItem.productName,
+              'sku': invMatch.sku ?? '-',
+              'qty': orderItem.qty,
+              'price': orderItem.price,
+              'stockType': _globalStockType,
+              'isOutOfStock': isOutOfStock,
+            });
+          }
+        });
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Pending order items successfully loaded into bill!'), backgroundColor: Colors.green),
+    );
   }
 
   // 📅 Compact & Modern Date Picker with Manual Entry Support
@@ -203,7 +320,6 @@ class _SalesScreenState extends State<SalesScreen> {
       _inlinePriceController.text = '0';
     });
 
-    // 🎯 Focus loops back to product search for continuous adding
     Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
   }
 
@@ -754,7 +870,6 @@ class _SalesScreenState extends State<SalesScreen> {
                                   ),
                                   onChanged: (val) => _inlineSearchController.text = val,
                                   onSubmitted: (val) {
-                                    // 🎯 If empty text submitted on product search, jump to freight/charges box
                                     if (val.trim().isEmpty) {
                                       _freightFocusNode.requestFocus();
                                     }
@@ -858,7 +973,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const Divider(height: 6),
               
-              // 📐 Bottom Summary & Action Buttons (Will float up smoothly when interacting with freight/charges)
+              // 📐 Bottom Summary & Action Buttons
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
@@ -957,7 +1072,6 @@ class _SalesScreenState extends State<SalesScreen> {
                               prefixIcon: Icon(Icons.add_circle_outline, size: 14),
                             ),
                             onSubmitted: (val) {
-                              // 🎯 If empty freight submitted, jump focus to Save Button
                               if (val.trim().isEmpty) {
                                 FocusScope.of(context).requestFocus(_saveButtonFocusNode);
                               }
