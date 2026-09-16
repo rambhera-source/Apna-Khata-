@@ -967,7 +967,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text('Grand Total: ₹ ${_grandTotal.xsdToString() ?? _grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green)), // Fixed string formatting context safely
+                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green)),
                       ],
                     ),
                   ],
@@ -988,7 +988,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: `4`),
                   Expanded(
                     child: SizedBox(
                       height: 36,
