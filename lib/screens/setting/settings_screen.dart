@@ -17,7 +17,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<String> _routes = [];
   List<String> _salesmen = [];
   
-  // 🔥 Categories & Sub-Categories Map (Main Category -> List of Sub-Categories)
   Map<String, List<String>> _productCategoriesMap = {};
 
   List<double> _taxSlabs = [];
@@ -37,9 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _routes = List.from(settings.routes);
         _salesmen = List.from(settings.salesmen);
         
-        // Load categories map or default structure
         if (settings.productCategories.isNotEmpty) {
-          // Backward compatibility or parsing if stored as JSON strings
           for (var catStr in settings.productCategories) {
             try {
               var decoded = jsonDecode(catStr);
@@ -49,7 +46,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _productCategoriesMap[mainCat] = subs;
               }
             } catch (_) {
-              // Fallback if stored as plain string
               _productCategoriesMap[catStr] = [];
             }
           }
@@ -57,7 +53,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _productCategoriesMap = {
             'Accessories': ['Chargers', 'Cables', 'Power Banks', 'Neckbands'],
             'Spare Parts': ['Batteries', 'Displays', 'Touch Glass'],
-            'General': ['Items'],
           };
         }
             
@@ -92,7 +87,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _saveSettings() async {
-    // Convert Map to List of JSON strings for Isar storage
     List<String> encodedCategories = _productCategoriesMap.entries.map((entry) {
       return jsonEncode({'main': entry.key, 'subs': entry.value});
     }).toList();
@@ -129,41 +123,101 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // 🔥 Main Category & Sub-Category Dialog Manager
-  void _showMainCategoryDialog({String? mainCatToEdit}) {
-    final controller = TextEditingController(text: mainCatToEdit ?? '');
+  // 🔥 Smart Category Dialog (Jisme aap nayi Main Category ya existing ke andar Sub-Category select/create kar sakte hain)
+  void _showAddCategoryDialog() {
+    String? selectedExistingMain = _productCategoriesMap.keys.isNotEmpty ? _productCategoriesMap.keys.first : null;
+    bool isCreatingNewMain = false;
+    
+    final newMainController = TextEditingController();
+    final subController = TextEditingController();
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(mainCatToEdit == null ? 'Add Main Category' : 'Edit Main Category'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Main Category Name e.g. Accessories', border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-            onPressed: () {
-              String name = controller.text.trim();
-              if (name.isNotEmpty) {
-                setState(() {
-                  if (mainCatToEdit == null) {
-                    if (!_productCategoriesMap.containsKey(name)) {
-                      _productCategoriesMap[name] = [];
-                    }
-                  } else if (mainCatToEdit != name) {
-                    var subs = _productCategoriesMap.remove(mainCatToEdit) ?? [];
-                    _productCategoriesMap[name] = subs;
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Add Category & Sub-Category'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          isCreatingNewMain ? 'Create New Main Category' : 'Select Main Category',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setDialogState(() {
+                            isCreatingNewMain = !isCreatingNewMain;
+                          });
+                        },
+                        child: Text(isCreatingNewMain ? 'Use Existing' : '+ New Main', style: const TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  if (isCreatingNewMain)
+                    TextField(
+                      controller: newMainController,
+                      decoration: const InputDecoration(
+                        labelText: 'New Main Category e.g. Accessories',
+                        border: OutlineInputBorder(),
+                      ),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      value: selectedExistingMain,
+                      items: _productCategoriesMap.keys.map((main) => DropdownMenuItem(value: main, child: Text(main))).toList(),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          selectedExistingMain = val;
+                        });
+                      },
+                      decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                    ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: subController,
+                    decoration: const InputDecoration(
+                      labelText: 'Sub-Category Name e.g. Chargers',
+                      hintText: 'e.g. Cables, Batteries',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                onPressed: () {
+                  String mainCategory = isCreatingNewMain ? newMainController.text.trim() : (selectedExistingMain ?? '');
+                  String subCategory = subController.text.trim();
+
+                  if (mainCategory.isNotEmpty) {
+                    setState(() {
+                      if (!_productCategoriesMap.containsKey(mainCategory)) {
+                        _productCategoriesMap[mainCategory] = [];
+                      }
+                      if (subCategory.isNotEmpty && !_productCategoriesMap[mainCategory]!.contains(subCategory)) {
+                        _productCategoriesMap[mainCategory]!.add(subCategory);
+                      }
+                    });
+                    _saveSettings();
                   }
-                });
-                _saveSettings();
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('Save'),
-          ),
-        ],
+                  Navigator.pop(context);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -432,7 +486,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Divider(height: 32, thickness: 1),
 
-              // 🔥 1. Categories & Sub-Categories Master Section
+              // 🔥 Categories & Sub-Categories Master Section
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -440,8 +494,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, minimumSize: const Size(80, 32)),
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Main Cat', style: TextStyle(fontSize: 11)),
-                    onPressed: () => _showMainCategoryDialog(),
+                    label: const Text('Add Category', style: TextStyle(fontSize: 11)),
+                    onPressed: _showAddCategoryDialog,
                   ),
                 ],
               ),
@@ -475,10 +529,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                           icon: const Icon(Icons.add, size: 14),
                                           label: const Text('Add Sub', style: TextStyle(fontSize: 11)),
                                           onPressed: () => _showSubCategoryDialog(mainCat),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.edit, size: 16, color: Colors.blue),
-                                          onPressed: () => _showMainCategoryDialog(mainCatToEdit: mainCat),
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.delete, size: 16, color: Colors.red),
@@ -523,7 +573,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const Divider(height: 32, thickness: 1),
 
-              // 🔥 2. Tax Slabs Master Section
+              // Tax Slabs Section
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
