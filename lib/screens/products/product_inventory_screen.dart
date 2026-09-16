@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/inventory_model.dart';
 import 'package:accounting_app/models/transaction_model.dart';
+import 'add_product_screen.dart';
 
 class ProductInventoryScreen extends StatefulWidget {
   const ProductInventoryScreen({super.key});
@@ -31,7 +32,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
   DateTime? _startDate;
   DateTime? _endDate;
 
-  // 🔥 Multi-Select State Management
   final Set<int> _selectedItemIds = {};
   bool _isSelectAll = false;
 
@@ -122,7 +122,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     return txns.isNotEmpty;
   }
 
-  // 🗑️ Bulk Delete with Transaction Safety Check
   void _confirmBulkDelete() async {
     if (_selectedItemIds.isEmpty) return;
 
@@ -188,7 +187,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     );
   }
 
-  // 🗑️ Single Delete with Transaction Safety Check
   void _confirmDelete(InventoryItem item) async {
     bool hasTxn = await _hasTransactions(item.itemName);
 
@@ -598,168 +596,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
     );
   }
 
-  void _showAddEditProductDialog({InventoryItem? itemToEdit}) {
-    final TextEditingController nameController = TextEditingController(text: itemToEdit?.itemName ?? '');
-    final TextEditingController skuController = TextEditingController(text: itemToEdit?.sku ?? '');
-    final TextEditingController openingStockController = TextEditingController(text: itemToEdit?.openingStock?.toString() ?? '0');
-    final TextEditingController qtyController = TextEditingController(text: itemToEdit?.stockQuantity.toString() ?? '0');
-    final TextEditingController purchasePriceController = TextEditingController(text: itemToEdit?.purchasePrice.toString() ?? '0');
-    final TextEditingController tierPriceController = TextEditingController(text: itemToEdit?.priceA.toString() ?? '0');
-    
-    Set<String> uniqueCategories = _allInventoryItems
-        .map((item) => item.category ?? '')
-        .where((cat) => cat.trim().isNotEmpty)
-        .toSet();
-    if (uniqueCategories.isEmpty) uniqueCategories = {'General', 'Charger', 'Power Bank'};
-
-    String selectedCategory = itemToEdit?.category ?? uniqueCategories.first;
-    if (!uniqueCategories.contains(selectedCategory)) {
-      uniqueCategories.add(selectedCategory);
-    }
-
-    String priceCategory = itemToEdit?.priceCategory ?? 'A';
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(itemToEdit == null ? 'Add New Inventory Item' : 'Edit Item Details', style: const TextStyle(fontSize: 16)),
-          content: SizedBox(
-            width: 400,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(labelText: 'Product Name (Mandatory & Unique) *', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: skuController,
-                    decoration: const InputDecoration(labelText: 'SKU ID (Mandatory & Unique) *', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: selectedCategory,
-                    items: uniqueCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                    onChanged: (val) => setDialogState(() => selectedCategory = val ?? 'General'),
-                    decoration: const InputDecoration(labelText: 'Product Category', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: openingStockController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Opening Stock', border: OutlineInputBorder()),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: qtyController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Closing Qty *', border: OutlineInputBorder()),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: purchasePriceController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Purchase Price (₹)', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: DropdownButtonFormField<String>(
-                          value: _priceCategories.contains(priceCategory) ? priceCategory : 'A',
-                          items: _priceCategories.map((cat) => DropdownMenuItem(value: cat, child: Text('Tier $cat'))).toList(),
-                          onChanged: (val) => setDialogState(() => priceCategory = val ?? 'A'),
-                          decoration: const InputDecoration(labelText: 'Price Tier', border: OutlineInputBorder()),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 3,
-                        child: TextField(
-                          controller: tierPriceController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(labelText: 'Tier $priceCategory Price (₹) *', border: const OutlineInputBorder()),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-              onPressed: () async {
-                String name = nameController.text.trim();
-                String sku = skuController.text.trim();
-
-                if (name.isEmpty || sku.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Product Name aur SKU ID dono mandatory hain!'), backgroundColor: Colors.red),
-                  );
-                  return;
-                }
-
-                bool isDuplicate = _allInventoryItems.any((item) => 
-                  (itemToEdit == null || item.id != itemToEdit.id) && 
-                  (item.itemName.toLowerCase() == name.toLowerCase() || 
-                   (sku.isNotEmpty && item.sku != null && item.sku!.toLowerCase() == sku.toLowerCase()))
-                );
-
-                if (isDuplicate) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Yeh Product Name ya SKU ID pehle se मौजूद है!'), backgroundColor: Colors.red),
-                  );
-                  return;
-                }
-
-                await DatabaseHelper.isar.writeTxn(() async {
-                  InventoryItem item = itemToEdit ?? InventoryItem();
-                  item.itemName = name;
-                  item.sku = sku;
-                  item.category = selectedCategory;
-                  item.openingStock = double.tryParse(openingStockController.text) ?? 0.0;
-                  item.stockQuantity = double.tryParse(qtyController.text) ?? 0.0;
-                  item.purchasePrice = double.tryParse(purchasePriceController.text) ?? 0.0;
-                  item.priceA = double.tryParse(tierPriceController.text) ?? 0.0;
-                  item.priceCategory = priceCategory;
-                  item.stockType = 'Fresh';
-
-                  await DatabaseHelper.isar.inventoryItems.put(item);
-                });
-
-                if (!mounted) return;
-                Navigator.pop(context);
-                _loadInventory();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Inventory Successfully Saved!'), backgroundColor: Colors.green),
-                );
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -786,7 +622,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
               onPressed: _confirmBulkDelete,
             ),
           ],
-          // 🔥 Three-Dots Action Menu (Template, Import, Export)
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
@@ -837,7 +672,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         padding: const EdgeInsets.all(10.0),
         child: Column(
           children: [
-            // 🔥 Premium Modern Search & Stock Filter Row
             Row(
               children: [
                 Expanded(
@@ -956,7 +790,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                 ),
               ),
             ],
-            // 🔥 Header Row with Select All Checkbox
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(color: Colors.teal.shade100, borderRadius: BorderRadius.circular(6)),
@@ -984,7 +817,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                     flex: 2,
                     child: InkWell(
                       onTap: () {
-                        // Category Filter Dialog trigger
                         Set<String> categories = _allInventoryItems
                             .map((item) => item.category ?? 'General')
                             .where((cat) => cat.trim().isNotEmpty)
@@ -1065,7 +897,15 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
                           margin: const EdgeInsets.symmetric(vertical: 2),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                           child: InkWell(
-                            onTap: () => _showProductHistoryDialog(item),
+                            onTap: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => AddProductScreen(itemToEdit: item),
+                                ),
+                              );
+                              _loadInventory();
+                            },
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                               child: Row(
@@ -1142,7 +982,13 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
-        onPressed: () => _showAddEditProductDialog(),
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddProductScreen()),
+          );
+          _loadInventory();
+        },
         child: const Icon(Icons.add),
       ),
     );
