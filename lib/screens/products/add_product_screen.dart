@@ -26,10 +26,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _purchasePriceController = TextEditingController(text: '0');
   final _tierPriceController = TextEditingController(text: '0');
 
-  // 🔥 Categories & Tax Slabs state
-  Map<String, List<String>> _categoriesMap = {};
-  String? _selectedMainCategory;
-  String? _selectedSubCategory;
+  // 🔥 Single Unified Categories List state
+  List<String> _flattenedCategories = [];
+  String? _selectedCategory;
 
   List<double> _availableTaxSlabs = [0.0, 5.0, 12.0, 18.0, 28.0];
   double _selectedTaxRate = 18.0;
@@ -45,7 +44,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _loadMastersAndEditData() async {
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
-    Map<String, List<String>> loadedCats = {};
+    List<String> loadedFlatCats = [];
     List<double> loadedTaxes = [0.0, 5.0, 12.0, 18.0, 28.0];
 
     if (settings != null) {
@@ -56,10 +55,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
             if (decoded is Map) {
               String mainCat = decoded['main'] ?? 'General';
               List<String> subs = List<String>.from(decoded['subs'] ?? []);
-              loadedCats[mainCat] = subs;
+              if (subs.isEmpty) {
+                loadedFlatCats.add(mainCat);
+              } else {
+                for (var sub in subs) {
+                  loadedFlatCats.add('$mainCat > $sub');
+                }
+              }
             }
           } catch (_) {
-            loadedCats[catStr] = [];
+            if (!loadedFlatCats.contains(catStr)) {
+              loadedFlatCats.add(catStr);
+            }
           }
         }
       }
@@ -68,15 +75,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
       }
     }
 
-    if (loadedCats.isEmpty) {
-      loadedCats = {
-        'Accessories': ['Chargers', 'Cables', 'Power Banks'],
-        'Spare Parts': ['Batteries', 'Displays'],
-      };
+    if (loadedFlatCats.isEmpty) {
+      loadedFlatCats = [
+        'Accessories > Chargers',
+        'Accessories > Cables',
+        'Accessories > Power Banks',
+        'Spare Parts > Batteries',
+        'Spare Parts > Displays',
+      ];
     }
 
     setState(() {
-      _categoriesMap = loadedCats;
+      _flattenedCategories = loadedFlatCats;
       _availableTaxSlabs = loadedTaxes;
 
       if (widget.itemToEdit != null) {
@@ -94,27 +104,34 @@ class _AddProductScreenState extends State<AddProductScreen> {
         _selectedPriceTier = item.priceCategory ?? 'A';
         _tierPriceController.text = item.priceA.toString();
 
-        // Match category
-        String fullCat = item.category ?? 'General General';
-        if (fullCat.contains(' > ')) {
-          var parts = fullCat.split(' > ');
-          _selectedMainCategory = parts[0];
-          _selectedSubCategory = parts[1];
+        String itemCat = item.category ?? 'Accessories > Chargers';
+        if (_flattenedCategories.contains(itemCat)) {
+          _selectedCategory = itemCat;
         } else {
-          _selectedMainCategory = _categoriesMap.keys.isNotEmpty ? _categoriesMap.keys.first : 'General';
-          _selectedSubCategory = fullCat;
+          _flattenedCategories.add(itemCat);
+          _selectedCategory = itemCat;
         }
       } else {
-        _selectedMainCategory = _categoriesMap.keys.isNotEmpty ? _categoriesMap.keys.first : null;
-        if (_selectedMainCategory != null && _categoriesMap[_selectedMainCategory!]!.isNotEmpty) {
-          _selectedSubCategory = _categoriesMap[_selectedMainCategory!]!.first;
-        }
+        _selectedCategory = _flattenedCategories.isNotEmpty ? _flattenedCategories.first : null;
       }
     });
   }
 
   Future<void> _saveMasterSettingsToDb() async {
-    List<String> encodedCategories = _categoriesMap.entries.map((entry) {
+    Map<String, List<String>> tempMap = {};
+    for (var cat in _flattenedCategories) {
+      if (cat.contains(' > ')) {
+        var parts = cat.split(' > ');
+        String main = parts[0];
+        String sub = parts[1];
+        if (!tempMap.containsKey(main)) tempMap[main] = [];
+        if (!tempMap[main]!.contains(sub)) tempMap[main]!.add(sub);
+      } else {
+        if (!tempMap.containsKey(cat)) tempMap[cat] = [];
+      }
+    }
+
+    List<String> encodedCategories = tempMap.entries.map((entry) {
       return jsonEncode({'main': entry.key, 'subs': entry.value});
     }).toList();
 
@@ -126,7 +143,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     });
   }
 
-  // 🔥 Quick Add Category Dialog from Product Screen
+  // 🔥 Quick Add Category Dialog (Combined Main > Sub)
   void _showQuickAddCategoryDialog() {
     final mainController = TextEditingController();
     final subController = TextEditingController();
@@ -134,7 +151,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add New Category & Sub-Category'),
+        title: const Text('Add New Category'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -156,16 +173,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
             onPressed: () {
               String main = mainController.text.trim();
               String sub = subController.text.trim();
-              if (main.isNotEmpty && sub.isNotEmpty) {
+              if (main.isNotEmpty) {
+                String fullCategory = sub.isNotEmpty ? '$main > $sub' : main;
                 setState(() {
-                  if (!_categoriesMap.containsKey(main)) {
-                    _categoriesMap[main] = [];
+                  if (!_flattenedCategories.contains(fullCategory)) {
+                    _flattenedCategories.add(fullCategory);
+                    _flattenedCategories.sort();
                   }
-                  if (!_categoriesMap[main]!.contains(sub)) {
-                    _categoriesMap[main]!.add(sub);
-                  }
-                  _selectedMainCategory = main;
-                  _selectedSubCategory = sub;
+                  _selectedCategory = fullCategory;
                 });
                 _saveMasterSettingsToDb();
               }
@@ -178,7 +193,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  // 🔥 Quick Add Tax Slab Dialog
   void _showQuickAddTaxDialog() {
     final controller = TextEditingController();
     showDialog(
@@ -241,7 +255,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       return;
     }
 
-    String finalCategory = '${_selectedMainCategory ?? "General"} > ${_selectedSubCategory ?? "General"}';
+    String finalCategory = _selectedCategory ?? 'General > General';
 
     await DatabaseHelper.isar.writeTxn(() async {
       InventoryItem item = widget.itemToEdit ?? InventoryItem();
@@ -287,9 +301,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   Widget build(BuildContext context) {
     bool isEditing = widget.itemToEdit != null;
-    List<String> subCategories = (_selectedMainCategory != null && _categoriesMap.containsKey(_selectedMainCategory))
-        ? _categoriesMap[_selectedMainCategory!]!
-        : [];
 
     return Scaffold(
       appBar: AppBar(
@@ -346,40 +357,54 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 12),
 
-              // 🔥 Main Category & Sub-Category Selection with Quick Add Button
+              // 🔥 Single Unified Category Search/Dropdown with Quick Add Button
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedMainCategory,
-                      hint: const Text('Main Category'),
-                      items: _categoriesMap.keys.map((cat) => DropdownMenuItem(value: cat, child: Text(cat, style: const TextStyle(fontSize: 12)))).toList(),
-                      onChanged: (val) {
+                    child: Autocomplete<String>(
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        if (textEditingValue.text.isEmpty) {
+                          return _flattenedCategories;
+                        }
+                        return _flattenedCategories.where((cat) =>
+                          cat.toLowerCase().contains(textEditingValue.text.toLowerCase())
+                        );
+                      },
+                      displayStringForOption: (String option) => option,
+                      onSelected: (String selection) {
                         setState(() {
-                          _selectedMainCategory = val;
-                          var subs = _categoriesMap[val!] ?? [];
-                          _selectedSubCategory = subs.isNotEmpty ? subs.first : null;
+                          _selectedCategory = selection;
                         });
                       },
-                      decoration: const InputDecoration(labelText: 'Main Category', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        if (_selectedCategory != null && controller.text.isEmpty) {
+                          controller.text = _selectedCategory!;
+                        }
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'Category (Search or Select)',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.category),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          ),
+                          onChanged: (val) {
+                            setState(() {
+                              _selectedCategory = val;
+                            });
+                          },
+                        );
+                      },
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedSubCategory,
-                      hint: const Text('Sub-Category'),
-                      items: subCategories.map((sub) => DropdownMenuItem(value: sub, child: Text(sub, style: const TextStyle(fontSize: 12)))).toList(),
-                      onChanged: (val) => setState(() => _selectedSubCategory = val),
-                      decoration: const InputDecoration(labelText: 'Sub-Category', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
-                    ),
-                  ),
+                  const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.add_circle, color: Colors.teal, size: 28),
+                    icon: const Icon(Icons.add_circle, color: Colors.teal, size: 32),
                     onPressed: _showQuickAddCategoryDialog,
                     tooltip: 'Add New Category',
                     constraints: const BoxConstraints(),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: EdgeInsets.zero,
                   ),
                 ],
               ),
