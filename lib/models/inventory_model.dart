@@ -13,12 +13,18 @@ class InventoryItem {
   String? sku; 
   String? stockType = 'Fresh'; // 'Fresh' ya 'Replacement'
 
+  // 🔥 नए और जरूरी फील्ड्स (Print Name, HSN, Tax, Barcode)
+  String? printName;
+  String? hsnCode;
+  double? taxRate;
+  String? barcode;
+
   late String category = 'Mobile Accessories'; // e.g. "Mobile Accessories", "Cables"
   
   double stockQuantity = 0.0; // Current Stock (Closing Stock)
   double? openingStock = 0.0; // Opening Stock
   
-  double purchasePrice = 0.0; // 🔥 नया: Purchase Price (खरीद मूल्य)
+  double purchasePrice = 0.0; // Purchase Price (खरीद मूल्य)
   String? priceCategory = 'A'; // Selected Price Tier ('A' to 'Z')
   
   late String unit = 'Pcs'; // e.g. "Pcs", "Box", "Set"
