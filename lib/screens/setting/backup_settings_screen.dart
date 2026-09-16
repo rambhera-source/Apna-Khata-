@@ -41,7 +41,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     try {
       Directory? directory;
       if (Platform.isAndroid) {
-        // Android पर पब्लिक Documents या External Storage फोल्डर का इस्तेमाल करें ताकि फाइल आसानी से दिखे
         directory = await getExternalStorageDirectory();
         directory ??= await getApplicationDocumentsDirectory();
       } else {
@@ -640,7 +639,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
           ),
           const SizedBox(height: 20),
 
-          const Text('Manual Import, Export & Restore Operations', style: TextStyle(exports: true, fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+          const Text('Manual Import, Export & Restore Operations', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
           const SizedBox(height: 8),
           Row(
             children: [
