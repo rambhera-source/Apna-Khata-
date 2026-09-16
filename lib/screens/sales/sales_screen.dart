@@ -15,8 +15,8 @@ import '../../models/transaction_model.dart';
 import '../../models/order_model.dart';
 import '../../models/settings_model.dart'; 
 import '../../models/inventory_model.dart';
-import '../account/add_account_screen.dart';        // 👈 Fixed relative path
-import '../products/product_inventory_screen.dart'; // 👈 Fixed relative path
+import '../account/add_account_screen.dart';
+import '../products/product_inventory_screen.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -28,14 +28,18 @@ class SalesScreen extends StatefulWidget {
 class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _invoiceNoController = TextEditingController(text: 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
+  final TextEditingController _dateController = TextEditingController();
   
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
+  final TextEditingController _freightSearchController = TextEditingController();
   
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
+  final FocusNode _freightFocusNode = FocusNode();
+  final FocusNode _saveButtonFocusNode = FocusNode();
 
   List<Map<String, dynamic>> _presetChargesList = [];
   final List<Map<String, dynamic>> _billChargesList = [];
@@ -63,6 +67,7 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void initState() {
     super.initState();
+    _dateController.text = DateFormat('dd-MM-yyyy').format(_selectedDate);
     _loadDropdownDataAndSettings();
   }
 
@@ -126,28 +131,36 @@ class _SalesScreenState extends State<SalesScreen> {
       _pendingOrdersList = orders;
       _selectedPendingOrder = orders.isNotEmpty ? orders.first : null;
     });
-
-    if (orders.isNotEmpty && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('⚠️ ${orders.length} Pending Order(s) found for $partyName!'),
-          backgroundColor: Colors.amber.shade900,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    }
   }
 
+  // 📅 Compact & Modern Date Picker with Manual Entry Support
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            primaryColor: Colors.teal.shade800,
+            colorScheme: ColorScheme.light(primary: Colors.teal.shade800),
+            buttonTheme: const ButtonThemeData(textTheme: ButtonTextTheme.primary),
+          ),
+          child: Center(
+            child: SizedBox(
+              width: 320,
+              height: 420,
+              child: child,
+            ),
+          ),
+        );
+      },
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
+        _dateController.text = DateFormat('dd-MM-yyyy').format(picked);
       });
     }
   }
@@ -158,9 +171,9 @@ class _SalesScreenState extends State<SalesScreen> {
     int q = int.tryParse(_inlineQtyController.text) ?? 1;
     double pr = double.tryParse(_inlinePriceController.text) ?? _selectedInlineProduct!.priceA;
 
-    if (q <= 0 || pr <= 0) {
+    if (q <= 0 || pr < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quantity aur Price > 0 honi chahiye!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Quantity aur Price valid hone chahiye!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -190,6 +203,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _inlinePriceController.text = '0';
     });
 
+    // 🎯 Focus loops back to product search for continuous adding
     Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
   }
 
@@ -254,7 +268,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     children: [
                       pw.Text(_isGstActive ? 'TAX INVOICE (GST)' : 'BILL / ESTIMATE', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
                       pw.Text('Invoice No: ${_invoiceNoController.text}'),
-                      pw.Text('Date: ${DateFormat('dd-MM-yy').format(_selectedDate)}'),
+                      pw.Text('Date: ${_dateController.text}'),
                     ],
                   ),
                 ],
@@ -435,23 +449,6 @@ class _SalesScreenState extends State<SalesScreen> {
           title: const Text('Sales Invoice'),
           backgroundColor: Colors.teal.shade800,
           foregroundColor: Colors.white,
-          actions: [
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Center(
-                child: GestureDetector(
-                  onTap: _selectDate,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.calendar_today, size: 16),
-                      const SizedBox(width: 4),
-                      Text(DateFormat('dd-MMM-yy').format(_selectedDate), style: const TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
         ),
         body: Padding(
           padding: const EdgeInsets.all(10.0),
@@ -510,27 +507,35 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Date & Customer Searchable Autocomplete
+              // Date Input (Manual + Calendar Picker) & Customer Searchable Autocomplete
               Row(
                 children: [
                   SizedBox(
                     height: 40,
-                    width: 90,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        side: BorderSide(color: Colors.grey.shade400),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    width: 110,
+                    child: TextField(
+                      controller: _dateController,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        labelText: 'Date',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_today, size: 14, color: Colors.teal),
+                          onPressed: _selectDate,
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.only(right: 4),
+                        ),
                       ),
-                      onPressed: _selectDate,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.calendar_today, size: 12, color: Colors.teal),
-                          const SizedBox(width: 3),
-                          Text(DateFormat('dd-MM-yy').format(_selectedDate), style: const TextStyle(color: Colors.black87, fontSize: 10, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
+                      onChanged: (val) {
+                        try {
+                          final parsedDate = DateFormat('dd-MM-yyyy').parse(val);
+                          setState(() {
+                            _selectedDate = parsedDate;
+                          });
+                        } catch (_) {}
+                      },
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -548,6 +553,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         onSelected: (Account selection) {
                           _partyController.text = selection.name;
                           _checkForPendingOrders(selection.name);
+                          Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
                         },
                         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                           if (_partyController.text.isNotEmpty && controller.text.isEmpty) {
@@ -636,18 +642,11 @@ class _SalesScreenState extends State<SalesScreen> {
                                 children: [
                                   Text(
                                     '${index + 1}. ${item['name']}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                      color: isOutOfStock ? Colors.red : Colors.black87, // 👈 Red font in cart if out of stock
-                                    ),
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87),
                                   ),
                                   Text(
                                     'SKU: ${item['sku']}${isOutOfStock ? " (No Stock)" : ""}',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      color: isOutOfStock ? Colors.red.shade700 : Colors.grey, // 👈 Red subtitle in cart if out of stock
-                                    ),
+                                    style: TextStyle(fontSize: 9, color: isOutOfStock ? Colors.red.shade700 : Colors.grey),
                                   ),
                                 ],
                               ),
@@ -698,7 +697,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
                     const SizedBox(height: 4),
 
-                    // Inline Search Bar for Inventory Items with Stock Check & Red Text Styling
+                    // Inline Search Bar for Inventory Items
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
@@ -744,7 +743,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                 }
                                 return TextField(
                                   controller: controller,
-                                  focusNode: focusNode,
+                                  focusNode: _searchFocusNode,
                                   style: const TextStyle(fontSize: 12),
                                   decoration: const InputDecoration(
                                     labelText: 'Search Product Name or SKU to add...',
@@ -754,6 +753,12 @@ class _SalesScreenState extends State<SalesScreen> {
                                     prefixIcon: Icon(Icons.search, size: 16),
                                   ),
                                   onChanged: (val) => _inlineSearchController.text = val,
+                                  onSubmitted: (val) {
+                                    // 🎯 If empty text submitted on product search, jump to freight/charges box
+                                    if (val.trim().isEmpty) {
+                                      _freightFocusNode.requestFocus();
+                                    }
+                                  },
                                 );
                               },
                               optionsViewBuilder: (context, onSelected, options) {
@@ -785,21 +790,8 @@ class _SalesScreenState extends State<SalesScreen> {
 
                                           return ListTile(
                                             dense: true,
-                                            title: Text(
-                                              item.itemName,
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 11,
-                                                color: isOutOfStock ? Colors.red : Colors.black87,
-                                              ),
-                                            ),
-                                            subtitle: Text(
-                                              'SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}',
-                                              style: TextStyle(
-                                                fontSize: 9,
-                                                color: isOutOfStock ? Colors.red.shade700 : Colors.grey,
-                                              ),
-                                            ),
+                                            title: Text(item.itemName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87)),
+                                            subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: TextStyle(fontSize: 9, color: isOutOfStock ? Colors.red.shade700 : Colors.grey)),
                                             onTap: () => onSelected(item),
                                           );
                                         },
@@ -816,11 +808,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                   flex: 3,
                                   child: Text(
                                     _selectedInlineProduct!.itemName,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: _selectedInlineProduct!.stockQuantity <= 0 ? Colors.red : Colors.teal,
-                                    ),
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _selectedInlineProduct!.stockQuantity <= 0 ? Colors.red : Colors.teal),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -870,7 +858,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const Divider(height: 6),
               
-              // 📐 Compact Bottom Summary & Fixed Action Buttons
+              // 📐 Bottom Summary & Action Buttons (Will float up smoothly when interacting with freight/charges)
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
@@ -954,11 +942,12 @@ class _SalesScreenState extends State<SalesScreen> {
                               'rate': selection['value'] ?? 0.0,
                             });
                           });
+                          _freightSearchController.clear();
                         },
                         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                           return TextField(
                             controller: controller,
-                            focusNode: focusNode,
+                            focusNode: _freightFocusNode,
                             style: const TextStyle(fontSize: 11),
                             decoration: const InputDecoration(
                               labelText: 'Add Freight / Charge...',
@@ -967,6 +956,12 @@ class _SalesScreenState extends State<SalesScreen> {
                               contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                               prefixIcon: Icon(Icons.add_circle_outline, size: 14),
                             ),
+                            onSubmitted: (val) {
+                              // 🎯 If empty freight submitted, jump focus to Save Button
+                              if (val.trim().isEmpty) {
+                                FocusScope.of(context).requestFocus(_saveButtonFocusNode);
+                              }
+                            },
                           );
                         },
                       ),
@@ -1015,6 +1010,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     child: SizedBox(
                       height: 36,
                       child: ElevatedButton(
+                        focusNode: _saveButtonFocusNode,
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade800, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                         onPressed: _saveSalesTransaction,
                         child: const Text('Save Bill', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
@@ -1034,12 +1030,16 @@ class _SalesScreenState extends State<SalesScreen> {
   void dispose() {
     _partyController.dispose();
     _invoiceNoController.dispose();
+    _dateController.dispose();
     _inlineSearchController.dispose();
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
+    _freightSearchController.dispose();
     _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
+    _freightFocusNode.dispose();
+    _saveButtonFocusNode.dispose();
     super.dispose();
   }
 }
