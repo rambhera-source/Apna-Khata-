@@ -29,7 +29,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _returnNoController = TextEditingController(text: 'PRN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   
-  // Inline Product Search & Input Controllers with FocusNodes for smooth flow
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
@@ -48,7 +47,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
   
   final List<Map<String, dynamic>> _cartItems = [];
   
-  // 🔥 Default Payment Mode set to 'Credit' for Purchase Return
   String _paymentMode = 'Credit';
   final List<String> _paymentModes = ['Credit', 'Cash', 'Bank / UPI'];
 
@@ -94,10 +92,10 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     });
   }
 
-  void _navigateToAddNewPartyWithPreFill(String partyName) async {
+  void _navigateToAddNewParty() async {
     final String? newPartyName = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => AddAccountScreen(initialName: partyName)),
+      MaterialPageRoute(builder: (context) => const AddAccountScreen()),
     );
 
     await _loadDropdownDataAndSettings();
@@ -152,6 +150,73 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     });
 
     Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
+  }
+
+  void _editCartItem(int index) {
+    final item = _cartItems[index];
+    final qtyController = TextEditingController(text: item['qty'].toString());
+    final priceController = TextEditingController(text: item['price'].toString());
+    String editStockType = item['stockType'];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Edit Return Item'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Item: ${item['name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: qtyController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: priceController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: editStockType,
+                    items: _stockTypes.map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
+                    onChanged: (val) {
+                      setDialogState(() {
+                        editStockType = val!;
+                      });
+                    },
+                    decoration: const InputDecoration(labelText: 'Stock Type', border: OutlineInputBorder()),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                  onPressed: () {
+                    int q = int.tryParse(qtyController.text) ?? 1;
+                    double pr = double.tryParse(priceController.text) ?? item['price'];
+                    
+                    setState(() {
+                      _cartItems[index]['qty'] = q;
+                      _cartItems[index]['price'] = pr;
+                      _cartItems[index]['stockType'] = editStockType;
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Update'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   double get _subTotal {
@@ -319,7 +384,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
 
     if (!mounted) return;
 
-    // ✨ Purchase Return Saved Success Dialog with Share & Print options
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -429,7 +493,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Return No, Stock Type & Payment Mode Row
               Row(
                 children: [
                   Expanded(
@@ -478,7 +541,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const SizedBox(height: 8),
 
-              // 2. Date Selection & Supplier Row
               Row(
                 children: [
                   Expanded(
@@ -511,74 +573,33 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                     flex: 5,
                     child: SizedBox(
                       height: 42,
-                      child: Autocomplete<String>(
-                        optionsBuilder: (TextEditingValue textEditingValue) {
-                          if (textEditingValue.text.isEmpty) {
-                            return const Iterable<String>.empty();
-                          }
-                          return _allAccounts.where((acc) => acc.toLowerCase().contains(textEditingValue.text.toLowerCase()));
-                        },
-                        onSelected: (String selection) {
-                          _partyController.text = selection;
-                        },
-                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                          if (_partyController.text.isNotEmpty && controller.text.isEmpty) {
-                            controller.text = _partyController.text;
-                          }
-                          return TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            decoration: InputDecoration(
-                              labelText: 'Supplier / Party Name *',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-                              suffixIcon: const Icon(Icons.arrow_drop_down, size: 20),
-                            ),
-                            onChanged: (val) => _partyController.text = val,
-                          );
-                        },
-                        optionsViewBuilder: (context, onSelected, options) {
-                          return Align(
-                            alignment: Alignment.topLeft,
-                            child: Material(
-                              elevation: 4,
-                              child: SizedBox(
-                                width: 280,
-                                height: 160,
-                                child: ListView.builder(
-                                  padding: EdgeInsets.zero,
-                                  itemCount: options.length + 1,
-                                  itemBuilder: (context, index) {
-                                    if (index == options.length) {
-                                      return ListTile(
-                                        tileColor: Colors.blue.shade50,
-                                        leading: const Icon(Icons.person_add, color: Colors.blue, size: 16),
-                                        title: Text('Add New: "${_partyController.text}"', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue)),
-                                        onTap: () => _navigateToAddNewPartyWithPreFill(_partyController.text),
-                                      );
-                                    }
-                                    final opt = options.elementAt(index);
-                                    return ListTile(
-                                      dense: true,
-                                      title: Text(opt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                      onTap: () => onSelected(opt),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                          );
-                        },
+                      child: SearchableField(
+                        label: 'Supplier / Party Name *',
+                        items: _allAccounts,
+                        controller: _partyController,
+                        onSelected: (val) => _partyController.text = val,
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    height: 42,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade700, 
+                        foregroundColor: Colors.white, 
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                      icon: const Icon(Icons.person_add, size: 14),
+                      label: const Text('New', style: TextStyle(fontSize: 11)),
+                      onPressed: _navigateToAddNewParty,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
 
-              // 3. Items List with Dynamic Inline Search at the bottom
               const Text('Returned Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 4),
 
@@ -656,7 +677,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                     ),
                     const SizedBox(height: 4),
 
-                    // Inline Product Search Box
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
@@ -776,7 +796,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const Divider(height: 8),
               
-              // 5. Bottom Calculation & Grand Total
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
@@ -909,7 +928,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const SizedBox(height: 8),
 
-              // Action Buttons
               Row(
                 children: [
                   Expanded(
