@@ -618,7 +618,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Date Input & Customer Searchable Autocomplete (Stable Dropdown on Keyboard Hide via TapRegion)
+              // Date Input & Customer Searchable Autocomplete
               Row(
                 children: [
                   SizedBox(
@@ -654,7 +654,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     child: SizedBox(
                       height: 40,
                       child: TapRegion(
-                        onTapOutside: (_) {}, // Keeps dropdown open when keyboard minimizes
+                        onTapOutside: (_) {},
                         child: RawAutocomplete<Account>(
                           optionsBuilder: (TextEditingValue textEditingValue) {
                             if (textEditingValue.text.isEmpty) {
@@ -820,7 +820,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         children: [
                           if (_selectedInlineProduct == null)
                             TapRegion(
-                              onTapOutside: (_) {}, // Keeps product list open when keyboard minimizes
+                              onTapOutside: (_) {},
                               child: RawAutocomplete<InventoryItem>(
                                 optionsBuilder: (TextEditingValue textEditingValue) {
                                   if (textEditingValue.text.isEmpty) return _allInventoryItems;
@@ -1142,7 +1142,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                         icon: const Icon(Icons.share, size: 14),
                         label: const Text('WhatsApp', style: TextStyle(fontSize: 11)),
-                        onPressed: () => _generateAndPrintOrShareInvoice(isWhatsApp: true),
+                        onPressed: () => _generateAndProfileOrShareInvoice(isWhatsApp: true),
                       ),
                     ),
                   ),
