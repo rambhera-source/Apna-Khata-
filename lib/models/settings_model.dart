@@ -18,4 +18,8 @@ class CompanySettings {
 
   // 🔥 Extra Charges & Discounts Master List (Stored as JSON strings)
   List<String> extraCharges = [];
+
+  // 🔥 Product Categories (Main & Sub-Categories JSON) aur Tax Slabs (GST %) ke liye fields
+  List<String> productCategories = [];
+  List<double> taxSlabs = [];
 }
