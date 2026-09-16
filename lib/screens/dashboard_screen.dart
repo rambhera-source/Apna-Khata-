@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/database_helper.dart';
 import '../models/transaction_model.dart';
@@ -171,7 +170,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ✨ ऐप क्लोज करने से पहले साइलेंट बैकअप लेने का फंक्शन
   Future<void> _performAutoBackupOnClose() async {
     try {
       final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
@@ -197,8 +195,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {}
   }
 
-  // 🛡️ केवल होम स्क्रीन पर बैक बटन दबाने पर ऐप एग्जिट और बैकअप प्रॉम्प्ट
-  Future<bool> _onWillPop() async {
+  // ✨ स्मार्ट बैकअप और एग्जिट प्रोसेस
+  Future<void> _triggerBackupAndExit() async {
     bool shouldExit = false;
     await showDialog(
       context: context,
@@ -224,7 +222,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () async {
               Navigator.pop(context);
               
-              // 🔄 प्रोसेसिंग डायलॉग
               showDialog(
                 context: context,
                 barrierDismissible: false,
@@ -248,7 +245,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               if (!mounted) return;
               Navigator.pop(context); // प्रोग्रेस बंद करें
 
-              // ✅ सफलता का स्मार्ट पॉप-अप
               await showDialog(
                 context: context,
                 barrierDismissible: false,
@@ -282,7 +278,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
-    return shouldExit;
+    if (shouldExit) {
+      exit(0); // PC / Mobile ऐप पूरी तरह से बंद हो जाएगी
+    }
+  }
+
+  Future<bool> _onWillPop() async {
+    await _triggerBackupAndExit();
+    return false;
   }
 
   @override
@@ -383,13 +386,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                leading: const Icon(Icons.logout, color: Colors.orange),
+                title: const Text('Logout', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
                 onTap: () {
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(builder: (context) => const LoginScreen()),
                   );
+                },
+              ),
+              // 🚪 PC और Mobile दोनों के लिए Sidebar में सबसे नीचे 'Exit App' का ऑप्शन
+              ListTile(
+                leading: const Icon(Icons.exit_to_app, color: Colors.red),
+                title: const Text('Exit App', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(context); // Drawer बंद करें
+                  _triggerBackupAndExit(); // बैकअप और एग्जिट ट्रिगर करें
                 },
               ),
             ],
@@ -483,7 +495,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             case 'Parties':
                               return _buildMenuCard(context, 'Parties', Icons.people, Colors.indigo, const PartiesMasterScreen());
                             case 'Inventory':
-                              return _buildMenuCard(context, 'Inventory', Icons.inventory_2, Colors.purple, const ProductInventoryScreen());
+                            return _buildMenuCard(context, 'Inventory', Icons.inventory_2, Colors.purple, const ProductInventoryScreen());
                             case 'Day Book':
                               return _buildMenuCard(context, 'Day Book', Icons.book, Colors.brown, const DayBookScreen());
                             case 'Ledger':
