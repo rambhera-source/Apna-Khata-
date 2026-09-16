@@ -30,17 +30,42 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadInitialBackupPath();
+    _loadInitialOrlifeBackupPath();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkForExistingLocalBackupOnStartup();
     });
   }
 
-  Future<void> _loadInitialBackupPath() async {
-    final directory = await getApplicationDocumentsDirectory();
-    setState(() {
-      _customBackupPath = '${directory.path}/orlife_backups';
-    });
+  // 📂 सीधे 'Orlife CRM' नाम से फोल्डर सेट और क्रिएट करें
+  Future<void> _loadInitialOrlifeBackupPath() async {
+    try {
+      Directory? directory;
+      if (Platform.isAndroid) {
+        // Android पर पब्लिक Documents या External Storage फोल्डर का इस्तेमाल करें ताकि फाइल आसानी से दिखे
+        directory = await getExternalStorageDirectory();
+        directory ??= await getApplicationDocumentsDirectory();
+      } else {
+        directory = await getApplicationDocumentsDirectory();
+      }
+
+      final orlifeDir = Directory('${directory.path}/Orlife CRM');
+      if (!await orlifeDir.exists()) {
+        await orlifeDir.create(recursive: true);
+      }
+
+      setState(() {
+        _customBackupPath = orlifeDir.path;
+      });
+    } catch (_) {
+      final fallbackDir = await getApplicationDocumentsDirectory();
+      final orlifeDir = Directory('${fallbackDir.path}/Orlife CRM');
+      if (!await orlifeDir.exists()) {
+        await orlifeDir.create(recursive: true);
+      }
+      setState(() {
+        _customBackupPath = orlifeDir.path;
+      });
+    }
   }
 
   Future<void> _pickCustomBackupFolder() async {
@@ -63,6 +88,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
 
   Future<void> _checkForExistingLocalBackupOnStartup() async {
     try {
+      if (_customBackupPath.isEmpty) return;
       final backupDir = Directory(_customBackupPath);
       
       if (await backupDir.exists()) {
@@ -101,7 +127,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     } catch (_) {}
   }
 
-  // ✨ लाइव परसेंटेज प्रोग्रेस डायलॉग (स्मार्ट लोडिंग विथ % काउंट)
   void _showLiveProgressDialog(String title, Future<void> Function(void Function(String status, double progress) updateProgress) action) async {
     String currentStatus = 'Initializing...';
     double currentProgress = 0.0;
@@ -111,7 +136,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          // Callback to update progress from background task
           void update(String status, double progress) {
             if (mounted) {
               setDialogState(() {
@@ -121,10 +145,9 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
             }
           }
 
-          // Trigger action once dialog opens
           if (currentProgress == 0.0 && currentStatus == 'Initializing...') {
             action(update).then((_) {
-              if (mounted) Navigator.pop(context); // Close dialog on complete
+              if (mounted) Navigator.pop(context);
             }).catchError((e) {
               if (mounted) Navigator.pop(context);
               _showResultDialog(isSuccess: false, title: 'Operation Failed', message: '$e');
@@ -332,7 +355,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
-  // 📤 लाइव प्रोग्रेस के साथ एक्सपोर्ट / मैनुअल बैकअप
   void _exportBackup() {
     _showLiveProgressDialog('Creating Backup...', (updateProgress) async {
       updateProgress('Fetching inventory items...', 0.2);
@@ -362,19 +384,18 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
         await backupDir.create(recursive: true);
       }
 
-      final file = File('${backupDir.path}/manual_export_${DateTime.now().millisecondsSinceEpoch}.json');
+      final file = File('${backupDir.path}/orlife_crm_backup_${DateTime.now().millisecondsSinceEpoch}.json');
       await file.writeAsBytes(utf8.encode(jsonString));
 
       updateProgress('Backup Completed Successfully!', 1.0);
       await Future.delayed(const Duration(milliseconds: 400));
 
       if (!mounted) return;
-      await Share.shareXFiles([XFile(file.path)], text: 'ORLIFE ERP Database Backup File.');
-      _showResultDialog(isSuccess: true, title: 'Backup Successful', message: 'Backup file successfully created and saved to your folder.');
+      await Share.shareXFiles([XFile(file.path)], text: 'ORLIFE CRM Database Backup File.');
+      _showResultDialog(isSuccess: true, title: 'Backup Successful', message: 'Backup file successfully created inside "Orlife CRM" folder.');
     });
   }
 
-  // 📥 लाइव प्रोग्रेस के साथ रिस्टोर
   Future<void> _restoreFromFile(File file) async {
     _showLiveProgressDialog('Restoring Database...', (updateProgress) async {
       updateProgress('Reading backup file...', 0.3);
@@ -448,10 +469,8 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
-  // ☁️ वास्तविक गूगल ड्राइव लॉगिन फ्लो (Google Sign-In simulation/flow)
   void _toggleGoogleDriveLink(bool connect) async {
     if (connect) {
-      // यूजर को ईमेल आईडी से लॉगिन करने का प्रॉम्प्ट दिखाएं
       TextEditingController emailController = TextEditingController();
       showDialog(
         context: context,
@@ -490,7 +509,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
         ),
       );
     } else {
-      // डिस्कनेक्ट करें
       setState(() {
         _isGoogleDriveLinked = false;
         _linkedGoogleAccount = 'Not Connected';
@@ -530,7 +548,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          // 📁 कॉम्पैक्ट और एलिगेंट फोल्डर पाथ UI
           const Text('Backup Storage Path / Folder', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
           const SizedBox(height: 8),
           Card(
@@ -541,7 +558,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Current Backup Folder:', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                  const Text('Current Backup Folder (Orlife CRM):', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   Container(
                     width: double.infinity,
@@ -623,7 +640,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
           ),
           const SizedBox(height: 20),
 
-          const Text('Manual Import, Export & Restore Operations', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+          const Text('Manual Import, Export & Restore Operations', style: TextStyle(exports: true, fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
           const SizedBox(height: 8),
           Row(
             children: [
