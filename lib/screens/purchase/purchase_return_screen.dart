@@ -522,7 +522,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
         ..voucherNumber = _returnNoController.text
         ..partyName = _partyController.text.trim()
         ..cashOrBank = _paymentMode
-        ..amount = _grandTotal
+        ..amount = -_grandTotal // 👈 यहाँ माइनस (-) कर दिया गया है ताकि लेजर में सप्लायर का बैलेंस कम हो जाए
         ..notes = 'Purchase Return Entry';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
@@ -536,7 +536,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             .findFirst();
 
         if (invItem != null) {
-          invItem.stockQuantity -= returnedQty;
+          invItem.stockQuantity -= returnedQty; // इन्वेंट्री से स्टॉक कम होना सही है
           if (invItem.stockQuantity < 0) invItem.stockQuantity = 0;
           await DatabaseHelper.isar.inventoryItems.put(invItem);
         }
@@ -557,7 +557,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             Text('Purchase Return Saved!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('Purchase return safalपूर्वक save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
+        content: const Text('Purchase return safalpurvak save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () {
@@ -758,7 +758,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                             onSubmitted: (_) {
                               if (_partyController.text.trim().isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('⚠️ Pehle Supplier / Party Name bharein!'), backgroundColor: Colors.red),
+                                  const SnackBar(content: Text('Pehle Supplier / Party Name bharein!'), backgroundColor: Colors.red),
                                 );
                                 _partyFocusNode.requestFocus();
                               } else {
@@ -971,7 +971,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                                   onTap: () {
                                     if (_partyController.text.trim().isEmpty) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('⚠️ Kripya pehle Supplier / Party Name bharein!'), backgroundColor: Colors.red),
+                                        const SnackBar(content: Text('Kripya pehle Supplier / Party Name bharein!'), backgroundColor: Colors.red),
                                       );
                                       _partyFocusNode.requestFocus();
                                     }
@@ -1239,7 +1239,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                       height: 36,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
-                        icon: const Icon(Icons.share, size: 16),
+                        icon: const Icon(Icons.share, size: 14),
                         label: const Text('Share', style: TextStyle(fontSize: 11)),
                         onPressed: () => _generateAndPrintOrShareReturn(isShare: true),
                       ),
