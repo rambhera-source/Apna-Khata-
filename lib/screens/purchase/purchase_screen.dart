@@ -125,28 +125,13 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: Colors.blue.shade800,
-            colorScheme: ColorScheme.light(primary: Colors.blue.shade800),
-            buttonTheme: const ButtonThemeData(textTheme: ButtonTextTheme.primary),
-          ),
-          child: Center(
-            child: SizedBox(
-              width: 320,
-              height: 420,
-              child: child,
-            ),
-          ),
-        );
-      },
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
         _dateController.text = DateFormat('dd-MM-yyyy').format(picked);
       });
+      _partyFocusNode.requestFocus();
     }
   }
 
@@ -222,7 +207,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     return total < 0 ? 0 : total;
   }
 
-  // 🔥 Interactive Purchase Preview Dialog
   void _showPurchasePreviewDialog() {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) {
@@ -449,7 +433,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            const pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)),
+                            pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)), // 🔥 const हटा दिया गया
                             pw.Text('₹ ${_subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
@@ -458,8 +442,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
-                              pw.Text('${charge['name']}:', style: const pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                              pw.Text('${charge['name']}:', style: pw.TextStyle(fontSize: 11)),
+                              pw.Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
                         ],
@@ -468,8 +452,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
-                              pw.Text('GST (${_gstRate}%):', style: const pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                              pw.Text('GST (${_gstRate}%):', style: pw.TextStyle(fontSize: 11)),
+                              pw.Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
                         ],
@@ -593,7 +577,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       _billChargesList.clear();
     });
     Future.delayed(const Duration(milliseconds: 50), () {
-      _dateFocusNode.requestFocus();
+      FocusScope.of(context).requestFocus(_dateFocusNode);
     });
   }
 
@@ -687,7 +671,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                 children: [
                   SizedBox(
                     height: 40,
-                    width: 110,
+                    width: 120,
                     child: TextField(
                       controller: _dateController,
                       focusNode: _dateFocusNode,
@@ -705,6 +689,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                           padding: const EdgeInsets.only(right: 4),
                         ),
                       ),
+                      onTap: () {
+                        _dateController.selection = TextSelection(baseOffset: 0, extentOffset: _dateController.text.length);
+                      },
                       onSubmitted: (_) {
                         _partyFocusNode.requestFocus();
                       },
@@ -1046,7 +1033,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                     decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
                                     onTap: () => _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length),
-                                    onSubmitted: (_) => _addInlineItemToCart(),
+                                    onSubmitted: (_) {
+                                      _addInlineItemToCart();
+                                    },
                                   ),
                                 ),
                                 IconButton(
@@ -1066,6 +1055,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               ),
               const Divider(height: 6),
               
+              // Freight & Discount Charges Section
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
@@ -1161,7 +1151,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                               focusNode: focusNode,
                               style: const TextStyle(fontSize: 11),
                               decoration: const InputDecoration(
-                                labelText: 'Add Freight / Charge...',
+                                labelText: 'Add Freight / Discount Charge...',
                                 border: OutlineInputBorder(),
                                 isDense: true,
                                 contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
