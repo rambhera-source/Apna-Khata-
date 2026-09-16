@@ -14,7 +14,6 @@ import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/transaction_model.dart';
 import 'package:accounting_app/models/settings_model.dart';
 import 'package:accounting_app/models/inventory_model.dart';
-import '../searchable_field.dart';
 import '../account/add_account_screen.dart';
 import '../products/product_inventory_screen.dart';
 
@@ -35,6 +34,8 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
   final TextEditingController _freightSearchController = TextEditingController();
 
+  final FocusNode _dateFocusNode = FocusNode();
+  final FocusNode _partyFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
@@ -66,6 +67,10 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     super.initState();
     _dateController.text = DateFormat('dd-MM-yyyy').format(_selectedDate);
     _loadDropdownDataAndSettings();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _dateFocusNode.requestFocus();
+    });
   }
 
   Future<void> _loadDropdownDataAndSettings() async {
@@ -180,7 +185,9 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       _inlinePriceController.text = '0';
     });
 
-    Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
+    Future.delayed(const Duration(milliseconds: 50), () {
+      _searchFocusNode.requestFocus();
+    });
   }
 
   double get _subTotal {
@@ -215,6 +222,136 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     return total < 0 ? 0 : total;
   }
 
+  // 🔥 Interactive Purchase Return Preview Dialog
+  void _showPurchaseReturnPreviewDialog() {
+    final partyName = _partyController.text.trim();
+    if (partyName.isEmpty || _cartItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⚠️ Pehle Supplier Name aur Return Items add karein!'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Purchase Return Preview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+            IconButton(
+              icon: const Icon(Icons.close, size: 20),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          height: 500,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Center(
+                  child: Column(
+                    children: [
+                      Text('ORLIFE Mobile Accessories', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text('Purchase Return / Debit Note', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+                const Divider(thickness: 1.5, height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Supplier: $partyName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text('Payment: $_paymentMode | Type: $_globalStockType', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('Return No: ${_returnNoController.text}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        Text('Date: ${_dateController.text}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                  decoration: BoxDecoration(color: Colors.blue.shade900, borderRadius: BorderRadius.circular(4)),
+                  child: const Row(
+                    children: [
+                      SizedBox(width: 25, child: Text('S.N.', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+                      Expanded(flex: 3, child: Text('Item Name (SKU)', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+                      SizedBox(width: 35, child: Text('Qty', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                      SizedBox(width: 50, child: Text('Price', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                      SizedBox(width: 55, child: Text('Total', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ...List.generate(_cartItems.length, (index) {
+                  final item = _cartItems[index];
+                  double total = (item['qty'] as int) * (item['price'] as double);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 25, child: Text('${index + 1}', style: const TextStyle(fontSize: 11))),
+                        Expanded(flex: 3, child: Text('${item['name']} [${item['sku']}]', style: const TextStyle(fontSize: 11))),
+                        SizedBox(width: 35, child: Text('${item['qty']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
+                        SizedBox(width: 50, child: Text('₹${item['price']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.right)),
+                        SizedBox(width: 55, child: Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
+                      ],
+                    ),
+                  );
+                }),
+                const Divider(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+                        for (var charge in _billChargesList)
+                          Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+                        if (_isGstActive) Text('GST (18%): + ₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+                        const SizedBox(height: 4),
+                        Text('Return Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue)),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade900, foregroundColor: Colors.white),
+            icon: const Icon(Icons.print, size: 16),
+            label: const Text('Print / PDF'),
+            onPressed: () {
+              Navigator.pop(context);
+              _generateAndPrintOrShareReturn(isShare: false);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _generateAndPrintOrShareReturn({required bool isShare}) async {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) return;
@@ -233,8 +370,8 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Purchase Return / Debit Note', style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                      pw.Text('Purchase Return / Debit Note', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                       if (_isGstActive && _companyGstin.isNotEmpty)
                         pw.Text('GSTIN: $_companyGstin', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ],
@@ -242,55 +379,116 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
-                      pw.Text(_isGstActive ? 'DEBIT NOTE (GST)' : 'PURCHASE RETURN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
-                      pw.Text('Return No: ${_returnNoController.text}'),
-                      pw.Text('Date: ${_dateController.text}'),
+                      pw.Text(_isGstActive ? 'DEBIT NOTE (GST)' : 'PURCHASE RETURN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                      pw.Text('Return No: ${_returnNoController.text}', style: const pw.TextStyle(fontSize: 11)),
+                      pw.Text('Date: ${_dateController.text}', style: const pw.TextStyle(fontSize: 11)),
                     ],
                   ),
                 ],
               ),
-              pw.Divider(thickness: 1.5, color: PdfColors.blue),
-              pw.SizedBox(height: 10),
-              pw.Text('Supplier Name: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-              pw.Text('Payment Mode: $_paymentMode'),
+              pw.Divider(thickness: 1.5, color: PdfColors.blue900),
+              pw.SizedBox(height: 8),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Supplier Name:', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text(partyName, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('Payment Mode: $_paymentMode', style: const pw.TextStyle(fontSize: 11)),
+                      pw.Text('Stock Type: $_globalStockType', style: const pw.TextStyle(fontSize: 11)),
+                    ],
+                  ),
+                ],
+              ),
               pw.SizedBox(height: 15),
               pw.Table.fromTextArray(
-                headers: ['S.No', 'Item Description (SKU)', 'Qty', 'Price (₹)', 'Total (₹)'],
+                headers: ['S.N.', 'Item Description & SKU', 'Qty', 'Unit', 'Price (₹)', 'Total (₹)'],
                 data: List.generate(_cartItems.length, (index) {
                   final item = _cartItems[index];
                   double total = (item['qty'] as int) * (item['price'] as double);
                   return [
                     '${index + 1}',
-                    '${item['name']} [${item['sku']}] (${item['stockType']})',
+                    '${item['name']} [${item['sku']}]',
                     '${item['qty']}',
+                    'Pcs',
                     '${item['price']}',
                     '${total.toStringAsFixed(2)}',
                   ];
                 }),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.blue),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
+                cellStyle: const pw.TextStyle(fontSize: 10),
                 cellAlignment: pw.Alignment.centerLeft,
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(30),
+                  1: const pw.FlexColumnWidth(3),
+                  2: const pw.FixedColumnWidth(40),
+                  3: const pw.FixedColumnWidth(45),
+                  4: const pw.FixedColumnWidth(60),
+                  5: const pw.FixedColumnWidth(70),
+                },
               ),
               pw.SizedBox(height: 20),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.end,
                 children: [
                   pw.Container(
-                    padding: const pw.EdgeInsets.all(10),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.blue), borderRadius: pw.BorderRadius.circular(4)),
+                    width: 220,
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.blue900), borderRadius: pw.BorderRadius.circular(4)),
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
-                        pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
-                        for (var charge in _billChargesList)
-                          pw.Text('${charge['name']} (${charge['qty']} x ₹${charge['rate']}): ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            const pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)),
+                            pw.Text('₹ ${_subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                        for (var charge in _billChargesList) ...[
+                          pw.SizedBox(height: 4),
+                          pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Text('${charge['name']}:', style: const pw.TextStyle(fontSize: 11)),
+                              pw.Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                            ],
+                          ),
+                        ],
                         if (_isGstActive) ...[
                           pw.SizedBox(height: 4),
-                          pw.Text('CGST (9%): ₹ ${(_taxAmount / 2).toStringAsFixed(2)}'),
-                          pw.Text('SGST (9%): ₹ ${(_taxAmount / 2).toStringAsFixed(2)}'),
+                          pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              const pw.Text('CGST (9%):', style: pw.TextStyle(fontSize: 11)),
+                              pw.Text('₹ ${(_taxAmount / 2).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                            ],
+                          ),
+                          pw.SizedBox(height: 4),
+                          pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              const pw.Text('SGST (9%):', style: pw.TextStyle(fontSize: 11)),
+                              pw.Text('₹ ${(_taxAmount / 2).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                            ],
+                          ),
                         ],
                         pw.Divider(),
-                        pw.Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text('Return Total:', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                            pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -306,7 +504,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       final output = await getTemporaryDirectory();
       final file = File('${output.path}/PurchaseReturn_${_returnNoController.text}.pdf');
       await file.writeAsBytes(await pdf.save());
-      await Share.shareXFiles([XFile(file.path)], text: 'Purchase Return / Debit Note #${_returnNoController.text}. Total: ₹ $_grandTotal');
+      await Share.shareXFiles([XFile(file.path)], text: 'Purchase Return / Debit Note #${_returnNoController.text}. Total: ₹ ${_grandTotal.toStringAsFixed(2)}');
     } else {
       await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     }
@@ -401,6 +599,9 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       _returnNoController.text = 'PRN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
       _billChargesList.clear();
     });
+    Future.delayed(const Duration(milliseconds: 50), () {
+      _dateFocusNode.requestFocus();
+    });
   }
 
   Future<bool> _onWillPop() async {
@@ -430,7 +631,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        resizeToAvoidBottomInset: true,
+        resizeToAvoidBottomInset: false,
         appBar: AppBar(
           title: Text(_isGstActive ? 'Purchase Return (GST)' : 'Purchase Return'),
           backgroundColor: Colors.blue.shade900,
@@ -496,7 +697,9 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                     width: 110,
                     child: TextField(
                       controller: _dateController,
+                      focusNode: _dateFocusNode,
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
                         labelText: 'Date',
                         border: const OutlineInputBorder(),
@@ -509,13 +712,8 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                           padding: const EdgeInsets.only(right: 4),
                         ),
                       ),
-                      onChanged: (val) {
-                        try {
-                          final parsedDate = DateFormat('dd-MM-yyyy').parse(val);
-                          setState(() {
-                            _selectedDate = parsedDate;
-                          });
-                        } catch (_) {}
+                      onSubmitted: (_) {
+                        _partyFocusNode.requestFocus();
                       },
                     ),
                   ),
@@ -523,75 +721,85 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                   Expanded(
                     child: SizedBox(
                       height: 40,
-                      child: TapRegion(
-                        onTapOutside: (_) {},
-                        child: RawAutocomplete<Account>(
-                          optionsBuilder: (TextEditingValue textEditingValue) {
-                            if (textEditingValue.text.isEmpty) {
-                              return _allAccountsList;
-                            }
-                            return _allAccountsList.where((acc) => 
-                              acc.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) || 
-                              (acc.phone != null && acc.phone!.contains(textEditingValue.text))
-                            );
-                          },
-                          displayStringForOption: (Account option) => option.name,
-                          onSelected: (Account selection) {
-                            _partyController.text = selection.name;
-                            Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
-                          },
-                          textEditingController: _partyController,
-                          focusNode: FocusNode(),
-                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                            return TextField(
-                              controller: controller,
-                              focusNode: focusNode,
-                              style: const TextStyle(fontSize: 12),
-                              decoration: const InputDecoration(
-                                labelText: 'Supplier / Party Name *',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                prefixIcon: Icon(Icons.person, size: 16),
-                              ),
-                            );
-                          },
-                          optionsViewBuilder: (context, onSelected, options) {
-                            return Align(
-                              alignment: Alignment.topLeft,
-                              child: Material(
-                                elevation: 4,
-                                child: SizedBox(
-                                  width: 300,
-                                  height: 200,
-                                  child: ListView.builder(
-                                    padding: EdgeInsets.zero,
-                                    itemCount: options.length + 1,
-                                    itemBuilder: (context, index) {
-                                      if (index == 0) {
-                                        return ListTile(
-                                          tileColor: Colors.blue.shade50,
-                                          leading: const Icon(Icons.person_add, color: Colors.blue, size: 16),
-                                          title: const Text('+ Add New Party / Customer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue)),
-                                          onTap: () {
-                                            _navigateToAddNewParty();
-                                          },
-                                        );
-                                      }
-                                      final acc = options.elementAt(index - 1);
+                      child: RawAutocomplete<Account>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return _allAccountsList;
+                          }
+                          return _allAccountsList.where((acc) => 
+                            acc.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) || 
+                            (acc.phone != null && acc.phone!.contains(textEditingValue.text))
+                          );
+                        },
+                        displayStringForOption: (Account option) => option.name,
+                        onSelected: (Account selection) {
+                          _partyController.text = selection.name;
+                          Future.delayed(const Duration(milliseconds: 50), () {
+                            _searchFocusNode.requestFocus();
+                          });
+                        },
+                        textEditingController: _partyController,
+                        focusNode: _partyFocusNode,
+                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            style: const TextStyle(fontSize: 12),
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Supplier / Party Name *',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              prefixIcon: Icon(Icons.person, size: 16),
+                            ),
+                            onSubmitted: (_) {
+                              if (_partyController.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('⚠️ Pehle Supplier / Party Name bharein!'), backgroundColor: Colors.red),
+                                );
+                                _partyFocusNode.requestFocus();
+                              } else {
+                                _searchFocusNode.requestFocus();
+                              }
+                            },
+                          );
+                        },
+                        optionsViewBuilder: (context, onSelected, options) {
+                          return Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 4,
+                              child: SizedBox(
+                                width: 300,
+                                height: 200,
+                                child: ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: options.length + 1,
+                                  itemBuilder: (context, index) {
+                                    if (index == 0) {
                                       return ListTile(
-                                        dense: true,
-                                        title: Text(acc.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                                        subtitle: Text('Ph: ${acc.phone ?? "N/A"} | Group: ${acc.groupCategory}', style: const TextStyle(fontSize: 9)),
-                                        onTap: () => onSelected(acc),
+                                        tileColor: Colors.blue.shade50,
+                                        leading: const Icon(Icons.person_add, color: Colors.blue, size: 16),
+                                        title: const Text('+ Add New Party / Customer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue)),
+                                        onTap: () {
+                                          _navigateToAddNewParty();
+                                        },
                                       );
-                                    },
-                                  ),
+                                    }
+                                    final acc = options.elementAt(index - 1);
+                                    return ListTile(
+                                      dense: true,
+                                      title: Text(acc.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                      subtitle: Text('Ph: ${acc.phone ?? "N/A"} | Group: ${acc.groupCategory}', style: const TextStyle(fontSize: 9)),
+                                      onTap: () => onSelected(acc),
+                                    );
+                                  },
                                 ),
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -614,9 +822,25 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const SizedBox(height: 6),
 
-              const Text('Returned Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              // Professional Grid Table Header
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                decoration: BoxDecoration(color: Colors.blue.shade900, borderRadius: BorderRadius.circular(4)),
+                child: const Row(
+                  children: [
+                    SizedBox(width: 25, child: Text('S.N.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10))),
+                    Expanded(flex: 3, child: Text('Item Description', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10))),
+                    SizedBox(width: 45, child: Text('Qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.center)),
+                    SizedBox(width: 45, child: Text('Unit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.center)),
+                    SizedBox(width: 60, child: Text('Price', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.right)),
+                    SizedBox(width: 65, child: Text('Amount', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.right)),
+                    SizedBox(width: 25),
+                  ],
+                ),
+              ),
               const SizedBox(height: 2),
 
+              // Professional Items Table & Inline Search Grid
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
@@ -626,17 +850,20 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                       double total = (item['qty'] as int) * (item['price'] as double);
 
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        margin: const EdgeInsets.symmetric(vertical: 2),
-                        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4)),
+                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                        decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+                          color: index % 2 == 0 ? Colors.white : Colors.grey.shade50,
+                        ),
                         child: Row(
                           children: [
+                            SizedBox(width: 25, child: Text('${index + 1}', style: const TextStyle(fontSize: 11))),
                             Expanded(
                               flex: 3,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('${index + 1}. ${item['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                  Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87)),
                                   Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                 ],
                               ),
@@ -647,6 +874,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                                 controller: TextEditingController(text: item['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
                                 decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
                                 onChanged: (val) {
                                   int? q = int.tryParse(val);
@@ -657,12 +885,15 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                               ),
                             ),
                             const SizedBox(width: 4),
+                            const SizedBox(width: 45, child: Text('Pcs', style: TextStyle(fontSize: 11), textAlign: TextAlign.center)),
+                            const SizedBox(width: 4),
                             SizedBox(
                               width: 60,
                               child: TextField(
                                 controller: TextEditingController(text: item['price'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.right,
                                 decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
                                 onChanged: (val) {
                                   double? p = double.tryParse(val);
@@ -673,20 +904,27 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue)),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red, size: 16),
-                              onPressed: () => setState(() => _cartItems.removeAt(index)),
-                              constraints: const BoxConstraints(),
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                            SizedBox(
+                              width: 65,
+                              child: Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue), textAlign: TextAlign.right),
+                            ),
+                            SizedBox(
+                              width: 25,
+                              child: IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 14),
+                                onPressed: () => setState(() => _cartItems.removeAt(index)),
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                              ),
                             ),
                           ],
                         ),
                       );
                     }),
 
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
 
+                    // Inline Product Search Bar with Party Validation
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
@@ -694,99 +932,89 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (_selectedInlineProduct == null)
-                            TapRegion(
-                              onTapOutside: (_) {},
-                              child: RawAutocomplete<InventoryItem>(
-                                optionsBuilder: (TextEditingValue textEditingValue) {
-                                  if (textEditingValue.text.isEmpty) return _allInventoryItems;
-                                  return _allInventoryItems.where((item) =>
-                                    item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                                    (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
-                                  );
-                                },
-                                displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
-                                onSelected: (InventoryItem selection) {
-                                  int existingIndex = _cartItems.indexWhere((item) => item['name'] == selection.itemName);
-
-                                  if (existingIndex != -1) {
-                                    setState(() {
-                                      _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + 1;
-                                    });
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('⚠️ ${selection.itemName} already in return. Quantity updated!'), duration: const Duration(seconds: 2)),
-                                    );
-                                    _inlineSearchController.clear();
-                                  } else {
-                                    setState(() {
-                                      _selectedInlineProduct = selection;
-                                      _inlinePriceController.text = selection.purchasePrice.toString();
-                                      _inlineQtyController.text = '1';
-                                    });
-                                    Future.delayed(const Duration(milliseconds: 100), () {
-                                      _qtyFocusNode.requestFocus();
-                                      _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
-                                    });
-                                  }
-                                },
-                                textEditingController: _inlineSearchController,
-                                focusNode: _searchFocusNode,
-                                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                  return TextField(
-                                    controller: controller,
-                                    focusNode: focusNode,
-                                    style: const TextStyle(fontSize: 12),
-                                    decoration: const InputDecoration(
-                                      labelText: 'Search Product Name or SKU to return...',
-                                      border: OutlineInputBorder(),
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                      prefixIcon: Icon(Icons.search, size: 16),
-                                    ),
-                                    onSubmitted: (val) {
-                                      if (val.trim().isEmpty) {
-                                        _freightFocusNode.requestFocus();
-                                      }
-                                    },
-                                  );
-                                },
-                                optionsViewBuilder: (context, onSelected, options) {
-                                  return Align(
-                                    alignment: Alignment.topLeft,
-                                    child: Material(
-                                      elevation: 4,
-                                      child: SizedBox(
-                                        width: 280,
-                                        height: 150,
-                                        child: ListView.builder(
-                                          padding: EdgeInsets.zero,
-                                          itemCount: options.length + 1,
-                                          itemBuilder: (context, index) {
-                                            if (index == 0) {
-                                              return ListTile(
-                                                tileColor: Colors.blue.shade100,
-                                                leading: const Icon(Icons.add_circle, color: Colors.blue, size: 16),
-                                                title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue)),
-                                                onTap: () async {
-                                                  Navigator.pop(context);
-                                                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
-                                                  await _loadDropdownDataAndSettings();
-                                                },
-                                              );
-                                            }
-                                            final item = options.elementAt(index - 1);
+                            RawAutocomplete<InventoryItem>(
+                              optionsBuilder: (TextEditingValue textEditingValue) {
+                                if (_partyController.text.trim().isEmpty) {
+                                  return const Iterable<InventoryItem>.empty();
+                                }
+                                if (textEditingValue.text.isEmpty) return _allInventoryItems;
+                                return _allInventoryItems.where((item) =>
+                                  item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                                  (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
+                                );
+                              },
+                              displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
+                              onSelected: (InventoryItem selection) {
+                                setState(() {
+                                  _selectedInlineProduct = selection;
+                                  _inlinePriceController.text = selection.purchasePrice.toString();
+                                  _inlineQtyController.text = '1';
+                                });
+                                Future.delayed(const Duration(milliseconds: 50), () {
+                                  _qtyFocusNode.requestFocus();
+                                  _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
+                                });
+                              },
+                              textEditingController: _inlineSearchController,
+                              focusNode: _searchFocusNode,
+                              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                return TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  style: const TextStyle(fontSize: 12),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Search Product Name or SKU to return...',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    prefixIcon: Icon(Icons.search, size: 16),
+                                  ),
+                                  onTap: () {
+                                    if (_partyController.text.trim().isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('⚠️ Kripya pehle Supplier / Party Name bharein!'), backgroundColor: Colors.red),
+                                      );
+                                      _partyFocusNode.requestFocus();
+                                    }
+                                  },
+                                );
+                              },
+                              optionsViewBuilder: (context, onSelected, options) {
+                                return Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Material(
+                                    elevation: 4,
+                                    child: SizedBox(
+                                      width: 280,
+                                      height: 150,
+                                      child: ListView.builder(
+                                        padding: EdgeInsets.zero,
+                                        itemCount: options.length + 1,
+                                        itemBuilder: (context, index) {
+                                          if (index == 0) {
                                             return ListTile(
-                                              dense: true,
-                                              title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                                              subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9)),
-                                              onTap: () => onSelected(item),
+                                              tileColor: Colors.blue.shade100,
+                                              leading: const Icon(Icons.add_circle, color: Colors.blue, size: 16),
+                                              title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue)),
+                                              onTap: () async {
+                                                await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
+                                                await _loadDropdownDataAndSettings();
+                                              },
                                             );
-                                          },
-                                        ),
+                                          }
+                                          final item = options.elementAt(index - 1);
+                                          return ListTile(
+                                            dense: true,
+                                            title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                            subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9)),
+                                            onTap: () => onSelected(item),
+                                          );
+                                        },
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
+                                  ),
+                                );
+                              },
                             )
                           else
                             Row(
@@ -845,154 +1073,21 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const Divider(height: 6),
               
+              // Bottom Summary
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                        Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-
-                    ...List.generate(_billChargesList.length, (index) {
-                      final charge = _billChargesList[index];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1),
-                        child: Row(
-                          children: [
-                            Expanded(flex: 3, child: Text(charge['name'], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
-                            SizedBox(
-                              width: 40,
-                              height: 26,
-                              child: TextField(
-                                controller: TextEditingController(text: charge['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['qty'].toString().length)),
-                                keyboardType: TextInputType.number,
-                                style: const TextStyle(fontSize: 10),
-                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
-                                onChanged: (val) {
-                                  charge['qty'] = double.tryParse(val) ?? 1.0;
-                                  setState(() {});
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                            SizedBox(
-                              width: 50,
-                              height: 26,
-                              child: TextField(
-                                controller: TextEditingController(text: charge['rate'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: charge['rate'].toString().length)),
-                                keyboardType: TextInputType.number,
-                                style: const TextStyle(fontSize: 10),
-                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(2)),
-                                onChanged: (val) {
-                                  charge['rate'] = double.tryParse(val) ?? 0.0;
-                                  setState(() {});
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                            Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 12, color: Colors.red),
-                              onPressed: () => setState(() => _billChargesList.removeAt(index)),
-                              constraints: const BoxConstraints(),
-                              padding: EdgeInsets.zero,
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-
-                    const SizedBox(height: 2),
-                    SizedBox(
-                      height: 32,
-                      child: TapRegion(
-                        onTapOutside: (_) {},
-                        child: RawAutocomplete<Map<String, dynamic>>(
-                          optionsBuilder: (TextEditingValue textEditingValue) {
-                            if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
-                            return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
-                          },
-                          displayStringForOption: (option) => option['name'],
-                          onSelected: (selection) {
-                            setState(() {
-                              _billChargesList.add({
-                                'name': selection['name'],
-                                'type': selection['type'],
-                                'mode': selection['mode'],
-                                'qty': 1.0,
-                                'rate': selection['value'] ?? 0.0,
-                              });
-                            });
-                            _freightSearchController.clear();
-                          },
-                          textEditingController: _freightSearchController,
-                          focusNode: _freightFocusNode,
-                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                            return TextField(
-                              controller: controller,
-                              focusNode: focusNode,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: const InputDecoration(
-                                labelText: 'Add Freight / Charge...',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                prefixIcon: Icon(Icons.add_circle_outline, size: 14),
-                              ),
-                              onSubmitted: (val) {
-                                if (val.trim().isEmpty) {
-                                  FocusScope.of(context).requestFocus(_saveButtonFocusNode);
-                                }
-                              },
-                            );
-                          },
-                          optionsViewBuilder: (context, onSelected, options) {
-                            return Align(
-                              alignment: Alignment.topLeft,
-                              child: Material(
-                                elevation: 4,
-                                child: SizedBox(
-                                  width: 240,
-                                  height: 120,
-                                  child: ListView.builder(
-                                    padding: EdgeInsets.zero,
-                                    itemCount: options.length,
-                                    itemBuilder: (context, index) {
-                                      final opt = options.elementAt(index);
-                                      return ListTile(
-                                        dense: true,
-                                        title: Text(opt['name'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                        onTap: () => onSelected(opt),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blue)),
-                      ],
-                    ),
+                    Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                    Text('Return Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blue)),
                   ],
                 ),
               ),
               const SizedBox(height: 6),
 
+              // Fixed Bottom Action Buttons
               Row(
                 children: [
                   Expanded(
@@ -1002,7 +1097,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                         icon: const Icon(Icons.preview, size: 14),
                         label: const Text('Preview', style: TextStyle(fontSize: 11)),
-                        onPressed: () => _generateAndPrintOrShareReturn(isShare: false),
+                        onPressed: _showPurchaseReturnPreviewDialog,
                       ),
                     ),
                   ),
@@ -1048,6 +1143,8 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
     _freightSearchController.dispose();
+    _dateFocusNode.dispose();
+    _partyFocusNode.dispose();
     _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
