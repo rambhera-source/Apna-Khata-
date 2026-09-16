@@ -28,7 +28,6 @@ class OrdersManagementScreen extends StatefulWidget {
 class _OrdersManagementScreenState extends State<OrdersManagementScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // Form Controllers & State
   final TextEditingController _partyController = TextEditingController();
   final TextEditingController _orderNoController = TextEditingController(text: 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}');
   final TextEditingController _dateController = TextEditingController();
@@ -37,6 +36,8 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
   
+  final FocusNode _dateFocusNode = FocusNode();
+  final FocusNode _partyFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
@@ -53,7 +54,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
   Product? _selectedInlineProduct;
   final List<Map<String, dynamic>> _orderItems = [];
 
-  // Orders Management & Filter State
   List<SalesOrder> _ordersList = [];
   bool _isLoadingOrders = false;
   DateTime _fromDate = DateTime.now().subtract(const Duration(days: 30));
@@ -71,6 +71,10 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     _dateController.text = DateFormat('dd-MM-yyyy').format(_selectedDate);
     _loadData();
     _fetchOrders();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FocusScope.of(context).requestFocus(_dateFocusNode);
+    });
   }
 
   @override
@@ -82,6 +86,8 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     _inlineSearchController.dispose();
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
+    _dateFocusNode.dispose();
+    _partyFocusNode.dispose();
     _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
@@ -143,7 +149,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     }
   }
 
-  // 📅 Compact & Modern Date Picker with Manual Entry Support
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -172,6 +177,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
         _selectedDate = picked;
         _dateController.text = DateFormat('dd-MM-yyyy').format(picked);
       });
+      _partyFocusNode.requestFocus();
     }
   }
 
@@ -236,7 +242,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     return total < 0 ? 0 : total;
   }
 
-  // 📄 PDF Generation for Preview, Share & Print
   Future<void> _generateAndPrintOrShareOrder({required bool isShare}) async {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _orderItems.isEmpty) {
@@ -331,7 +336,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     }
   }
 
-  // 🔍 Fetch Orders Date-wise
   Future<void> _fetchOrders() async {
     setState(() => _isLoadingOrders = true);
 
@@ -352,7 +356,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     });
   }
 
-  // 💾 Save New Order
   Future<void> _saveOrder() async {
     if (_partyController.text.isEmpty || _orderItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
@@ -438,7 +441,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     );
   }
 
-  // 🗑️ Delete Single Order
   Future<void> _deleteOrder(SalesOrder order) async {
     await DatabaseHelper.isar.writeTxn(() async {
       await order.items.load();
@@ -451,7 +453,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order deleted successfully!'), backgroundColor: Colors.red));
   }
 
-  // 🗑️ Bulk Delete Selected Orders
   Future<void> _bulkDeleteOrders() async {
     if (_selectedOrderIds.isEmpty) return;
 
@@ -474,7 +475,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     );
   }
 
-  // ✏️ Modify Order Dialog
   void _editOrder(SalesOrder order) async {
     await order.items.load();
     final TextEditingController partyController = TextEditingController(text: order.partyName);
@@ -558,6 +558,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Text(_isSelectionMode ? '${_selectedOrderIds.length} Selected' : 'Orders Management'),
         backgroundColor: Colors.amber.shade900,
@@ -595,7 +596,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Bar (Order No & Date)
                 Row(
                   children: [
                     Expanded(
@@ -621,6 +621,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                         height: 40,
                         child: TextField(
                           controller: _dateController,
+                          focusNode: _dateFocusNode,
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                           decoration: InputDecoration(
                             labelText: 'Date',
@@ -634,6 +635,12 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                               padding: const EdgeInsets.only(right: 4),
                             ),
                           ),
+                          onTap: () {
+                            _dateController.selection = TextSelection(baseOffset: 0, extentOffset: _dateController.text.length);
+                          },
+                          onSubmitted: (_) {
+                            _partyFocusNode.requestFocus();
+                          },
                           onChanged: (val) {
                             try {
                               final parsedDate = DateFormat('dd-MM-yyyy').parse(val);
@@ -649,7 +656,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                 ),
                 const SizedBox(height: 6),
 
-                // Customer / Party Name Selection
                 Row(
                   children: [
                     Expanded(
@@ -659,6 +665,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                           label: 'Customer / Party Name *',
                           items: _allAccounts,
                           controller: _partyController,
+                          focusNode: _partyFocusNode,
                           onSelected: (val) {
                             _partyController.text = val;
                             Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
@@ -688,7 +695,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                 const Text('Order Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                 const SizedBox(height: 2),
 
-                // 📦 Items List & Inline Product Search Bar inside Scrollable Expanded area
                 Expanded(
                   child: ListView(
                     padding: EdgeInsets.zero,
@@ -756,7 +762,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
 
                       const SizedBox(height: 4),
 
-                      // Inline Search Bar for Products
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.amber.shade200)),
@@ -912,7 +917,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                 ),
                 const Divider(height: 6),
                 
-                // 📐 Bottom Summary & Save Order Button
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.amber.shade200)),
@@ -1031,7 +1035,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                 ),
                 const SizedBox(height: 6),
 
-                // Action Buttons (Preview, Share PDF, Save Order)
                 Row(
                   children: [
                     Expanded(
