@@ -404,7 +404,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
                               pw.Text('GST (${_gstRate}%):', style: const pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                              pw.Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
                         ],
@@ -450,7 +450,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
         ..voucherNumber = _returnNoController.text
         ..partyName = _partyController.text.trim()
         ..cashOrBank = 'Cash'
-        ..amount = _grandTotal
+        ..amount = -_grandTotal // 👈 यहाँ माइनस (-) कर दिया गया है ताकि लेजर में अमाउंट कम (Less) हो जाए
         ..notes = 'Sales Return Bill';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
