@@ -35,7 +35,6 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
   final TextEditingController _freightSearchController = TextEditingController();
   
-  // 🔥 Focus Nodes for Complete Keyboard Flow (Starting from Date)
   final FocusNode _dateFocusNode = FocusNode();
   final FocusNode _partyFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
@@ -70,7 +69,6 @@ class _SalesScreenState extends State<SalesScreen> {
     _dateController.text = DateFormat('dd-MM-yyyy').format(_selectedDate);
     _loadDropdownDataAndSettings();
 
-    // 🔥 1. Screen khulte hi sabse pehle focus Date par jaye
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _dateFocusNode.requestFocus();
     });
@@ -307,7 +305,6 @@ class _SalesScreenState extends State<SalesScreen> {
       _inlinePriceController.text = '0';
     });
 
-    // 🔥 Item add hone ke baad focus wapas Product Search par jaye
     Future.delayed(const Duration(milliseconds: 50), () {
       _searchFocusNode.requestFocus();
     });
@@ -384,14 +381,15 @@ class _SalesScreenState extends State<SalesScreen> {
               pw.Text('Bill To: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 15),
               pw.Table.fromTextArray(
-                headers: ['S.No', 'Item Description (SKU)', 'Qty', 'Price (₹)', 'Total (₹)'],
+                headers: ['S.No', 'Item Description (SKU)', 'Qty', 'Unit', 'Price (₹)', 'Amount (₹)'],
                 data: List.generate(_cartItems.length, (index) {
                   final item = _cartItems[index];
                   double total = (item['qty'] as int) * (item['price'] as double);
                   return [
                     '${index + 1}',
-                    '${item['name']} [${item['sku']}] (${item['stockType']})',
+                    '${item['name']} [${item['sku']}]',
                     '${item['qty']}',
+                    'Pcs',
                     '${item['price']}',
                     '${total.toStringAsFixed(2)}',
                   ];
@@ -521,7 +519,6 @@ class _SalesScreenState extends State<SalesScreen> {
       _invoiceNoController.text = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
       _billChargesList.clear();
     });
-    // Bill clear hone ke baad wapas Date par focus bhej dein
     Future.delayed(const Duration(milliseconds: 50), () {
       _dateFocusNode.requestFocus();
     });
@@ -554,7 +551,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        resizeToAvoidBottomInset: true,
+        resizeToAvoidBottomInset: false, // 🔥 कीबोर्ड आने पर बटन्स को नीचे फिक्स रखने के लिए
         appBar: AppBar(
           title: const Text('Sales Invoice'),
           backgroundColor: Colors.teal.shade800,
@@ -617,7 +614,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Date Input (Starting Focus) & Customer Searchable Autocomplete
+              // Date & Customer Autocomplete
               Row(
                 children: [
                   SizedBox(
@@ -625,7 +622,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     width: 110,
                     child: TextField(
                       controller: _dateController,
-                      focusNode: _dateFocusNode, // 🔥 1. Date par sabse pehle focus
+                      focusNode: _dateFocusNode,
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                       textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
@@ -641,7 +638,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         ),
                       ),
                       onSubmitted: (_) {
-                        // 🔥 Date par Enter dabate hi focus Party Name par jaye
                         _partyFocusNode.requestFocus();
                       },
                     ),
@@ -664,14 +660,12 @@ class _SalesScreenState extends State<SalesScreen> {
                         onSelected: (Account selection) {
                           _partyController.text = selection.name;
                           _checkForPendingOrders(selection.name);
-                          
-                          // 🔥 2. Party select hote hi focus Product Search par jaye
                           Future.delayed(const Duration(milliseconds: 50), () {
                             _searchFocusNode.requestFocus();
                           });
                         },
                         textEditingController: _partyController,
-                        focusNode: _partyFocusNode, // 🔥 Party Focus Node
+                        focusNode: _partyFocusNode,
                         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                           return TextField(
                             controller: controller,
@@ -732,10 +726,25 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              const Text('Items in Bill:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              // 🔥 Professional Grid Table Header (Excel/ERP Style)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                decoration: BoxDecoration(color: Colors.teal.shade800, borderRadius: BorderRadius.circular(4)),
+                child: const Row(
+                  children: [
+                    SizedBox(width: 25, child: Text('S.N.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10))),
+                    Expanded(flex: 3, child: Text('Item Description', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10))),
+                    SizedBox(width: 45, child: Text('Qty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.center)),
+                    SizedBox(width: 45, child: Text('Unit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.center)),
+                    SizedBox(width: 60, child: Text('Price', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.right)),
+                    SizedBox(width: 65, child: Text('Amount', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10), textAlign: TextAlign.right)),
+                    SizedBox(width: 25),
+                  ],
+                ),
+              ),
               const SizedBox(height: 2),
 
-              // Items List & Inline Product Search Bar
+              // 🔥 Professional Items Table & Inline Search Grid
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
@@ -746,17 +755,20 @@ class _SalesScreenState extends State<SalesScreen> {
                       bool isOutOfStock = item['isOutOfStock'] ?? false;
 
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        margin: const EdgeInsets.symmetric(vertical: 2),
-                        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: isOutOfStock ? Colors.red.shade300 : Colors.grey.shade300), borderRadius: BorderRadius.circular(4)),
+                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                        decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+                          color: index % 2 == 0 ? Colors.white : Colors.grey.shade50,
+                        ),
                         child: Row(
                           children: [
+                            SizedBox(width: 25, child: Text('${index + 1}', style: const TextStyle(fontSize: 11))),
                             Expanded(
                               flex: 3,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('${index + 1}. ${item['name']}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87)),
+                                  Text(item['name'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87)),
                                   Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                 ],
                               ),
@@ -767,6 +779,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                 controller: TextEditingController(text: item['qty'].toString())..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
                                 decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
                                 onChanged: (val) {
                                   int? q = int.tryParse(val);
@@ -777,12 +790,15 @@ class _SalesScreenState extends State<SalesScreen> {
                               ),
                             ),
                             const SizedBox(width: 4),
+                            const SizedBox(width: 45, child: Text('Pcs', style: TextStyle(fontSize: 11), textAlign: TextAlign.center)),
+                            const SizedBox(width: 4),
                             SizedBox(
                               width: 60,
                               child: TextField(
                                 controller: TextEditingController(text: item['price'].toString())..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.right,
                                 decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.all(4)),
                                 onChanged: (val) {
                                   double? p = double.tryParse(val);
@@ -793,21 +809,27 @@ class _SalesScreenState extends State<SalesScreen> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red, size: 16),
-                              onPressed: () => setState(() => _cartItems.removeAt(index)),
-                              constraints: const BoxConstraints(),
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                            SizedBox(
+                              width: 65,
+                              child: Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal), textAlign: TextAlign.right),
+                            ),
+                            SizedBox(
+                              width: 25,
+                              child: IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 14),
+                                onPressed: () => setState(() => _cartItems.removeAt(index)),
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                              ),
                             ),
                           ],
                         ),
                       );
                     }),
 
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
 
-                    // Product Search / Inline Item Section
+                    // Inline Product Search Bar inside Grid style
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
@@ -830,15 +852,13 @@ class _SalesScreenState extends State<SalesScreen> {
                                   _inlinePriceController.text = selection.priceA.toString();
                                   _inlineQtyController.text = '1';
                                 });
-                                
-                                // 🔥 3. Product select hote hi focus Qty par jaye
                                 Future.delayed(const Duration(milliseconds: 50), () {
                                   _qtyFocusNode.requestFocus();
                                   _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
                                 });
                               },
                               textEditingController: _inlineSearchController,
-                              focusNode: _searchFocusNode, // 🔥 Product Search Focus Node
+                              focusNode: _searchFocusNode,
                               fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                                 return TextField(
                                   controller: controller,
@@ -851,11 +871,6 @@ class _SalesScreenState extends State<SalesScreen> {
                                     contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                     prefixIcon: Icon(Icons.search, size: 16),
                                   ),
-                                  onSubmitted: (val) {
-                                    if (val.trim().isEmpty) {
-                                      _freightFocusNode.requestFocus();
-                                    }
-                                  },
                                 );
                               },
                               optionsViewBuilder: (context, onSelected, options) {
@@ -913,14 +928,12 @@ class _SalesScreenState extends State<SalesScreen> {
                                   width: 50,
                                   child: TextField(
                                     controller: _inlineQtyController,
-                                    focusNode: _qtyFocusNode, // 🔥 Qty Focus Node
+                                    focusNode: _qtyFocusNode,
                                     keyboardType: TextInputType.number,
-                                    textInputAction: TextInputAction.next,
                                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                     decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
                                     onTap: () => _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length),
                                     onSubmitted: (_) {
-                                      // 🔥 4. Qty par Enter dabane par focus Price par jaye
                                       _priceFocusNode.requestFocus();
                                       _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length);
                                     },
@@ -931,14 +944,12 @@ class _SalesScreenState extends State<SalesScreen> {
                                   width: 65,
                                   child: TextField(
                                     controller: _inlinePriceController,
-                                    focusNode: _priceFocusNode, // 🔥 Price Focus Node
+                                    focusNode: _priceFocusNode,
                                     keyboardType: TextInputType.number,
-                                    textInputAction: TextInputAction.done,
                                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                     decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
                                     onTap: () => _inlinePriceController.selection = TextSelection(baseOffset: 0, extentOffset: _inlinePriceController.text.length),
                                     onSubmitted: (_) {
-                                      // 🔥 5. Price par Enter dabate hi item add ho aur focus wapas Product Search par jaye
                                       _addInlineItemToCart();
                                     },
                                   ),
@@ -960,33 +971,21 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const Divider(height: 6),
               
-              // Bottom Summary & Action Buttons
+              // Bottom Summary
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Subtotal:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                        Text('₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
-                      ],
-                    ),
+                    Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                    Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
                   ],
                 ),
               ),
               const SizedBox(height: 6),
 
-              // Action Buttons
+              // 🔥 Fixed Bottom Action Buttons (Never moves up with keyboard)
               Row(
                 children: [
                   Expanded(
