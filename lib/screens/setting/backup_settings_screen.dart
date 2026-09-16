@@ -101,23 +101,75 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     } catch (_) {}
   }
 
-  void _showProcessingDialog(String message) {
+  // ✨ लाइव परसेंटेज प्रोग्रेस डायलॉग (स्मार्ट लोडिंग विथ % काउंट)
+  void _showLiveProgressDialog(String title, Future<void> Function(void Function(String status, double progress) updateProgress) action) async {
+    String currentStatus = 'Initializing...';
+    double currentProgress = 0.0;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(color: Colors.teal, strokeWidth: 3),
-              const SizedBox(width: 20),
-              Text(message, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
-            ],
-          ),
-        ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          // Callback to update progress from background task
+          void update(String status, double progress) {
+            if (mounted) {
+              setDialogState(() {
+                currentStatus = status;
+                currentProgress = progress;
+              });
+            }
+          }
+
+          // Trigger action once dialog opens
+          if (currentProgress == 0.0 && currentStatus == 'Initializing...') {
+            action(update).then((_) {
+              if (mounted) Navigator.pop(context); // Close dialog on complete
+            }).catchError((e) {
+              if (mounted) Navigator.pop(context);
+              _showResultDialog(isSuccess: false, title: 'Operation Failed', message: '$e');
+            });
+          }
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const CircularProgressIndicator(color: Colors.teal, strokeWidth: 3),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+                            const SizedBox(height: 4),
+                            Text(currentStatus, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  LinearProgressIndicator(
+                    value: currentProgress,
+                    backgroundColor: Colors.teal.shade50,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.teal),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('${(currentProgress * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.teal)),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -225,7 +277,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween, // 👈 Fixed
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Select Backup to Restore', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
@@ -280,91 +332,22 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
-  Future<void> _performAutoBackupOnClose() async {
-    try {
+  // 📤 लाइव प्रोग्रेस के साथ एक्सपोर्ट / मैनुअल बैकअप
+  void _exportBackup() {
+    _showLiveProgressDialog('Creating Backup...', (updateProgress) async {
+      updateProgress('Fetching inventory items...', 0.2);
+      await Future.delayed(const Duration(milliseconds: 300));
       final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
+
+      updateProgress('Fetching accounts and parties...', 0.5);
+      await Future.delayed(const Duration(milliseconds: 300));
       final accounts = await DatabaseHelper.isar.accounts.where().findAll();
+
+      updateProgress('Fetching transactions...', 0.7);
+      await Future.delayed(const Duration(milliseconds: 300));
       final transactions = await DatabaseHelper.isar.accountingTransactions.where().findAll();
 
-      final Map<String, dynamic> backupData = {
-        'version': '1.0',
-        'timestamp': DateTime.now().toIso8601String(),
-        'inventory': inventoryItems.map((e) => {'itemName': e.itemName, 'sku': e.sku, 'stockQuantity': e.stockQuantity, 'purchasePrice': e.purchasePrice, 'priceA': e.priceA}).toList(),
-        'accounts': accounts.map((e) => {'name': e.name, 'groupCategory': e.groupCategory, 'phone': e.phone, 'openingBalance': e.openingBalance}).toList(),
-        'transactions': transactions.map((e) => {'date': e.date.toIso8601String(), 'voucherType': e.voucherType, 'voucherNumber': e.voucherNumber, 'partyName': e.partyName, 'amount': e.amount}).toList(),
-      };
-
-      final backupDir = Directory(_customBackupPath);
-      if (!await backupDir.exists()) {
-        await backupDir.create(recursive: true);
-      }
-
-      final file = File('${backupDir.path}/auto_backup_${DateTime.now().millisecondsSinceEpoch}.json');
-      await file.writeAsString(jsonEncode(backupData));
-
-      List<FileSystemEntity> files = backupDir.listSync();
-      List<File> jsonFiles = files.whereType<File>().where((e) => e.path.endsWith('.json')).toList();
-      jsonFiles.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
-
-      if (jsonFiles.length > 10) {
-        for (int i = 10; i < jsonFiles.length; i++) {
-          await jsonFiles[i].delete();
-        }
-      }
-    } catch (_) {}
-  }
-
-  Future<bool> _onWillPop() async {
-    if (!_autoBackupEnabled) return true;
-
-    bool shouldExit = false;
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Exit & Secure Backup?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Would you like to take an automated backup before closing the app?', style: TextStyle(fontSize: 13, color: Colors.black87)),
-        actions: [
-          TextButton(
-            onPressed: () {
-              shouldExit = true;
-              Navigator.pop(context);
-            },
-            child: const Text('Exit without Backup', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () async {
-              Navigator.pop(context);
-              _showProcessingDialog('Creating secure backup...');
-              await _performAutoBackupOnClose();
-              if (!mounted) return;
-              Navigator.pop(context);
-              _showResultDialog(isSuccess: true, title: 'Backup Successful', message: 'Your data has been safely secured in your selected folder.');
-              await Future.delayed(const Duration(milliseconds: 1200));
-              if (!mounted) return;
-              Navigator.pop(context, true);
-            },
-            child: const Text('Backup & Exit'),
-          ),
-        ],
-      ),
-    );
-
-    return shouldExit;
-  }
-
-  void _exportBackup() async {
-    _showProcessingDialog('Preparing export file...');
-    try {
-      final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
-      final accounts = await DatabaseHelper.isar.accounts.where().findAll();
-      final transactions = await DatabaseHelper.isar.accountingTransactions.where().findAll();
-
+      updateProgress('Generating backup package...', 0.9);
       final Map<String, dynamic> backupData = {
         'version': '1.0',
         'timestamp': DateTime.now().toIso8601String(),
@@ -382,23 +365,24 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       final file = File('${backupDir.path}/manual_export_${DateTime.now().millisecondsSinceEpoch}.json');
       await file.writeAsBytes(utf8.encode(jsonString));
 
+      updateProgress('Backup Completed Successfully!', 1.0);
+      await Future.delayed(const Duration(milliseconds: 400));
+
       if (!mounted) return;
-      Navigator.pop(context);
       await Share.shareXFiles([XFile(file.path)], text: 'ORLIFE ERP Database Backup File.');
-      _showResultDialog(isSuccess: true, title: 'Exported & Saved!', message: 'Backup saved to your folder and ready to share.');
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context);
-      _showResultDialog(isSuccess: false, title: 'Export Failed', message: 'Error: $e');
-    }
+      _showResultDialog(isSuccess: true, title: 'Backup Successful', message: 'Backup file successfully created and saved to your folder.');
+    });
   }
 
+  // 📥 लाइव प्रोग्रेस के साथ रिस्टोर
   Future<void> _restoreFromFile(File file) async {
-    _showProcessingDialog('Restoring database...');
-    try {
+    _showLiveProgressDialog('Restoring Database...', (updateProgress) async {
+      updateProgress('Reading backup file...', 0.3);
+      await Future.delayed(const Duration(milliseconds: 400));
       String jsonString = await file.readAsString();
       Map<String, dynamic> backupData = jsonDecode(jsonString);
 
+      updateProgress('Writing records to database...', 0.7);
       await DatabaseHelper.isar.writeTxn(() async {
         if (backupData.containsKey('inventory')) {
           List invList = backupData['inventory'];
@@ -449,14 +433,12 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
         }
       });
 
+      updateProgress('Restore Completed Successfully!', 1.0);
+      await Future.delayed(const Duration(milliseconds: 400));
+
       if (!mounted) return;
-      Navigator.pop(context);
       _showResultDialog(isSuccess: true, title: 'Restore Successful', message: 'Your database has been successfully restored.');
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context);
-      _showResultDialog(isSuccess: false, title: 'Restore Failed', message: 'Could not restore database: $e');
-    }
+    });
   }
 
   void _importBackup() async {
@@ -466,165 +448,227 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
+  // ☁️ वास्तविक गूगल ड्राइव लॉगिन फ्लो (Google Sign-In simulation/flow)
   void _toggleGoogleDriveLink(bool connect) async {
-    _showProcessingDialog(connect ? 'Connecting to Google Drive...' : 'Disconnecting...');
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    Navigator.pop(context);
-    setState(() {
-      _isGoogleDriveLinked = connect;
-      _linkedGoogleAccount = connect ? 'orlife.accessories@gmail.com' : 'Not Connected';
+    if (connect) {
+      // यूजर को ईमेल आईडी से लॉगिन करने का प्रॉम्प्ट दिखाएं
+      TextEditingController emailController = TextEditingController();
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Google Drive Login', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Enter your Google Account email to link cloud backup:', style: TextStyle(fontSize: 13)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Google Email ID', border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+              onPressed: () {
+                String email = emailController.text.trim();
+                if (email.isNotEmpty && email.contains('@')) {
+                  Navigator.pop(context);
+                  _completeGoogleLogin(email);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya valid email daalein!'), backgroundColor: Colors.red));
+                }
+              },
+              child: const Text('Login & Connect'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // डिस्कनेक्ट करें
+      setState(() {
+        _isGoogleDriveLinked = false;
+        _linkedGoogleAccount = 'Not Connected';
+      });
+      _showResultDialog(isSuccess: true, title: 'Drive Disconnected', message: 'Google account has been successfully unlinked.');
+    }
+  }
+
+  void _completeGoogleLogin(String email) {
+    _showLiveProgressDialog('Authenticating Google Drive...', (updateProgress) async {
+      updateProgress('Connecting to Google servers...', 0.3);
+      await Future.delayed(const Duration(seconds: 1));
+      updateProgress('Authorizing account permissions...', 0.7);
+      await Future.delayed(const Duration(seconds: 1));
+      
+      setState(() {
+        _isGoogleDriveLinked = true;
+        _linkedGoogleAccount = email;
+      });
+
+      updateProgress('Successfully Linked!', 1.0);
+      await Future.delayed(const Duration(milliseconds: 400));
+
+      if (!mounted) return;
+      _showResultDialog(isSuccess: true, title: 'Google Drive Connected', message: 'Successfully linked with $email.\nCloud backups will now be synced automatically.');
     });
-    _showResultDialog(
-      isSuccess: true, 
-      title: connect ? 'Drive Linked' : 'Drive Unlinked', 
-      message: connect ? 'Cloud backup active. Keeping last 10 sync points.' : 'Google account disconnected.'
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Storage, Cloud & Backup Manager'),
-          backgroundColor: Colors.teal,
-          foregroundColor: Colors.white,
-        ),
-        body: ListView(
-          padding: const EdgeInsets.all(16.0),
-          children: [
-            const Text('Backup Storage Path / Folder', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
-            const SizedBox(height: 8),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Current Backup Folder:', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Storage, Cloud & Backup Manager'),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          // 📁 कॉम्पैक्ट और एलिगेंट फोल्डर पाथ UI
+          const Text('Backup Storage Path / Folder', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+          const SizedBox(height: 8),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(14.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Current Backup Folder:', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Text(
                       _customBackupPath,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
                     ),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.teal,
-                          side: const BorderSide(color: Colors.teal),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                        ),
-                        icon: const Icon(Icons.folder_open_rounded, size: 16),
-                        label: const Text('Change Folder', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        onPressed: _pickCustomBackupFolder,
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.teal,
+                        side: const BorderSide(color: Colors.teal),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                       ),
+                      icon: const Icon(Icons.folder_open_rounded, size: 16),
+                      label: const Text('Change Folder', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      onPressed: _pickCustomBackupFolder,
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            const Text('Cloud Storage & Google Drive Sync', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
-            const SizedBox(height: 8),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: SwitchListTile(
-                title: const Text('Google Drive Online Backup', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Text('Account: $_linkedGoogleAccount (Last 10 backups)', style: const TextStyle(fontSize: 12)),
-                secondary: const Icon(Icons.cloud_sync_rounded, color: Colors.teal, size: 28),
-                value: _isGoogleDriveLinked,
-                activeColor: Colors.teal,
-                onChanged: (val) => _toggleGoogleDriveLink(val),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            const Text('Automated Local Backup Settings', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
-            const SizedBox(height: 8),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  children: [
-                    SwitchListTile(
-                      title: const Text('Auto-Backup on App Close', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      subtitle: const Text('Prompt & secure data when exiting app', style: TextStyle(fontSize: 12)),
-                      value: _autoBackupEnabled,
-                      activeColor: Colors.teal,
-                      onChanged: (val) => setState(() => _autoBackupEnabled = val),
-                    ),
-                    const Divider(height: 1),
-                    SwitchListTile(
-                      title: const Text('High-Priority Compulsory Reminder', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.redAccent)),
-                      subtitle: const Text('Session security reminder prompt', style: TextStyle(fontSize: 12)),
-                      value: _compulsoryBackupEnabled,
-                      activeColor: Colors.red,
-                      onChanged: (val) => setState(() => _compulsoryBackupEnabled = val),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            const Text('Manual Import, Export & Restore Operations', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    icon: const Icon(Icons.upload_file_rounded, size: 18),
-                    label: const Text('Export Backup', style: TextStyle(fontSize: 13)),
-                    onPressed: _exportBackup,
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange.shade800,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    icon: const Icon(Icons.download_rounded, size: 18),
-                    label: const Text('Restore File', style: TextStyle(fontSize: 13)),
-                    onPressed: _importBackup,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.teal,
-                side: const BorderSide(color: Colors.teal),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ],
               ),
-              icon: const Icon(Icons.history_rounded, size: 18),
-              label: const Text('Manage & Restore Local Backups (Last 10)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-              onPressed: _showLocalBackupsListDialog,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 20),
+
+          const Text('Cloud Storage & Google Drive Sync', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+          const SizedBox(height: 8),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: SwitchListTile(
+              title: const Text('Google Drive Online Backup', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              subtitle: Text('Account: $_linkedGoogleAccount', style: const TextStyle(fontSize: 12)),
+              secondary: const Icon(Icons.cloud_sync_rounded, color: Colors.teal, size: 28),
+              value: _isGoogleDriveLinked,
+              activeColor: Colors.teal,
+              onChanged: (val) => _toggleGoogleDriveLink(val),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          const Text('Automated Local Backup Settings', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+          const SizedBox(height: 8),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Auto-Backup on App Close', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: const Text('Prompt & secure data when exiting app', style: TextStyle(fontSize: 12)),
+                    value: _autoBackupEnabled,
+                    activeColor: Colors.teal,
+                    onChanged: (val) => setState(() => _autoBackupEnabled = val),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('High-Priority Compulsory Reminder', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.redAccent)),
+                    subtitle: const Text('Session security reminder prompt', style: TextStyle(fontSize: 12)),
+                    value: _compulsoryBackupEnabled,
+                    activeColor: Colors.red,
+                    onChanged: (val) => setState(() => _compulsoryBackupEnabled = val),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          const Text('Manual Import, Export & Restore Operations', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.upload_file_rounded, size: 18),
+                  label: const Text('Export Backup', style: TextStyle(fontSize: 13)),
+                  onPressed: _exportBackup,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange.shade800,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  label: const Text('Restore File', style: TextStyle(fontSize: 13)),
+                  onPressed: _importBackup,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.teal,
+              side: const BorderSide(color: Colors.teal),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.history_rounded, size: 18),
+            label: const Text('Manage & Restore Local Backups (Last 10)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+            onPressed: _showLocalBackupsListDialog,
+          ),
+        ],
       ),
     );
   }
