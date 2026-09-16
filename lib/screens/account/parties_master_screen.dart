@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
-import 'package:excel/excel.dart' as excel_pkg; // Excel reading support
+import 'package:excel/excel.dart' as excel_pkg;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
+import 'package:accounting_app/models/transaction_model.dart';
 import 'add_account_screen.dart';
 
 class PartiesMasterScreen extends StatefulWidget {
@@ -23,36 +24,155 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
   List<Account> _partiesList = [];
   bool _isLoading = true;
 
+  // 🔥 Selection State Management
+  final Set<int> _selectedPartyIds = {};
+  bool _isSelectAll = false;
+
+  // 🔥 Category Filter Variable
+  String _selectedCategoryFilter = 'All';
+  final List<String> _filterCategories = [
+    'All',
+    'Sundry Debtor',
+    'Sundry Creditor',
+    'Bank Account',
+    'Cash-in-Hand',
+    'Direct Expense',
+    'Indirect Expense',
+    'Direct Income',
+    'Indirect Income',
+  ];
+
   @override
   void initState() {
     super.initState();
     _loadParties();
   }
 
-  // 📂 डेटाबेस से सभी अकाउंट्स/पार्टियों को लोड करना
   Future<void> _loadParties() async {
     setState(() => _isLoading = true);
     final accounts = await DatabaseHelper.isar.accounts.where().findAll();
     setState(() {
       _partiesList = accounts;
       _isLoading = false;
+      _selectedPartyIds.clear();
+      _isSelectAll = false;
     });
   }
 
-  // ⚠️ Delete Warning Popup (Yes/No)
-  void _confirmDelete(Account party) {
+  // 🛡️ Helper to check if a party has any recorded transactions
+  Future<bool> _hasTransactions(String partyName) async {
+    final txns = await DatabaseHelper.isar.accountingTransactions
+        .filter()
+        .partyNameContains(partyName, caseSensitive: false)
+        .findAll();
+    return txns.isNotEmpty;
+  }
+
+  // 🗑️ Bulk Delete with Transaction Safety Check
+  void _confirmBulkDelete() async {
+    if (_selectedPartyIds.isEmpty) return;
+
+    // Filter out parties that have transactions
+    List<Account> deletableParties = [];
+    List<String> skippedParties = [];
+
+    for (int id in _selectedPartyIds) {
+      final party = _partiesList.firstWhere((p) => p.id == id);
+      bool hasTxn = await _hasTransactions(party.name);
+      if (hasTxn) {
+        skippedParties.add(party.name);
+      } else {
+        deletableParties.add(party);
+      }
+    }
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Party?'),
-        content: Text('Kya aap sach mein "${party.name}" ko delete karna chahte hain? Yeh action wapas nahi liya ja sakta.'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('Delete Parties?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Delete ${deletableParties.length} selected parties?', style: const TextStyle(fontSize: 13)),
+            if (skippedParties.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '⚠️ Skipped: ${skippedParties.length} party/parties have existing transactions and cannot be deleted.',
+                style: const TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          if (deletableParties.isNotEmpty)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, minimumSize: const Size(60, 32)),
+              onPressed: () async {
+                Navigator.pop(context);
+                await DatabaseHelper.isar.writeTxn(() async {
+                  for (var party in deletableParties) {
+                    await DatabaseHelper.isar.accounts.delete(party.id);
+                  }
+                });
+                _loadParties();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Selected safe parties deleted successfully!'), backgroundColor: Colors.red),
+                );
+              },
+              child: const Text('Delete'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // 🗑️ Single Delete with Transaction Safety Check
+  void _confirmDelete(Account party) async {
+    bool hasTxn = await _hasTransactions(party.name);
+
+    if (!mounted) return;
+
+    if (hasTxn) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Text('Cannot Delete Party', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red)),
+          content: Text('Transaction available! "${party.name}" ke naam par transactions maujood hain. Aap is account ko delete nahi kar sakte.', style: const TextStyle(fontSize: 13)),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, minimumSize: const Size(60, 32)),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('Delete Party?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        content: Text('Delete "${party.name}"?', style: const TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('No', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, minimumSize: const Size(60, 32)),
             onPressed: () async {
               Navigator.pop(context);
               await DatabaseHelper.isar.writeTxn(() async {
@@ -61,17 +181,55 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
               _loadParties();
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Party safely delete ho gayi!'), backgroundColor: Colors.red),
+                const SnackBar(content: Text('Deleted successfully!'), backgroundColor: Colors.red),
               );
             },
-            child: const Text('Yes, Delete'),
+            child: const Text('Yes'),
           ),
         ],
       ),
     );
   }
 
-  // 📥 Download Excel Template Function
+  Future<void> _exportSelectedParties() async {
+    if (_selectedPartyIds.isEmpty) return;
+
+    try {
+      List<List<dynamic>> rows = [
+        ['Party Name', 'Mobile Number', 'Group Category', 'Opening Balance', 'Balance Type', 'GSTIN', 'Address']
+      ];
+
+      for (var party in _partiesList) {
+        if (_selectedPartyIds.contains(party.id)) {
+          rows.add([
+            party.name,
+            party.phone ?? '',
+            party.groupCategory,
+            party.openingBalance,
+            party.balanceType,
+            party.gstin ?? '',
+            party.address ?? ''
+          ]);
+        }
+      }
+
+      String csvData = const ListToCsvConverter().convert(rows);
+      final output = await getTemporaryDirectory();
+      final file = File('${output.path}/Selected_Parties_Export_${DateTime.now().millisecondsSinceEpoch}.csv');
+      await file.writeAsString(csvData);
+
+      if (!mounted) return;
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Exported ${_selectedPartyIds.length} Parties from ORLIFE ERP.',
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   Future<void> _downloadExcelTemplate() async {
     try {
       List<List<dynamic>> rows = [
@@ -96,7 +254,6 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
     }
   }
 
-  // 📊 Universal Excel & CSV Import with Progress Dialog & Error Report Generation
   Future<void> _importPartiesUniversal() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -111,7 +268,6 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
 
         String extension = file.extension?.toLowerCase() ?? '';
         if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || extension == 'xlsx' || extension == 'xls') {
-          // 📊 Handle Excel File (.xlsx / .xls)
           var bytes = file.bytes ?? await File(file.path!).readAsBytes();
           var excelFile = excel_pkg.Excel.decodeBytes(bytes);
           for (var table in excelFile.tables.keys) {
@@ -121,10 +277,9 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
                 rows.add(row.map((cell) => cell?.value ?? '').toList());
               }
             }
-            break; // First sheet only
+            break;
           }
         } else {
-          // 📄 Handle CSV / Text File
           String csvString = '';
           if (file.bytes != null) {
             csvString = utf8.decode(file.bytes!, allowMalformed: true);
@@ -143,7 +298,6 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
           return;
         }
 
-        // 🔄 Show Processing Dialog
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -184,7 +338,6 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
             String gstin = row.length > 4 ? row[4].toString().trim() : '';
             String pincode = row.length > 5 ? row[5].toString().trim() : '';
 
-            // 1. Mandatory Fields Check
             if (name.isEmpty || mobile.isEmpty) {
               var failedRow = List.from(row);
               while (failedRow.length < rows[0].length) failedRow.add('');
@@ -193,7 +346,6 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
               continue;
             }
 
-            // 2. Duplicate Check
             final existingByMobile = await DatabaseHelper.isar.accounts
                 .filter()
                 .phoneEqualTo(mobile)
@@ -204,23 +356,14 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
                 .nameEqualTo(name, caseSensitive: false)
                 .findFirst();
 
-            if (existingByMobile != null) {
+            if (existingByMobile != null || existingByName != null) {
               var failedRow = List.from(row);
               while (failedRow.length < rows[0].length) failedRow.add('');
-              failedRow.add('Duplicate Mobile Number already exists');
+              failedRow.add('Duplicate record already exists');
               failedRows.add(failedRow);
               continue;
             }
 
-            if (existingByName != null) {
-              var failedRow = List.from(row);
-              while (failedRow.length < rows[0].length) failedRow.add('');
-              failedRow.add('Duplicate Party Name already exists');
-              failedRows.add(failedRow);
-              continue;
-            }
-
-            // 3. Save Account
             final account = Account()
               ..name = name
               ..phone = mobile
@@ -236,10 +379,9 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
         });
 
         if (!mounted) return;
-        Navigator.pop(context); // Close progress dialog
+        Navigator.pop(context);
         _loadParties();
 
-        // Agar koi fail records hain toh unki Error CSV file generate karein
         String? errorFilePath;
         if (failedRows.length > 1) {
           String errorCsvData = const ListToCsvConverter().convert(failedRows);
@@ -249,7 +391,6 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
           errorFilePath = errFile.path;
         }
 
-        // Show Process Report Dialog
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -261,10 +402,6 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
                 Text('✅ Successfully Imported: $successCount parties', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Text('❌ Failed / Skipped: ${failedRows.length > 1 ? failedRows.length - 1 : 0} parties', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                if (errorFilePath != null) ...[
-                  const SizedBox(height: 12),
-                  const Text('Kuch records duplicate ya invalid hone ki wajah se fail ho gaye hain. Aap failure report file download kar sakte hain.', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
               ],
             ),
             actions: [
@@ -294,106 +431,30 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
     }
   }
 
-  // ✏️ Modify / Edit Party Dialog with Pincode Auto-Fill
-  void _editParty(Account party) {
-    final nameController = TextEditingController(text: party.name);
-    final phoneController = TextEditingController(text: party.phone ?? '');
-    final balanceController = TextEditingController(text: party.openingBalance.toString());
-    final pincodeController = TextEditingController();
-    final cityController = TextEditingController();
-    final stateController = TextEditingController();
-
-    // Pincode auto-fill function
-    Future<void> lookupPincode(String pin) async {
-      if (pin.length == 6) {
-        try {
-          final url = Uri.parse('https://api.postalpincode.in/pincode/$pin');
-          final response = await http.get(url);
-          if (response.statusCode == 200) {
-            final data = jsonDecode(response.body);
-            if (data[0]['Status'] == 'Success') {
-              final postOffice = data[0]['PostOffice'][0];
-              cityController.text = postOffice['District'] ?? '';
-              stateController.text = postOffice['State'] ?? '';
-            }
-          }
-        } catch (_) {}
-      }
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Edit Party: ${party.name}'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Party Name *', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                TextField(controller: phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Mobile Number *', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                TextField(controller: balanceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Opening Balance', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: pincodeController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  decoration: const InputDecoration(labelText: 'Pincode (Auto-fill City/State)', border: OutlineInputBorder(), counterText: ''),
-                  onChanged: (val) {
-                    if (val.length == 6) {
-                      lookupPincode(val).then((_) => setDialogState(() {}));
-                    }
-                  },
-                ),
-                const SizedBox(height: 10),
-                TextField(controller: cityController, decoration: const InputDecoration(labelText: 'City / District', border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                TextField(controller: stateController, decoration: const InputDecoration(labelText: 'State', border: OutlineInputBorder())),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-              onPressed: () async {
-                String newName = nameController.text.trim();
-                String newPhone = phoneController.text.trim();
-                if (newName.isNotEmpty && newPhone.isNotEmpty) {
-                  await DatabaseHelper.isar.writeTxn(() async {
-                    party.name = newName;
-                    party.phone = newPhone;
-                    party.openingBalance = double.tryParse(balanceController.text) ?? party.openingBalance;
-                    if (cityController.text.isNotEmpty) {
-                      party.address = 'City: ${cityController.text}, State: ${stateController.text}, Pincode: ${pincodeController.text}';
-                    }
-                    await DatabaseHelper.isar.accounts.put(party);
-                  });
-                  Navigator.pop(context);
-                  _loadParties();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Party successfully updated!'), backgroundColor: Colors.green),
-                  );
-                }
-              },
-              child: const Text('Update'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final filteredParties = _selectedCategoryFilter == 'All'
+        ? _partiesList
+        : _partiesList.where((p) => p.groupCategory == _selectedCategoryFilter).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Parties & Accounts Master'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
+          if (_selectedPartyIds.isNotEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.upload_file, color: Colors.white),
+              tooltip: 'Export Selected',
+              onPressed: _exportSelectedParties,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_sweep, color: Colors.white),
+              tooltip: 'Delete Selected',
+              onPressed: _confirmBulkDelete,
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.download),
             tooltip: 'Download Excel/CSV Template',
@@ -402,23 +463,59 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
           IconButton(
             icon: const Icon(Icons.file_upload),
             tooltip: 'Bulk Import from Excel/CSV',
-            onPressed: _importPartiesUniversal, // 🔥 Universal Excel & CSV Import
+            onPressed: _importPartiesUniversal,
           ),
         ],
       ),
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             color: Colors.teal.shade50,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Total Parties: ${_partiesList.length}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                Checkbox(
+                  value: _isSelectAll,
+                  activeColor: Colors.teal,
+                  onChanged: (bool? value) {
+                    setState(() {
+                      _isSelectAll = value ?? false;
+                      if (_isSelectAll) {
+                        _selectedPartyIds.addAll(filteredParties.map((p) => p.id));
+                      } else {
+                        _selectedPartyIds.clear();
+                      }
+                    });
+                  },
+                ),
+                const Text('Select All', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedCategoryFilter,
+                      isDense: true,
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 12),
+                      items: _filterCategories.map((cat) {
+                        return DropdownMenuItem(
+                          value: cat,
+                          child: Text(cat == 'All' ? '📂 All (${_partiesList.length})' : '📂 $cat', style: const TextStyle(fontSize: 12)),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedCategoryFilter = val!;
+                          _selectedPartyIds.clear();
+                          _isSelectAll = false;
+                        });
+                      },
+                    ),
+                  ),
+                ),
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add New Party'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, minimumSize: const Size(90, 32)),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add', style: TextStyle(fontSize: 11)),
                   onPressed: () async {
                     await Navigator.push(
                       context,
@@ -433,47 +530,85 @@ class _PartiesMasterScreenState extends State<PartiesMasterScreen> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _partiesList.isEmpty
+                : filteredParties.isEmpty
                     ? const Center(
                         child: Text(
-                          'Abhi tak koi party add nahi ki gayi hai.\nUpar "Add New Party" par click karein.',
+                          'Is category mein koi party nahi mili.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.grey, fontSize: 14),
                         ),
                       )
                     : ListView.builder(
-                        itemCount: _partiesList.length,
+                        itemCount: filteredParties.length,
                         itemBuilder: (context, index) {
-                          final party = _partiesList[index];
+                          final party = filteredParties[index];
+                          bool isSelected = _selectedPartyIds.contains(party.id);
+
                           return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.teal.shade100,
-                                child: Text(
-                                  party.name.isNotEmpty ? party.name[0].toUpperCase() : 'A',
-                                  style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              title: Text(party.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('Group: ${party.groupCategory} | Phone: ${party.phone ?? 'N/A'}'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
+                            elevation: 1,
+                            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    '₹ ${party.openingBalance} ${party.balanceType}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: party.balanceType == 'Dr' ? Colors.red : Colors.green,
+                                  Checkbox(
+                                    value: isSelected,
+                                    activeColor: Colors.teal,
+                                    onChanged: (bool? value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          _selectedPartyIds.add(party.id);
+                                        } else {
+                                          _selectedPartyIds.remove(party.id);
+                                          _isSelectAll = false;
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: Colors.teal.shade100,
+                                    child: Text(
+                                      party.name.isNotEmpty ? party.name[0].toUpperCase() : 'A',
+                                      style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontSize: 12),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(party.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                        const SizedBox(height: 2),
+                                        Text('${party.groupCategory} | Ph: ${party.phone ?? 'N/A'}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    '₹${party.openingBalance} ${party.balanceType}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                      color: party.balanceType == 'Dr' ? Colors.red : Colors.green,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
                                   IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                                    onPressed: () => _editParty(party),
+                                    icon: const Icon(Icons.edit, color: Colors.blue, size: 16),
+                                    constraints: const BoxConstraints(),
+                                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                                    onPressed: () async {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (context) => const AddAccountScreen()),
+                                      );
+                                      _loadParties();
+                                    },
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                    icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                    constraints: const BoxConstraints(),
+                                    padding: const EdgeInsets.symmetric(horizontal: 3),
                                     onPressed: () => _confirmDelete(party),
                                   ),
                                 ],
