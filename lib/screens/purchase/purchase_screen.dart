@@ -14,7 +14,6 @@ import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/transaction_model.dart';
 import 'package:accounting_app/models/settings_model.dart'; 
 import 'package:accounting_app/models/inventory_model.dart';
-import '../searchable_field.dart';
 import '../account/add_account_screen.dart';
 import '../products/product_inventory_screen.dart';
 
@@ -46,7 +45,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
   DateTime _selectedDate = DateTime.now();
 
-  List<String> _allAccounts = [];
+  List<Account> _allAccountsList = [];
   List<InventoryItem> _allInventoryItems = [];
   InventoryItem? _selectedInlineProduct;
   
@@ -89,7 +88,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     }
 
     setState(() {
-      _allAccounts = accounts.map((a) => a.name).toList();
+      _allAccountsList = accounts;
       _allInventoryItems = inventoryItems;
       if (settings != null) {
         _isGstActive = settings.isGstEnabled;
@@ -521,14 +520,75 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                   Expanded(
                     child: SizedBox(
                       height: 40,
-                      child: SearchableField(
-                        label: 'Supplier / Party Name *',
-                        items: _allAccounts,
-                        controller: _partyController,
-                        onSelected: (val) {
-                          _partyController.text = val;
-                          Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
-                        },
+                      child: TapRegion(
+                        onTapOutside: (_) {},
+                        child: RawAutocomplete<Account>(
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text.isEmpty) {
+                              return _allAccountsList;
+                            }
+                            return _allAccountsList.where((acc) => 
+                              acc.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) || 
+                              (acc.phone != null && acc.phone!.contains(textEditingValue.text))
+                            );
+                          },
+                          displayStringForOption: (Account option) => option.name,
+                          onSelected: (Account selection) {
+                            _partyController.text = selection.name;
+                            Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
+                          },
+                          textEditingController: _partyController,
+                          focusNode: FocusNode(),
+                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                            return TextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              style: const TextStyle(fontSize: 12),
+                              decoration: const InputDecoration(
+                                labelText: 'Supplier / Party Name *',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                prefixIcon: Icon(Icons.person, size: 16),
+                              ),
+                            );
+                          },
+                          optionsViewBuilder: (context, onSelected, options) {
+                            return Align(
+                              alignment: Alignment.topLeft,
+                              child: Material(
+                                elevation: 4,
+                                child: SizedBox(
+                                  width: 300,
+                                  height: 200,
+                                  child: ListView.builder(
+                                    padding: EdgeInsets.zero,
+                                    itemCount: options.length + 1,
+                                    itemBuilder: (context, index) {
+                                      if (index == 0) {
+                                        return ListTile(
+                                          tileColor: Colors.blue.shade50,
+                                          leading: const Icon(Icons.person_add, color: Colors.blue, size: 16),
+                                          title: const Text('+ Add New Party / Customer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue)),
+                                          onTap: () {
+                                            _navigateToAddNewParty();
+                                          },
+                                        );
+                                      }
+                                      final acc = options.elementAt(index - 1);
+                                      return ListTile(
+                                        dense: true,
+                                        title: Text(acc.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                        subtitle: Text('Ph: ${acc.phone ?? "N/A"} | Group: ${acc.groupCategory}', style: const TextStyle(fontSize: 9)),
+                                        onTap: () => onSelected(acc),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -631,98 +691,99 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (_selectedInlineProduct == null)
-                            Autocomplete<InventoryItem>(
-                              optionsBuilder: (TextEditingValue textEditingValue) {
-                                if (textEditingValue.text.isEmpty) return _allInventoryItems;
-                                return _allInventoryItems.where((item) =>
-                                  item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                                  (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
-                                );
-                              },
-                              displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
-                              onSelected: (InventoryItem selection) {
-                                int existingIndex = _cartItems.indexWhere((item) => item['name'] == selection.itemName);
-
-                                if (existingIndex != -1) {
-                                  setState(() {
-                                    _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + 1;
-                                  });
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('⚠️ ${selection.itemName} already in purchase. Quantity updated!'), duration: const Duration(seconds: 2)),
+                            TapRegion(
+                              onTapOutside: (_) {},
+                              child: RawAutocomplete<InventoryItem>(
+                                optionsBuilder: (TextEditingValue textEditingValue) {
+                                  if (textEditingValue.text.isEmpty) return _allInventoryItems;
+                                  return _allInventoryItems.where((item) =>
+                                    item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                                    (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
                                   );
-                                  _inlineSearchController.clear();
-                                } else {
-                                  setState(() {
-                                    _selectedInlineProduct = selection;
-                                    _inlinePriceController.text = selection.purchasePrice.toString();
-                                    _inlineQtyController.text = '1';
-                                  });
-                                  Future.delayed(const Duration(milliseconds: 100), () {
-                                    _qtyFocusNode.requestFocus();
-                                    _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
-                                  });
-                                }
-                              },
-                              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                if (_inlineSearchController.text.isNotEmpty && controller.text.isEmpty) {
-                                  controller.text = _inlineSearchController.text;
-                                }
-                                return TextField(
-                                  controller: controller,
-                                  focusNode: _searchFocusNode,
-                                  style: const TextStyle(fontSize: 12),
-                                  decoration: const InputDecoration(
-                                    labelText: 'Search Product Name or SKU to add...',
-                                    border: OutlineInputBorder(),
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                    prefixIcon: Icon(Icons.search, size: 16),
-                                  ),
-                                  onChanged: (val) => _inlineSearchController.text = val,
-                                  onSubmitted: (val) {
-                                    if (val.trim().isEmpty) {
-                                      _freightFocusNode.requestFocus();
-                                    }
-                                  },
-                                );
-                              },
-                              optionsViewBuilder: (context, onSelected, options) {
-                                return Align(
-                                  alignment: Alignment.topLeft,
-                                  child: Material(
-                                    elevation: 4,
-                                    child: SizedBox(
-                                      width: 280,
-                                      height: 150,
-                                      child: ListView.builder(
-                                        padding: EdgeInsets.zero,
-                                        itemCount: options.length + 1,
-                                        itemBuilder: (context, index) {
-                                          if (index == 0) {
+                                },
+                                displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}]',
+                                onSelected: (InventoryItem selection) {
+                                  int existingIndex = _cartItems.indexWhere((item) => item['name'] == selection.itemName);
+
+                                  if (existingIndex != -1) {
+                                    setState(() {
+                                      _cartItems[existingIndex]['qty'] = (_cartItems[existingIndex]['qty'] as int) + 1;
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('⚠️ ${selection.itemName} already in purchase. Quantity updated!'), duration: const Duration(seconds: 2)),
+                                    );
+                                    _inlineSearchController.clear();
+                                  } else {
+                                    setState(() {
+                                      _selectedInlineProduct = selection;
+                                      _inlinePriceController.text = selection.purchasePrice.toString();
+                                      _inlineQtyController.text = '1';
+                                    });
+                                    Future.delayed(const Duration(milliseconds: 100), () {
+                                      _qtyFocusNode.requestFocus();
+                                      _inlineQtyController.selection = TextSelection(baseOffset: 0, extentOffset: _inlineQtyController.text.length);
+                                    });
+                                  }
+                                },
+                                textEditingController: _inlineSearchController,
+                                focusNode: _searchFocusNode,
+                                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                  return TextField(
+                                    controller: controller,
+                                    focusNode: focusNode,
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Search Product Name or SKU to add...',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                      prefixIcon: Icon(Icons.search, size: 16),
+                                    ),
+                                    onSubmitted: (val) {
+                                      if (val.trim().isEmpty) {
+                                        _freightFocusNode.requestFocus();
+                                      }
+                                    },
+                                  );
+                                },
+                                optionsViewBuilder: (context, onSelected, options) {
+                                  return Align(
+                                    alignment: Alignment.topLeft,
+                                    child: Material(
+                                      elevation: 4,
+                                      child: SizedBox(
+                                        width: 280,
+                                        height: 150,
+                                        child: ListView.builder(
+                                          padding: EdgeInsets.zero,
+                                          itemCount: options.length + 1,
+                                          itemBuilder: (context, index) {
+                                            if (index == 0) {
+                                              return ListTile(
+                                                tileColor: Colors.blue.shade100,
+                                                leading: const Icon(Icons.add_circle, color: Colors.blue, size: 16),
+                                                title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue)),
+                                                onTap: () async {
+                                                  Navigator.pop(context);
+                                                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
+                                                  await _loadDropdownDataAndSettings();
+                                                },
+                                              );
+                                            }
+                                            final item = options.elementAt(index - 1);
                                             return ListTile(
-                                              tileColor: Colors.blue.shade100,
-                                              leading: const Icon(Icons.add_circle, color: Colors.blue, size: 16),
-                                              title: const Text('+ Add New Product / Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue)),
-                                              onTap: () async {
-                                                Navigator.pop(context);
-                                                await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProductInventoryScreen()));
-                                                await _loadDropdownDataAndSettings();
-                                              },
+                                              dense: true,
+                                              title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                              subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9)),
+                                              onTap: () => onSelected(item),
                                             );
-                                          }
-                                          final item = options.elementAt(index - 1);
-                                          return ListTile(
-                                            dense: true,
-                                            title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                                            subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9)),
-                                            onTap: () => onSelected(item),
-                                          );
-                                        },
+                                          },
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             )
                           else
                             Row(
@@ -848,42 +909,72 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     const SizedBox(height: 2),
                     SizedBox(
                       height: 32,
-                      child: Autocomplete<Map<String, dynamic>>(
-                        optionsBuilder: (TextEditingValue textEditingValue) {
-                          if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
-                          return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
-                        },
-                        displayStringForOption: (option) => option['name'],
-                        onSelected: (selection) {
-                          setState(() {
-                            _billChargesList.add({
-                              'name': selection['name'],
-                              'type': selection['type'],
-                              'mode': selection['mode'],
-                              'qty': 1.0,
-                              'rate': selection['value'] ?? 0.0,
+                      child: TapRegion(
+                        onTapOutside: (_) {},
+                        child: RawAutocomplete<Map<String, dynamic>>(
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
+                            return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                          },
+                          displayStringForOption: (option) => option['name'],
+                          onSelected: (selection) {
+                            setState(() {
+                              _billChargesList.add({
+                                'name': selection['name'],
+                                'type': selection['type'],
+                                'mode': selection['mode'],
+                                'qty': 1.0,
+                                'rate': selection['value'] ?? 0.0,
+                              });
                             });
-                          });
-                        },
-                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                          return TextField(
-                            controller: controller,
-                            focusNode: _freightFocusNode,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: const InputDecoration(
-                              labelText: 'Add Freight / Charge...',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                              prefixIcon: Icon(Icons.add_circle_outline, size: 14),
-                            ),
-                            onSubmitted: (val) {
-                              if (val.trim().isEmpty) {
-                                FocusScope.of(context).requestFocus(_saveButtonFocusNode);
-                              }
-                            },
-                          );
-                        },
+                            _freightSearchController.clear();
+                          },
+                          textEditingController: _freightSearchController,
+                          focusNode: _freightFocusNode,
+                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                            return TextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: const InputDecoration(
+                                labelText: 'Add Freight / Charge...',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                prefixIcon: Icon(Icons.add_circle_outline, size: 14),
+                              ),
+                              onSubmitted: (val) {
+                                if (val.trim().isEmpty) {
+                                  FocusScope.of(context).requestFocus(_saveButtonFocusNode);
+                                }
+                              },
+                            );
+                          },
+                          optionsViewBuilder: (context, onSelected, options) {
+                            return Align(
+                              alignment: Alignment.topLeft,
+                              child: Material(
+                                elevation: 4,
+                                child: SizedBox(
+                                  width: 240,
+                                  height: 120,
+                                  child: ListView.builder(
+                                    padding: EdgeInsets.zero,
+                                    itemCount: options.length,
+                                    itemBuilder: (context, index) {
+                                      final opt = options.elementAt(index);
+                                      return ListTile(
+                                        dense: true,
+                                        title: Text(opt['name'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        onTap: () => onSelected(opt),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
 
@@ -918,7 +1009,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       height: 36,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
-                        icon: const Icon(Icons.share, size: 14),
+                        icon: const Icon(Icons.share, size: 16),
                         label: const Text('Share', style: TextStyle(fontSize: 11)),
                         onPressed: () => _generateAndPrintOrShareBill(isShare: true),
                       ),
