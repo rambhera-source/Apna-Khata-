@@ -36,7 +36,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     });
   }
 
-  // 📂 Safe & Permission-free App Directory for 'Orlife ERP Backups'
   Future<void> _loadInitialOrlifeBackupPath() async {
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -107,9 +106,11 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     } catch (_) {}
   }
 
+  // ✨ Fixed Live Progress Dialog with OK Button on 100% completion
   void _showLiveProgressDialog(String title, Future<void> Function(void Function(String status, double progress) updateProgress) action) async {
     String currentStatus = 'Initializing...';
     double currentProgress = 0.0;
+    bool isCompleted = false;
 
     showDialog(
       context: context,
@@ -121,56 +122,71 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
               setDialogState(() {
                 currentStatus = status;
                 currentProgress = progress;
+                if (progress >= 1.0) {
+                  isCompleted = true;
+                }
               });
             }
           }
 
           if (currentProgress == 0.0 && currentStatus == 'Initializing...') {
             action(update).then((_) {
-              if (mounted) Navigator.pop(context);
+              if (mounted) {
+                setDialogState(() {
+                  currentProgress = 1.0;
+                  currentStatus = 'Completed Successfully!';
+                  isCompleted = true;
+                });
+              }
             }).catchError((e) {
               if (mounted) Navigator.pop(context);
               _showResultDialog(isSuccess: false, title: 'Operation Failed', message: '$e');
             });
           }
 
-          return Dialog(
+          return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      const CircularProgressIndicator(color: Colors.teal, strokeWidth: 3),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal)),
-                            const SizedBox(height: 4),
-                            Text(currentStatus, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  LinearProgressIndicator(
-                    value: currentProgress,
-                    backgroundColor: Colors.teal.shade50,
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.teal),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text('${(currentProgress * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.teal)),
-                  ),
-                ],
-              ),
+            title: Row(
+              children: [
+                Icon(
+                  isCompleted ? Icons.check_circle_rounded : Icons.hourglass_top_rounded,
+                  color: isCompleted ? Colors.green : Colors.teal,
+                  size: 26,
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Text(isCompleted ? 'Success' : title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+              ],
             ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(currentStatus, style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                const SizedBox(height: 16),
+                LinearProgressIndicator(
+                  value: currentProgress,
+                  backgroundColor: Colors.teal.shade50,
+                  valueColor: AlwaysStoppedAnimation<Color>(isCompleted ? Colors.green : Colors.teal),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text('${(currentProgress * 100).toStringAsFixed(0)}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isCompleted ? Colors.green : Colors.teal)),
+                ),
+              ],
+            ),
+            actions: [
+              if (isCompleted)
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+            ],
           );
         },
       ),
@@ -311,65 +327,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       await Future.delayed(const Duration(seconds: 1));
       updateProgress('Sync complete!', 1.0);
       await Future.delayed(const Duration(milliseconds: 300));
-
-      if (!mounted) return;
-      showModalBottomSheet(
-        context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (context) => Container(
-          padding: const EdgeInsets.all(16),
-          height: 400,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Cloud Backups (Google Drive)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.indigo)),
-                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-                ],
-              ),
-              Text('Account: $_linkedGoogleAccount', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-              const SizedBox(height: 10),
-              Expanded(
-                child: ListView(
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.indigo.shade50,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.indigo.shade200),
-                      ),
-                      child: ListTile(
-                        leading: const Icon(Icons.cloud_done_rounded, color: Colors.indigo),
-                        title: Text('orlife_erp_cloud_backup_${DateFormat('yyyyMMdd').format(DateTime.now())}.json', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        subtitle: Text('${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now())}\nSize: 2.4 MB', style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                        isThreeLine: true,
-                        trailing: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(70, 32),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                          ),
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _showResultDialog(isSuccess: true, title: 'Cloud Restore', message: 'Cloud backup successfully downloaded and restored.');
-                          },
-                          child: const Text('Restore', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
     });
   }
 
@@ -507,10 +464,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
 
       updateProgress('Backup Completed Successfully!', 1.0);
       await Future.delayed(const Duration(milliseconds: 400));
-
-      if (!mounted) return;
-      await Share.shareXFiles([XFile(file.path)], text: 'ORLIFE ERP Database Backup File.');
-      _showResultDialog(isSuccess: true, title: 'Backup Successful', message: 'Backup file successfully created inside "Orlife ERP Backups" folder.');
     });
   }
 
@@ -574,9 +527,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
 
       updateProgress('Restore Completed Successfully!', 1.0);
       await Future.delayed(const Duration(milliseconds: 400));
-
-      if (!mounted) return;
-      _showResultDialog(isSuccess: true, title: 'Restore Successful', message: 'Your database has been successfully restored.');
     });
   }
 
@@ -734,14 +684,14 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                   ),
                   icon: const Icon(Icons.download_rounded, size: 18),
                   label: const Text('Restore File', style: TextStyle(fontSize: 13)),
-                  onPressed: _showRestoreSourceDialog, // 👈 Triggers Local vs Cloud options dialog
+                  onPressed: _showRestoreSourceDialog,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
+            style: ElevatedButton.styleFrom(
               foregroundColor: Colors.teal,
               side: const BorderSide(color: Colors.teal),
               padding: const EdgeInsets.symmetric(vertical: 12),
