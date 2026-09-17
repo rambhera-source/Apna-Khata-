@@ -32,18 +32,20 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
-  final TextEditingController _freightSearchController = TextEditingController();
+  final TextEditingController _extraChargeSearchController = TextEditingController();
+
+  final ScrollController _scrollController = ScrollController();
 
   final FocusNode _dateFocusNode = FocusNode();
   final FocusNode _partyFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
-  final FocusNode _freightFocusNode = FocusNode();
+  final FocusNode _extraChargeFocusNode = FocusNode();
   final FocusNode _saveButtonFocusNode = FocusNode();
 
-  List<Map<String, dynamic>> _presetChargesList = [];
-  final List<Map<String, dynamic>> _billChargesList = [];
+  List<Map<String, dynamic>> _presetExtraChargesList = [];
+  final List<Map<String, dynamic>> _appliedExtraChargesList = [];
 
   DateTime _selectedDate = DateTime.now();
 
@@ -100,7 +102,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
       }
-      _presetChargesList = loadedCharges;
+      _presetExtraChargesList = loadedCharges;
     });
   }
 
@@ -143,7 +145,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
     if (q <= 0 || pr < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quantity aur Price valid hone chahiye!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Please enter valid quantity and price!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -170,7 +172,14 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       _inlinePriceController.text = '0';
     });
 
-    Future.delayed(const Duration(milliseconds: 50), () {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
       _searchFocusNode.requestFocus();
     });
   }
@@ -179,9 +188,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  double get _billChargesTotal {
+  double get _extraChargesTotal {
     double total = 0.0;
-    for (var charge in _billChargesList) {
+    for (var charge in _appliedExtraChargesList) {
       double qty = charge['qty'] is double ? charge['qty'] : double.tryParse(charge['qty'].toString()) ?? 1.0;
       double rate = charge['rate'] is double ? charge['rate'] : double.tryParse(charge['rate'].toString()) ?? 0.0;
       double amt = qty * rate;
@@ -197,13 +206,13 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    double taxableValue = _subTotal + _billChargesTotal;
+    double taxableValue = _subTotal + _extraChargesTotal;
     if (taxableValue < 0) taxableValue = 0;
     return taxableValue * (_gstRate / 100);
   }
 
   double get _grandTotal {
-    double total = _subTotal + _billChargesTotal + _taxAmount;
+    double total = _subTotal + _extraChargesTotal + _taxAmount;
     return total < 0 ? 0 : total;
   }
 
@@ -211,7 +220,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('⚠️ Pehle Supplier Name aur Items add karein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Please select supplier name and add items first!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -288,7 +297,15 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     child: Row(
                       children: [
                         SizedBox(width: 25, child: Text('${index + 1}', style: const TextStyle(fontSize: 11))),
-                        Expanded(flex: 3, child: Text('${item['name']} [${item['sku']}]', style: const TextStyle(fontSize: 11))),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            '${item['name']} [${item['sku']}]',
+                            style: const TextStyle(fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         SizedBox(width: 35, child: Text('${item['qty']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
                         SizedBox(width: 50, child: Text('₹${item['price']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.right)),
                         SizedBox(width: 55, child: Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
@@ -304,7 +321,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
-                        for (var charge in _billChargesList)
+                        for (var charge in _appliedExtraChargesList)
                           Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         if (_isGstActive) Text('GST (${_gstRate}%): + ₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         const SizedBox(height: 4),
@@ -433,11 +450,11 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)), // 🔥 const हटा दिया गया
+                            pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)),
                             pw.Text('₹ ${_subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
-                        for (var charge in _billChargesList) ...[
+                        for (var charge in _appliedExtraChargesList) ...[
                           pw.SizedBox(height: 4),
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -488,7 +505,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
   Future<void> _savePurchaseTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Supplier aur Items bharein!'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill supplier and items!'), backgroundColor: Colors.red));
       return;
     }
 
@@ -507,6 +524,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
         String prodName = cartItem['name'];
         double boughtQty = (cartItem['qty'] as int).toDouble();
         double newPurchasePrice = cartItem['price'];
+        String itemStockType = cartItem['stockType'] ?? 'Fresh';
 
         final invItem = await DatabaseHelper.isar.inventoryItems
             .filter()
@@ -514,7 +532,16 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             .findFirst();
 
         if (invItem != null) {
-          invItem.stockQuantity += boughtQty;
+          if (itemStockType == 'Fresh') {
+            invItem.stockQuantity += boughtQty;
+          } else if (itemStockType == 'Replacement') {
+            invItem.replacementStock = (invItem.replacementStock ?? 0.0) + boughtQty;
+          } else if (itemStockType == 'Damaged') {
+            invItem.damagedStock = (invItem.damagedStock ?? 0.0) + boughtQty;
+          } else {
+            invItem.stockQuantity += boughtQty;
+          }
+
           invItem.purchasePrice = newPurchasePrice;
           await DatabaseHelper.isar.inventoryItems.put(invItem);
         }
@@ -535,7 +562,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
             Text('Purchase Saved Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('Purchase bill safalपूर्वक save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
+        content: const Text('Purchase bill has been saved successfully and inventory updated.', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () {
@@ -574,7 +601,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       _cartItems.clear();
       _partyController.clear();
       _billNoController.text = 'PUR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-      _billChargesList.clear();
+      _appliedExtraChargesList.clear();
     });
     Future.delayed(const Duration(milliseconds: 50), () {
       FocusScope.of(context).requestFocus(_dateFocusNode);
@@ -589,7 +616,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Discard Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Kya aap waqai is purchase bill ko exit karna chahte hain?', style: TextStyle(fontSize: 13)),
+        content: const Text('Do you really want to exit this purchase bill?', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
@@ -608,7 +635,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        resizeToAvoidBottomInset: false,
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: Text(_isGstActive ? 'Purchase Entry (GST)' : 'Purchase Entry'),
           backgroundColor: Colors.blue.shade800,
@@ -736,7 +763,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                             onSubmitted: (_) {
                               if (_partyController.text.trim().isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('⚠️ Pehle Supplier / Party Name bharein!'), backgroundColor: Colors.red),
+                                  const SnackBar(content: Text('Please fill supplier name first!'), backgroundColor: Colors.red),
                                 );
                                 _partyFocusNode.requestFocus();
                               } else {
@@ -802,7 +829,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Professional Grid Table Header
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(color: Colors.blue.shade800, borderRadius: BorderRadius.circular(4)),
@@ -820,9 +846,9 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               ),
               const SizedBox(height: 2),
 
-              // Professional Items Table & Inline Search Grid
               Expanded(
                 child: ListView(
+                  controller: _scrollController,
                   padding: EdgeInsets.zero,
                   children: [
                     ...List.generate(_cartItems.length, (index) {
@@ -843,8 +869,13 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87)),
-                                  Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                                  Text(
+                                    item['name'],
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text('SKU: ${item['sku']} | Type: ${item['stockType']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                 ],
                               ),
                             ),
@@ -904,7 +935,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
 
                     const SizedBox(height: 6),
 
-                    // Inline Product Search Bar with Party Validation
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
@@ -952,7 +982,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                   onTap: () {
                                     if (_partyController.text.trim().isEmpty) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('⚠️ Kripya pehle Supplier / Party Name bharein!'), backgroundColor: Colors.red),
+                                        const SnackBar(content: Text('Please fill supplier name first!'), backgroundColor: Colors.red),
                                       );
                                       _partyFocusNode.requestFocus();
                                     }
@@ -985,7 +1015,12 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                           final item = options.elementAt(index - 1);
                                           return ListTile(
                                             dense: true,
-                                            title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                            title: Text(
+                                              item.itemName,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                             subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9)),
                                             onTap: () => onSelected(item),
                                           );
@@ -1004,6 +1039,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                   child: Text(
                                     _selectedInlineProduct!.itemName,
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue),
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -1055,7 +1091,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               ),
               const Divider(height: 6),
               
-              // Freight & Discount Charges Section
+              // Settings Linked Extra Charges Section
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
@@ -1071,8 +1107,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                     ),
                     const SizedBox(height: 2),
 
-                    ...List.generate(_billChargesList.length, (index) {
-                      final charge = _billChargesList[index];
+                    ...List.generate(_appliedExtraChargesList.length, (index) {
+                      final charge = _appliedExtraChargesList[index];
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 1),
                         child: Row(
@@ -1111,7 +1147,7 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                             Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                             IconButton(
                               icon: const Icon(Icons.close, size: 12, color: Colors.red),
-                              onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                              onPressed: () => setState(() => _appliedExtraChargesList.removeAt(index)),
                               constraints: const BoxConstraints(),
                               padding: EdgeInsets.zero,
                             ),
@@ -1128,12 +1164,12 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                         child: RawAutocomplete<Map<String, dynamic>>(
                           optionsBuilder: (TextEditingValue textEditingValue) {
                             if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
-                            return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                            return _presetExtraChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
                           },
                           displayStringForOption: (option) => option['name'],
                           onSelected: (selection) {
                             setState(() {
-                              _billChargesList.add({
+                              _appliedExtraChargesList.add({
                                 'name': selection['name'],
                                 'type': selection['type'],
                                 'mode': selection['mode'],
@@ -1141,17 +1177,17 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
                                 'rate': selection['value'] ?? 0.0,
                               });
                             });
-                            _freightSearchController.clear();
+                            _extraChargeSearchController.clear();
                           },
-                          textEditingController: _freightSearchController,
-                          focusNode: _freightFocusNode,
+                          textEditingController: _extraChargeSearchController,
+                          focusNode: _extraChargeFocusNode,
                           fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                             return TextField(
                               controller: controller,
                               focusNode: focusNode,
                               style: const TextStyle(fontSize: 11),
                               decoration: const InputDecoration(
-                                labelText: 'Add Freight / Discount Charge...',
+                                labelText: 'Add Charge / Discount from Settings...',
                                 border: OutlineInputBorder(),
                                 isDense: true,
                                 contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -1204,7 +1240,6 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Fixed Bottom Action Buttons
               Row(
                 children: [
                   Expanded(
@@ -1259,13 +1294,14 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     _inlineSearchController.dispose();
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
-    _freightSearchController.dispose();
+    _extraChargeSearchController.dispose();
+    _scrollController.dispose();
     _dateFocusNode.dispose();
     _partyFocusNode.dispose();
     _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
-    _freightFocusNode.dispose();
+    _extraChargeFocusNode.dispose();
     _saveButtonFocusNode.dispose();
     super.dispose();
   }
