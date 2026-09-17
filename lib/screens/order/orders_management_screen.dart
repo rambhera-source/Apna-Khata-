@@ -11,7 +11,7 @@ import 'package:share_plus/share_plus.dart';
 
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
-import 'package:accounting_app/models/product.dart';
+import 'package:accounting_app/models/inventory_model.dart';
 import 'package:accounting_app/models/order_model.dart';
 import 'package:accounting_app/models/settings_model.dart';
 import '../searchable_field.dart';
@@ -35,13 +35,17 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
-  
+  final TextEditingController _extraChargeSearchController = TextEditingController();
+  final TextEditingController _searchFilterController = TextEditingController();
+
+  final ScrollController _scrollController = ScrollController();
+
   final FocusNode _dateFocusNode = FocusNode();
   final FocusNode _partyFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
-  final FocusNode _freightFocusNode = FocusNode();
+  final FocusNode _extraChargeFocusNode = FocusNode();
   final FocusNode _saveButtonFocusNode = FocusNode();
 
   List<Map<String, dynamic>> _presetChargesList = [];
@@ -50,8 +54,8 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
   DateTime _selectedDate = DateTime.now();
 
   List<String> _allAccounts = [];
-  List<Product> _allProducts = [];
-  Product? _selectedInlineProduct;
+  List<InventoryItem> _allInventoryItems = [];
+  InventoryItem? _selectedInlineProduct;
   final List<Map<String, dynamic>> _orderItems = [];
 
   List<SalesOrder> _ordersList = [];
@@ -86,19 +90,22 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     _inlineSearchController.dispose();
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
+    _extraChargeSearchController.dispose();
+    _searchFilterController.dispose();
+    _scrollController.dispose();
     _dateFocusNode.dispose();
     _partyFocusNode.dispose();
     _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
-    _freightFocusNode.dispose();
+    _extraChargeFocusNode.dispose();
     _saveButtonFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _loadData() async {
     final accounts = await DatabaseHelper.isar.accounts.where().findAll();
-    final products = await DatabaseHelper.isar.products.where().findAll();
+    final inventoryItems = await DatabaseHelper.isar.inventoryItems.where().findAll();
     final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
 
     List<Map<String, dynamic>> loadedCharges = [];
@@ -117,7 +124,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
 
     setState(() {
       _allAccounts = accounts.map((a) => a.name).toList();
-      _allProducts = products;
+      _allInventoryItems = inventoryItems;
       if (settings != null) {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
@@ -155,22 +162,6 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: Colors.amber.shade900,
-            colorScheme: ColorScheme.light(primary: Colors.amber.shade900),
-            buttonTheme: const ButtonThemeData(textTheme: ButtonTextTheme.primary),
-          ),
-          child: Center(
-            child: SizedBox(
-              width: 320,
-              height: 420,
-              child: child,
-            ),
-          ),
-        );
-      },
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
@@ -185,24 +176,25 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
     if (_selectedInlineProduct == null) return;
 
     int q = int.tryParse(_inlineQtyController.text) ?? 1;
-    double pr = double.tryParse(_inlinePriceController.text) ?? _selectedInlineProduct!.sellingPrice;
+    double pr = double.tryParse(_inlinePriceController.text) ?? _selectedInlineProduct!.priceA;
 
     if (q <= 0 || pr < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quantity aur Price valid hone chahiye!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Please enter valid quantity and price!'), backgroundColor: Colors.red),
       );
       return;
     }
 
     setState(() {
-      int existingIndex = _orderItems.indexWhere((item) => item['name'] == _selectedInlineProduct!.name);
+      int existingIndex = _orderItems.indexWhere((item) => item['name'] == _selectedInlineProduct!.itemName);
 
       if (existingIndex != -1) {
         _orderItems[existingIndex]['qty'] = (_orderItems[existingIndex]['qty'] as int) + q;
         _orderItems[existingIndex]['price'] = pr;
       } else {
         _orderItems.add({
-          'name': _selectedInlineProduct!.name,
+          'name': _selectedInlineProduct!.itemName,
+          'sku': _selectedInlineProduct!.sku ?? '-',
           'qty': q,
           'price': pr,
         });
@@ -214,16 +206,25 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
       _inlinePriceController.text = '0';
     });
 
-    Future.delayed(const Duration(milliseconds: 100), () => _searchFocusNode.requestFocus());
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+      _searchFocusNode.requestFocus();
+    });
   }
 
   double get _subTotal {
     return _orderItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  double get _billChargesTotal {
+  double get _extraChargesTotal {
     double total = 0.0;
-    for (var charge in _billChargesList) {
+    for (var charge in _appliedExtraChargesList) {
       double qty = charge['qty'] is double ? charge['qty'] : double.tryParse(charge['qty'].toString()) ?? 1.0;
       double rate = charge['rate'] is double ? charge['rate'] : double.tryParse(charge['rate'].toString()) ?? 0.0;
       double amt = qty * rate;
@@ -238,14 +239,14 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
   }
 
   double get _grandTotal {
-    double total = _subTotal + _billChargesTotal;
+    double total = _subTotal + _extraChargesTotal;
     return total < 0 ? 0 : total;
   }
 
   Future<void> _generateAndPrintOrShareOrder({required bool isShare}) async {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _orderItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill party and items!'), backgroundColor: Colors.red));
       return;
     }
 
@@ -284,13 +285,13 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
               pw.Text('Customer Name: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 15),
               pw.Table.fromTextArray(
-                headers: ['S.No', 'Item Description', 'Qty', 'Price (₹)', 'Total (₹)'],
+                headers: ['S.No', 'Item Description & SKU', 'Qty', 'Price (₹)', 'Total (₹)'],
                 data: List.generate(_orderItems.length, (index) {
                   final item = _orderItems[index];
                   double total = (item['qty'] as int) * (item['price'] as double);
                   return [
                     '${index + 1}',
-                    '${item['name']}',
+                    '${item['name']} [${item['sku']}]',
                     '${item['qty']}',
                     '${item['price']}',
                     '${total.toStringAsFixed(2)}',
@@ -311,8 +312,8 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
-                        for (var charge in _billChargesList)
-                          pw.Text('${charge['name']} (${charge['qty']} x ₹${charge['rate']}): ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
+                        for (var charge in _appliedExtraChargesList)
+                          pw.Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
                         pw.Divider(),
                         pw.Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.amber900)),
                       ],
@@ -358,7 +359,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
 
   Future<void> _saveOrder() async {
     if (_partyController.text.isEmpty || _orderItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill party and items!'), backgroundColor: Colors.red));
       return;
     }
 
@@ -389,7 +390,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
       _orderItems.clear();
       _orderNoController.text = 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
       _partyController.clear();
-      _billChargesList.clear();
+      _appliedExtraChargesList.clear();
     });
 
     _fetchOrders();
@@ -407,7 +408,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
             Text('Order Booked Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('Order safalपूर्वक save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
+        content: const Text('Order has been saved successfully. You can now share or print it.', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () {
@@ -557,6 +558,13 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
 
   @override
   Widget build(BuildContext context) {
+    // Filter orders based on search query (Order No or Party Name)
+    final query = _searchFilterController.text.trim().toLowerCase();
+    final filteredOrders = _ordersList.where((order) {
+      if (query.isEmpty) return true;
+      return order.orderNo.toLowerCase().contains(query) || order.partyName.toLowerCase().contains(query);
+    }).toList();
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
@@ -697,6 +705,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
 
                 Expanded(
                   child: ListView(
+                    controller: _scrollController,
                     padding: EdgeInsets.zero,
                     children: [
                       ...List.generate(_orderItems.length, (index) {
@@ -714,6 +723,8 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                                 child: Text(
                                   '${index + 1}. ${item['name']}',
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               SizedBox(
@@ -769,29 +780,30 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (_selectedInlineProduct == null)
-                              Autocomplete<Product>(
+                              Autocomplete<InventoryItem>(
                                 optionsBuilder: (TextEditingValue textEditingValue) {
-                                  if (textEditingValue.text.isEmpty) return _allProducts;
-                                  return _allProducts.where((item) =>
-                                    item.name.toLowerCase().contains(textEditingValue.text.toLowerCase())
+                                  if (textEditingValue.text.isEmpty) return _allInventoryItems;
+                                  return _allInventoryItems.where((item) =>
+                                    item.itemName.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                                    (item.sku != null && item.sku!.toLowerCase().contains(textEditingValue.text.toLowerCase()))
                                   );
                                 },
-                                displayStringForOption: (Product option) => '${option.name} (Stock: ${option.stock})',
-                                onSelected: (Product selection) {
-                                  int existingIndex = _orderItems.indexWhere((item) => item['name'] == selection.name);
+                                displayStringForOption: (InventoryItem option) => '${option.itemName} [SKU: ${option.sku ?? "-"}] (Stock: ${option.stockQuantity})',
+                                onSelected: (InventoryItem selection) {
+                                  int existingIndex = _orderItems.indexWhere((item) => item['name'] == selection.itemName);
 
                                   if (existingIndex != -1) {
                                     setState(() {
                                       _orderItems[existingIndex]['qty'] = (_orderItems[existingIndex]['qty'] as int) + 1;
                                     });
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('⚠️ ${selection.name} already in order. Quantity updated!'), duration: const Duration(seconds: 2)),
+                                      SnackBar(content: Text('${selection.itemName} already in order. Quantity updated!'), duration: const Duration(seconds: 2)),
                                     );
                                     _inlineSearchController.clear();
                                   } else {
                                     setState(() {
                                       _selectedInlineProduct = selection;
-                                      _inlinePriceController.text = selection.sellingPrice.toString();
+                                      _inlinePriceController.text = selection.priceA.toString();
                                       _inlineQtyController.text = '1';
                                     });
                                     Future.delayed(const Duration(milliseconds: 100), () {
@@ -809,7 +821,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                                     focusNode: _searchFocusNode,
                                     style: const TextStyle(fontSize: 12),
                                     decoration: const InputDecoration(
-                                      labelText: 'Search Product Name to add...',
+                                      labelText: 'Search Product Name or SKU to add...',
                                       border: OutlineInputBorder(),
                                       isDense: true,
                                       contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -849,8 +861,8 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                                             final item = options.elementAt(index - 1);
                                             return ListTile(
                                               dense: true,
-                                              title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                                              subtitle: Text('Stock: ${item.stock} | Price: ₹${item.sellingPrice}', style: const TextStyle(fontSize: 9)),
+                                              title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                              subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity} | Price: ₹${item.priceA}', style: const TextStyle(fontSize: 9)),
                                               onTap: () => onSelected(item),
                                             );
                                           },
@@ -866,8 +878,9 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                                   Expanded(
                                     flex: 3,
                                     child: Text(
-                                      _selectedInlineProduct!.name,
+                                      _selectedInlineProduct!.itemName,
                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amber),
+                                      maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -917,6 +930,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                 ),
                 const Divider(height: 6),
                 
+                // Settings Linked Extra Charges Section
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.amber.shade200)),
@@ -932,8 +946,8 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                       ),
                       const SizedBox(height: 2),
 
-                      ...List.generate(_billChargesList.length, (index) {
-                        final charge = _billChargesList[index];
+                      ...List.generate(_appliedExtraChargesList.length, (index) {
+                        final charge = _appliedExtraChargesList[index];
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 1),
                           child: Row(
@@ -972,7 +986,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                               Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                               IconButton(
                                 icon: const Icon(Icons.close, size: 12, color: Colors.red),
-                                onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                                onPressed: () => setState(() => _appliedExtraChargesList.removeAt(index)),
                                 constraints: const BoxConstraints(),
                                 padding: EdgeInsets.zero,
                               ),
@@ -992,7 +1006,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                           displayStringForOption: (option) => option['name'],
                           onSelected: (selection) {
                             setState(() {
-                              _billChargesList.add({
+                              _appliedExtraChargesList.add({
                                 'name': selection['name'],
                                 'type': selection['type'],
                                 'mode': selection['mode'],
@@ -1000,6 +1014,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                                 'rate': selection['value'] ?? 0.0,
                               });
                             });
+                            _extraChargeSearchController.clear();
                           },
                           fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                             return TextField(
@@ -1007,7 +1022,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                               focusNode: _freightFocusNode,
                               style: const TextStyle(fontSize: 11),
                               decoration: const InputDecoration(
-                                labelText: 'Add Freight / Charge...',
+                                labelText: 'Add Charge / Discount from Settings...',
                                 border: OutlineInputBorder(),
                                 isDense: true,
                                 contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -1126,17 +1141,73 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
+
+                // Search Bar for Order No or Party Name
+                TextField(
+                  controller: _searchFilterController,
+                  style: const TextStyle(fontSize: 12),
+                  decoration: InputDecoration(
+                    labelText: 'Search by Order No or Party Name...',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    suffixIcon: _searchFilterController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () {
+                              setState(() => _searchFilterController.clear());
+                            },
+                          )
+                        : null,
+                  ),
+                  onChanged: (val) => setState(() {}),
+                ),
+                const SizedBox(height: 8),
+
+                // Select All Header for Bulk Actions
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: filteredOrders.isNotEmpty && _selectedOrderIds.length == filteredOrders.length,
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == true) {
+                                _selectedOrderIds.addAll(filteredOrders.map((o) => o.id));
+                                _isSelectionMode = true;
+                              } else {
+                                _selectedOrderIds.clear();
+                                _isSelectionMode = false;
+                              }
+                            });
+                          },
+                        ),
+                        const Text('Select All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    if (_selectedOrderIds.isNotEmpty)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        icon: const Icon(Icons.delete, size: 16),
+                        label: Text('Delete Selected (${_selectedOrderIds.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: _bulkDeleteOrders,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
 
                 Expanded(
                   child: _isLoadingOrders
                       ? const Center(child: CircularProgressIndicator())
-                      : _ordersList.isEmpty
-                          ? const Center(child: Text('Is date range mein koi order nahi mila.', style: TextStyle(color: Colors.grey, fontSize: 13)))
+                      : filteredOrders.isEmpty
+                          ? const Center(child: Text('No orders found.', style: TextStyle(color: Colors.grey, fontSize: 13)))
                           : ListView.builder(
-                              itemCount: _ordersList.length,
+                              itemCount: filteredOrders.length,
                               itemBuilder: (context, index) {
-                                final order = _ordersList[index];
+                                final order = filteredOrders[index];
                                 final isSelected = _selectedOrderIds.contains(order.id);
                                 bool isPending = order.status == 'Pending' || order.status.contains('Pending');
 
@@ -1162,7 +1233,7 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                                     title: Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Text('Order No: ${order.orderNo}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                        Text('Order ID: ${order.orderNo}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                                         Chip(
                                           label: Text(order.status, style: const TextStyle(fontSize: 10, color: Colors.white)),
                                           backgroundColor: isPending ? Colors.amber.shade800 : Colors.green,
@@ -1172,20 +1243,11 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Si
                                     ),
                                     subtitle: Text('Party: ${order.partyName}\nDate: ${DateFormat('dd-MM-yyyy').format(order.date)}', style: const TextStyle(fontSize: 11)),
                                     isThreeLine: true,
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
-                                          tooltip: 'Modify Order',
-                                          onPressed: () => _editOrder(order),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                                          tooltip: 'Delete Order',
-                                          onPressed: () => _deleteOrder(order),
-                                        ),
-                                      ],
+                                    onTap: () => _editOrder(order),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                                      tooltip: 'Delete Order',
+                                      onPressed: () => _deleteOrder(order),
                                     ),
                                   ),
                                 );
