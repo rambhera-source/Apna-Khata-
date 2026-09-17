@@ -35,7 +35,8 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
   final TextEditingController _freightSearchController = TextEditingController();
   
-  // 🔥 Permanent Focus Nodes
+  final ScrollController _scrollController = ScrollController();
+
   final FocusNode _dateFocusNode = FocusNode();
   final FocusNode _partyFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
@@ -144,7 +145,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
     if (q <= 0 || pr < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quantity aur Price valid hone chahiye!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Please enter valid quantity and price!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -174,7 +175,14 @@ class _SalesScreenState extends State<SalesScreen> {
       _inlinePriceController.text = '0';
     });
 
-    Future.delayed(const Duration(milliseconds: 50), () {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
       _searchFocusNode.requestFocus();
     });
   }
@@ -183,7 +191,6 @@ class _SalesScreenState extends State<SalesScreen> {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  // 🔥 फ्रेट और डिस्काउंट चार्जेज का कुल योग
   double get _billChargesTotal {
     double total = 0.0;
     for (var charge in _billChargesList) {
@@ -212,12 +219,11 @@ class _SalesScreenState extends State<SalesScreen> {
     return total < 0 ? 0 : total;
   }
 
-  // 🔥 Interactive Invoice Preview Dialog (Freight & Discount के साथ)
   void _showInvoicePreviewDialog() {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('⚠️ Pehle Party Name aur Items add karein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Please select a party and add items first!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -294,7 +300,15 @@ class _SalesScreenState extends State<SalesScreen> {
                     child: Row(
                       children: [
                         SizedBox(width: 25, child: Text('${index + 1}', style: const TextStyle(fontSize: 11))),
-                        Expanded(flex: 3, child: Text('${item['name']} [${item['sku']}]', style: const TextStyle(fontSize: 11))),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            '${item['name']} [${item['sku']}]',
+                            style: const TextStyle(fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         SizedBox(width: 35, child: Text('${item['qty']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
                         SizedBox(width: 50, child: Text('₹${item['price']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.right)),
                         SizedBox(width: 55, child: Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
@@ -437,7 +451,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Future<void> _saveSalesTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill party and items!'), backgroundColor: Colors.red));
       return;
     }
 
@@ -478,7 +492,7 @@ class _SalesScreenState extends State<SalesScreen> {
             Text('Bill Saved Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('Aapka sales bill safalपूर्वक save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
+        content: const Text('Your sales bill has been saved successfully. You can now share or print it.', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () {
@@ -532,7 +546,7 @@ class _SalesScreenState extends State<SalesScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Discard Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Kya aap waqai is sales bill ko exit karna chahte hain?', style: TextStyle(fontSize: 13)),
+        content: const Text('Do you really want to exit this sales bill?', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
@@ -551,7 +565,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        resizeToAvoidBottomInset: false,
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: const Text('Sales Invoice'),
           backgroundColor: Colors.teal.shade800,
@@ -562,7 +576,6 @@ class _SalesScreenState extends State<SalesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Bar (Invoice No, Stock Type, Payment Mode)
               Row(
                 children: [
                   Expanded(
@@ -614,7 +627,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Date & Customer Autocomplete
               Row(
                 children: [
                   SizedBox(
@@ -684,7 +696,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             onSubmitted: (_) {
                               if (_partyController.text.trim().isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('⚠️ Pehle Customer / Party Name bharein!'), backgroundColor: Colors.red),
+                                  const SnackBar(content: Text('Please fill party name first!'), backgroundColor: Colors.red),
                                 );
                                 _partyFocusNode.requestFocus();
                               } else {
@@ -735,7 +747,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Professional Grid Table Header
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(color: Colors.teal.shade800, borderRadius: BorderRadius.circular(4)),
@@ -753,9 +764,9 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 2),
 
-              // Professional Items Table & Inline Search Grid
               Expanded(
                 child: ListView(
+                  controller: _scrollController,
                   padding: EdgeInsets.zero,
                   children: [
                     ...List.generate(_cartItems.length, (index) {
@@ -777,7 +788,12 @@ class _SalesScreenState extends State<SalesScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(item['name'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87)),
+                                  Text(
+                                    item['name'],
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                   Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                 ],
                               ),
@@ -838,7 +854,6 @@ class _SalesScreenState extends State<SalesScreen> {
 
                     const SizedBox(height: 6),
 
-                    // Inline Product Search Bar inside Grid style
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
@@ -886,7 +901,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                   onTap: () {
                                     if (_partyController.text.trim().isEmpty) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('⚠️ Kripya pehle Customer / Party Name bharein!'), backgroundColor: Colors.red),
+                                        const SnackBar(content: Text('Please fill party name first!'), backgroundColor: Colors.red),
                                       );
                                       _partyFocusNode.requestFocus();
                                     }
@@ -921,7 +936,12 @@ class _SalesScreenState extends State<SalesScreen> {
 
                                           return ListTile(
                                             dense: true,
-                                            title: Text(item.itemName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87)),
+                                            title: Text(
+                                              item.itemName,
+                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isOutOfStock ? Colors.red : Colors.black87),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                             subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: TextStyle(fontSize: 9, color: isOutOfStock ? Colors.red.shade700 : Colors.grey)),
                                             onTap: () => onSelected(item),
                                           );
@@ -940,6 +960,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                   child: Text(
                                     _selectedInlineProduct!.itemName,
                                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _selectedInlineProduct!.stockQuantity <= 0 ? Colors.red : Colors.teal),
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -991,7 +1012,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const Divider(height: 6),
               
-              // 🔥 Freight & Discount Charges Section (सेटिंग्स से लिंक्ड)
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
@@ -1140,7 +1160,6 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 6),
 
-              // Fixed Bottom Action Buttons
               Row(
                 children: [
                   Expanded(
@@ -1196,6 +1215,7 @@ class _SalesScreenState extends State<SalesScreen> {
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
     _freightSearchController.dispose();
+    _scrollController.dispose();
     _dateFocusNode.dispose();
     _partyFocusNode.dispose();
     _searchFocusNode.dispose();
