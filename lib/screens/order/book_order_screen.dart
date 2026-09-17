@@ -3,16 +3,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/inventory_model.dart';
 import 'package:accounting_app/models/order_model.dart';
 import 'package:accounting_app/models/settings_model.dart';
+import 'package:accounting_app/models/pdf_helper.dart';
 import '../searchable_field.dart';
 import '../account/add_account_screen.dart';
 import '../products/product_inventory_screen.dart';
@@ -41,7 +37,7 @@ class _BookOrderScreenState extends State<BookOrderScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
-  final FocusNode _extraChargeFocusNode = FocusNode();
+  final FocusNode _freightFocusNode = FocusNode();
   final FocusNode _saveButtonFocusNode = FocusNode();
 
   List<Map<String, dynamic>> _presetChargesList = [];
@@ -83,7 +79,7 @@ class _BookOrderScreenState extends State<BookOrderScreen> {
     _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
-    _extraChargeFocusNode.dispose();
+    _freightFocusNode.dispose();
     _saveButtonFocusNode.dispose();
     super.dispose();
   }
@@ -235,91 +231,23 @@ class _BookOrderScreenState extends State<BookOrderScreen> {
       return;
     }
 
-    final pdf = pw.Document();
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Sales Order / Booking Receipt', style: const pw.TextStyle(fontSize: 10)),
-                      if (_isGstActive && _companyGstin.isNotEmpty)
-                        pw.Text('GSTIN: $_companyGstin', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text('SALES ORDER (PENDING)', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.amber900)),
-                      pw.Text('Order No: ${_orderNoController.text}'),
-                      pw.Text('Date: ${_dateController.text}'),
-                    ],
-                  ),
-                ],
-              ),
-              pw.Divider(thickness: 1.5, color: PdfColors.amber900),
-              pw.SizedBox(height: 10),
-              pw.Text('Customer Name: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 15),
-              pw.Table.fromTextArray(
-                headers: ['S.No', 'Item Description & SKU', 'Qty', 'Price (₹)', 'Total (₹)'],
-                data: List.generate(_orderItems.length, (index) {
-                  final item = _orderItems[index];
-                  double total = (item['qty'] as int) * (item['price'] as double);
-                  return [
-                    '${index + 1}',
-                    '${item['name']} [${item['sku']}]',
-                    '${item['qty']}',
-                    '${item['price']}',
-                    '${total.toStringAsFixed(2)}',
-                  ];
-                }),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.amber900),
-                cellAlignment: pw.Alignment.centerLeft,
-              ),
-              pw.SizedBox(height: 20),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.end,
-                children: [
-                  pw.Container(
-                    padding: const pw.EdgeInsets.all(10),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.amber900), borderRadius: pw.BorderRadius.circular(4)),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
-                        for (var charge in _appliedExtraChargesList)
-                          pw.Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
-                        pw.Divider(),
-                        pw.Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.amber900)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
+    await PdfHelper.generateAndPrintOrShare(
+      title: 'SALES ORDER (PENDING)',
+      voucherNoKey: 'Order No',
+      voucherNoValue: _orderNoController.text,
+      date: _dateController.text,
+      partyLabel: 'Customer Name',
+      partyName: partyName,
+      items: _orderItems,
+      subTotal: _subTotal,
+      extraCharges: _appliedExtraChargesList.map((e) => {'name': e['name'], 'rate': (e['qty'] as double) * (e['rate'] as double)}).toList(),
+      taxAmount: 0.0,
+      grandTotal: _grandTotal,
+      isGstActive: _isGstActive,
+      companyGstin: _companyGstin,
+      gstRate: 0.0,
+      isShare: isShare,
     );
-
-    if (isShare) {
-      final output = await getTemporaryDirectory();
-      final file = File('${output.path}/Order_${_orderNoController.text}.pdf');
-      await file.writeAsBytes(await pdf.save());
-      await Share.shareXFiles([XFile(file.path)], text: 'Sales Order #${_orderNoController.text} from ORLIFE. Total: ₹ ${_grandTotal.toStringAsFixed(2)}');
-    } else {
-      await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-    }
   }
 
   Future<void> _saveOrder() async {
@@ -632,7 +560,7 @@ class _BookOrderScreenState extends State<BookOrderScreen> {
                                 onChanged: (val) => _inlineSearchController.text = val,
                                 onSubmitted: (val) {
                                   if (val.trim().isEmpty) {
-                                    _freightFocusNode.requestFocus();
+                                    FocusScope.of(context).requestFocus(_extraChargeFocusNode);
                                   }
                                 },
                               );
@@ -747,8 +675,8 @@ class _BookOrderScreenState extends State<BookOrderScreen> {
                   ),
                   const SizedBox(height: 2),
 
-                  ...List.generate(_billChargesList.length, (index) {
-                    final charge = _billChargesList[index];
+                  ...List.generate(_appliedExtraChargesList.length, (index) {
+                    final charge = _appliedExtraChargesList[index];
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 1),
                       child: Row(
@@ -787,7 +715,7 @@ class _BookOrderScreenState extends State<BookOrderScreen> {
                           Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                           IconButton(
                             icon: const Icon(Icons.close, size: 12, color: Colors.red),
-                            onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                            onPressed: () => setState(() => _appliedExtraChargesList.removeAt(index)),
                             constraints: const BoxConstraints(),
                             padding: EdgeInsets.zero,
                           ),
@@ -807,7 +735,7 @@ class _BookOrderScreenState extends State<BookOrderScreen> {
                       displayStringForOption: (option) => option['name'],
                       onSelected: (selection) {
                         setState(() {
-                          _billChargesList.add({
+                          _appliedExtraChargesList.add({
                             'name': selection['name'],
                             'type': selection['type'],
                             'mode': selection['mode'],
@@ -820,7 +748,7 @@ class _BookOrderScreenState extends State<BookOrderScreen> {
                       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                         return TextField(
                           controller: controller,
-                          focusNode: _freightFocusNode,
+                          focusNode: _extraChargeFocusNode,
                           style: const TextStyle(fontSize: 11),
                           decoration: const InputDecoration(
                             labelText: 'Add Charge / Discount from Settings...',
@@ -885,7 +813,7 @@ class _BookOrderScreenState extends State<BookOrderScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.amber.shade900,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.zero,
+                        padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                       ),
                       onPressed: _saveOrder,
