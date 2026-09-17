@@ -3,11 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../database/database_helper.dart';
 import '../../models/account.dart';
@@ -15,6 +10,7 @@ import '../../models/transaction_model.dart';
 import '../../models/order_model.dart';
 import '../../models/settings_model.dart'; 
 import '../../models/inventory_model.dart';
+import '../../models/pdf_helper.dart';
 import '../account/add_account_screen.dart';
 import '../products/product_inventory_screen.dart';
 
@@ -104,7 +100,7 @@ class _SalesScreenState extends State<SalesScreen> {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
       }
-      _presetChargesList = loadedCharges;
+      _presetExtraChargesList = loadedCharges;
 
       // If an order was passed from OrdersManagementScreen, load its data automatically
       if (widget.initialOrder != null) {
@@ -377,93 +373,23 @@ class _SalesScreenState extends State<SalesScreen> {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) return;
 
-    final pdf = pw.Document();
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Wholesale & Retail Mobile Parts & Accessories', style: const pw.TextStyle(fontSize: 10)),
-                      if (_isGstActive && _companyGstin.isNotEmpty)
-                        pw.Text('GSTIN: $_companyGstin', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text(_isGstActive ? 'TAX INVOICE (GST)' : 'BILL / ESTIMATE', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
-                      pw.Text('Invoice No: ${_invoiceNoController.text}'),
-                      pw.Text('Date: ${_dateController.text}'),
-                    ],
-                  ),
-                ],
-              ),
-              pw.Divider(thickness: 1.5, color: PdfColors.teal),
-              pw.SizedBox(height: 10),
-              pw.Text('Bill To: $partyName', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 15),
-              pw.Table.fromTextArray(
-                headers: ['S.No', 'Item Description (SKU)', 'Qty', 'Unit', 'Price (₹)', 'Amount (₹)'],
-                data: List.generate(_cartItems.length, (index) {
-                  final item = _cartItems[index];
-                  double total = (item['qty'] as int) * (item['price'] as double);
-                  return [
-                    '${index + 1}',
-                    '${item['name']} [${item['sku']}]',
-                    '${item['qty']}',
-                    'Pcs',
-                    '${item['price']}',
-                    '${total.toStringAsFixed(2)}',
-                  ];
-                }),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.teal),
-                cellAlignment: pw.Alignment.centerLeft,
-              ),
-              pw.SizedBox(height: 20),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.end,
-                children: [
-                  pw.Container(
-                    padding: const pw.EdgeInsets.all(10),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.teal), borderRadius: pw.BorderRadius.circular(4)),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
-                        for (var charge in _appliedExtraChargesList)
-                          pw.Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
-                        if (_isGstActive) pw.Text('GST (${_gstRate.toStringAsFixed(1)}%): + ₹ ${_taxAmount.toStringAsFixed(2)}'),
-                        pw.Divider(),
-                        pw.Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
+    await PdfHelper.generateAndPrintOrShare(
+      title: _isGstActive ? 'TAX INVOICE (GST)' : 'BILL / ESTIMATE',
+      voucherNoKey: 'Invoice No',
+      voucherNoValue: _invoiceNoController.text,
+      date: _dateController.text,
+      partyLabel: 'Bill To',
+      partyName: partyName,
+      items: _cartItems,
+      subTotal: _subTotal,
+      extraCharges: _appliedExtraChargesList.map((e) => {'name': e['name'], 'rate': (e['qty'] as double) * (e['rate'] as double)}).toList(),
+      taxAmount: _taxAmount,
+      grandTotal: _grandTotal,
+      isGstActive: _isGstActive,
+      companyGstin: _companyGstin,
+      gstRate: _gstRate,
+      isShare: isWhatsApp,
     );
-
-    if (isWhatsApp) {
-      final output = await getTemporaryDirectory();
-      final file = File('${output.path}/Invoice_${_invoiceNoController.text}.pdf');
-      await file.writeAsBytes(await pdf.save());
-      await Share.shareXFiles([XFile(file.path)], text: 'Sales Invoice #${_invoiceNoController.text} from ORLIFE. Total: ₹ ${_grandTotal.toStringAsFixed(2)}');
-    } else {
-      await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-    }
   }
 
   Future<void> _saveSalesTransaction() async {
