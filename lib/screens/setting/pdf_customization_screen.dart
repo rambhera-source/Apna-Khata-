@@ -17,6 +17,7 @@ class _PdfCustomizationScreenState extends State<PdfCustomizationScreen> {
   bool _showSku = true;
   bool _showGstin = true;
   String _selectedThemeColor = 'Teal';
+  String _selectedPageSize = 'A4';
   bool _isLoading = true;
 
   @override
@@ -33,6 +34,7 @@ class _PdfCustomizationScreenState extends State<PdfCustomizationScreen> {
       _showSku = settings.showSku;
       _showGstin = settings.showGstin;
       _selectedThemeColor = settings.themeColorName;
+      _selectedPageSize = settings.pageSize;
     } else {
       _titleController.text = 'ORLIFE Mobile Accessories';
       _subHeadingController.text = 'Wholesale & Retail Mobile Parts & Accessories';
@@ -47,7 +49,8 @@ class _PdfCustomizationScreenState extends State<PdfCustomizationScreen> {
       ..subHeading = _subHeadingController.text.trim()
       ..showSku = _showSku
       ..showGstin = _showGstin
-      ..themeColorName = _selectedThemeColor;
+      ..themeColorName = _selectedThemeColor
+      ..pageSize = _selectedPageSize;
 
     await DatabaseHelper.isar.writeTxn(() async {
       await DatabaseHelper.isar.pdfSettingsModels.put(newSettings);
@@ -102,7 +105,18 @@ class _PdfCustomizationScreenState extends State<PdfCustomizationScreen> {
                   ),
                   const Divider(height: 30),
 
+                  const Text('PDF Page Format / Size', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: _selectedPageSize,
+                    items: ['A4', 'Letter', 'A5', 'Thermal 3-Inch'].map((size) => DropdownMenuItem(value: size, child: Text(size))).toList(),
+                    onChanged: (val) => setState(() => _selectedPageSize = val!),
+                    decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                  ),
+                  const SizedBox(height: 16),
+
                   const Text('PDF Theme Color', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal)),
+                  const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: _selectedThemeColor,
                     items: ['Teal', 'Amber', 'Blue', 'Indigo'].map((color) => DropdownMenuItem(value: color, child: Text(color))).toList(),
