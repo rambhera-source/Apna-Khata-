@@ -32,18 +32,20 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
-  final TextEditingController _freightSearchController = TextEditingController();
+  final TextEditingController _extraChargeSearchController = TextEditingController();
+
+  final ScrollController _scrollController = ScrollController();
 
   final FocusNode _dateFocusNode = FocusNode();
   final FocusNode _partyFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
-  final FocusNode _freightFocusNode = FocusNode();
+  final FocusNode _extraChargeFocusNode = FocusNode();
   final FocusNode _saveButtonFocusNode = FocusNode();
 
-  List<Map<String, dynamic>> _presetChargesList = [];
-  final List<Map<String, dynamic>> _billChargesList = [];
+  List<Map<String, dynamic>> _presetExtraChargesList = [];
+  final List<Map<String, dynamic>> _appliedExtraChargesList = [];
 
   DateTime _selectedDate = DateTime.now();
 
@@ -61,6 +63,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
 
   bool _isGstActive = false;
   String _companyGstin = '';
+  double _gstRate = 18.0;
 
   @override
   void initState() {
@@ -99,7 +102,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
       }
-      _presetChargesList = loadedCharges;
+      _presetExtraChargesList = loadedCharges;
     });
   }
 
@@ -124,22 +127,6 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: Colors.blue.shade900,
-            colorScheme: ColorScheme.light(primary: Colors.blue.shade900),
-            buttonTheme: const ButtonThemeData(textTheme: ButtonTextTheme.primary),
-          ),
-          child: Center(
-            child: SizedBox(
-              width: 320,
-              height: 420,
-              child: child,
-            ),
-          ),
-        );
-      },
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
@@ -185,7 +172,14 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       _inlinePriceController.text = '0';
     });
 
-    Future.delayed(const Duration(milliseconds: 50), () {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
       _searchFocusNode.requestFocus();
     });
   }
@@ -194,9 +188,9 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  double get _billChargesTotal {
+  double get _extraChargesTotal {
     double total = 0.0;
-    for (var charge in _billChargesList) {
+    for (var charge in _appliedExtraChargesList) {
       double qty = charge['qty'] is double ? charge['qty'] : double.tryParse(charge['qty'].toString()) ?? 1.0;
       double rate = charge['rate'] is double ? charge['rate'] : double.tryParse(charge['rate'].toString()) ?? 0.0;
       double amt = qty * rate;
@@ -212,13 +206,13 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
 
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    double taxableValue = _subTotal + _billChargesTotal;
+    double taxableValue = _subTotal + _extraChargesTotal;
     if (taxableValue < 0) taxableValue = 0;
-    return taxableValue * 0.18;
+    return taxableValue * (_gstRate / 100);
   }
 
   double get _grandTotal {
-    double total = _subTotal + _billChargesTotal + _taxAmount;
+    double total = _subTotal + _extraChargesTotal + _taxAmount;
     return total < 0 ? 0 : total;
   }
 
@@ -303,7 +297,15 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                     child: Row(
                       children: [
                         SizedBox(width: 25, child: Text('${index + 1}', style: const TextStyle(fontSize: 11))),
-                        Expanded(flex: 3, child: Text('${item['name']} [${item['sku']}]', style: const TextStyle(fontSize: 11))),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            '${item['name']} [${item['sku']}]',
+                            style: const TextStyle(fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         SizedBox(width: 35, child: Text('${item['qty']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
                         SizedBox(width: 50, child: Text('₹${item['price']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.right)),
                         SizedBox(width: 55, child: Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
@@ -319,9 +321,9 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
-                        for (var charge in _billChargesList)
+                        for (var charge in _appliedExtraChargesList)
                           Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
-                        if (_isGstActive) Text('GST (18%): + ₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
+                        if (_isGstActive) Text('GST (${_gstRate}%): + ₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         const SizedBox(height: 4),
                         Text('Return Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue)),
                       ],
@@ -452,7 +454,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                             pw.Text('₹ ${_subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
-                        for (var charge in _billChargesList) ...[
+                        for (var charge in _appliedExtraChargesList) ...[
                           pw.SizedBox(height: 4),
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -467,16 +469,8 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
-                              pw.Text('CGST (9%):', style: pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${(_taxAmount / 2).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                            ],
-                          ),
-                          pw.SizedBox(height: 4),
-                          pw.Row(
-                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                            children: [
-                              pw.Text('SGST (9%):', style: pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${(_taxAmount / 2).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                              pw.Text('GST (${_gstRate}%):', style: pw.TextStyle(fontSize: 11)),
+                              pw.Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
                         ],
@@ -529,6 +523,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       for (var cartItem in _cartItems) {
         String prodName = cartItem['name'];
         double returnedQty = (cartItem['qty'] as int).toDouble();
+        String itemStockType = cartItem['stockType'] ?? 'Fresh';
 
         final invItem = await DatabaseHelper.isar.inventoryItems
             .filter()
@@ -536,8 +531,20 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             .findFirst();
 
         if (invItem != null) {
-          invItem.stockQuantity -= returnedQty;
-          if (invItem.stockQuantity < 0) invItem.stockQuantity = 0;
+          if (itemStockType == 'Fresh') {
+            invItem.stockQuantity -= returnedQty;
+            if (invItem.stockQuantity < 0) invItem.stockQuantity = 0;
+          } else if (itemStockType == 'Replacement') {
+            invItem.replacementStock = (invItem.replacementStock ?? 0.0) - returnedQty;
+            if ((invItem.replacementStock ?? 0) < 0) invItem.replacementStock = 0.0;
+          } else if (itemStockType == 'Damaged') {
+            invItem.damagedStock = (invItem.damagedStock ?? 0.0) - returnedQty;
+            if ((invItem.damagedStock ?? 0) < 0) invItem.damagedStock = 0.0;
+          } else {
+            invItem.stockQuantity -= returnedQty;
+            if (invItem.stockQuantity < 0) invItem.stockQuantity = 0;
+          }
+
           await DatabaseHelper.isar.inventoryItems.put(invItem);
         }
       }
@@ -596,7 +603,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       _cartItems.clear();
       _partyController.clear();
       _returnNoController.text = 'PRN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-      _billChargesList.clear();
+      _appliedExtraChargesList.clear();
     });
     Future.delayed(const Duration(milliseconds: 50), () {
       FocusScope.of(context).requestFocus(_dateFocusNode);
@@ -630,7 +637,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        resizeToAvoidBottomInset: false,
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: Text(_isGstActive ? 'Purchase Return (GST)' : 'Purchase Return'),
           backgroundColor: Colors.blue.shade900,
@@ -843,6 +850,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
 
               Expanded(
                 child: ListView(
+                  controller: _scrollController,
                   padding: EdgeInsets.zero,
                   children: [
                     ...List.generate(_cartItems.length, (index) {
@@ -863,15 +871,20 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87)),
-                                  Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                                  Text(
+                                    item['name'],
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text('SKU: ${item['sku']} | Type: ${item['stockType']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                 ],
                               ),
                             ),
                             SizedBox(
                               width: 45,
                               child: TextField(
-                                controller: TextEditingController(text: item['qty'].toString())..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
+                                controller: TextEditingController(text: item['qty'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['qty'].toString().length)),
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                 textAlign: TextAlign.center,
@@ -890,7 +903,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                             SizedBox(
                               width: 60,
                               child: TextField(
-                                controller: TextEditingController(text: item['price'].toString())..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
+                                controller: TextEditingController(text: item['price'].toString()) ..selection = TextSelection.fromPosition(TextPosition(offset: item['price'].toString().length)),
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                 textAlign: TextAlign.right,
@@ -1004,7 +1017,12 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                                           final item = options.elementAt(index - 1);
                                           return ListTile(
                                             dense: true,
-                                            title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                            title: Text(
+                                              item.itemName,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                             subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9)),
                                             onTap: () => onSelected(item),
                                           );
@@ -1023,6 +1041,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                                   child: Text(
                                     _selectedInlineProduct!.itemName,
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue),
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -1072,6 +1091,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
               ),
               const Divider(height: 6),
               
+              // Settings Linked Extra Charges Section
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blue.shade200)),
@@ -1087,8 +1107,8 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                     ),
                     const SizedBox(height: 2),
 
-                    ...List.generate(_billChargesList.length, (index) {
-                      final charge = _billChargesList[index];
+                    ...List.generate(_appliedExtraChargesList.length, (index) {
+                      final charge = _appliedExtraChargesList[index];
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 1),
                         child: Row(
@@ -1127,7 +1147,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                             Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                             IconButton(
                               icon: const Icon(Icons.close, size: 12, color: Colors.red),
-                              onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                              onPressed: () => setState(() => _appliedExtraChargesList.removeAt(index)),
                               constraints: const BoxConstraints(),
                               padding: EdgeInsets.zero,
                             ),
@@ -1144,12 +1164,12 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                         child: RawAutocomplete<Map<String, dynamic>>(
                           optionsBuilder: (TextEditingValue textEditingValue) {
                             if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
-                            return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                            return _presetExtraChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
                           },
                           displayStringForOption: (option) => option['name'],
                           onSelected: (selection) {
                             setState(() {
-                              _billChargesList.add({
+                              _appliedExtraChargesList.add({
                                 'name': selection['name'],
                                 'type': selection['type'],
                                 'mode': selection['mode'],
@@ -1157,17 +1177,17 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                                 'rate': selection['value'] ?? 0.0,
                               });
                             });
-                            _freightSearchController.clear();
+                            _extraChargeSearchController.clear();
                           },
-                          textEditingController: _freightSearchController,
-                          focusNode: _freightFocusNode,
+                          textEditingController: _extraChargeSearchController,
+                          focusNode: _extraChargeFocusNode,
                           fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                             return TextField(
                               controller: controller,
                               focusNode: focusNode,
                               style: const TextStyle(fontSize: 11),
                               decoration: const InputDecoration(
-                                labelText: 'Add Freight / Discount Charge...',
+                                labelText: 'Add Charge / Discount from Settings...',
                                 border: OutlineInputBorder(),
                                 isDense: true,
                                 contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -1212,7 +1232,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text('Grand Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blue)),
+                        Text('Return Total: ₹ ${_grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blue)),
                       ],
                     ),
                   ],
@@ -1239,7 +1259,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                       height: 36,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
-                        icon: const Icon(Icons.share, size: 14),
+                        icon: const Icon(Icons.share, size: 16),
                         label: const Text('Share', style: TextStyle(fontSize: 11)),
                         onPressed: () => _generateAndPrintOrShareReturn(isShare: true),
                       ),
@@ -1274,13 +1294,14 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     _inlineSearchController.dispose();
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
-    _freightSearchController.dispose();
+    _extraChargeSearchController.dispose();
+    _scrollController.dispose();
     _dateFocusNode.dispose();
     _partyFocusNode.dispose();
     _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
-    _freightFocusNode.dispose();
+    _extraChargeFocusNode.dispose();
     _saveButtonFocusNode.dispose();
     super.dispose();
   }
