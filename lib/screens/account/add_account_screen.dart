@@ -5,10 +5,11 @@ import 'dart:convert';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/settings_model.dart';
+import 'package:accounting_app/models/account_category_model.dart';
 import '../searchable_field.dart';
 
 class AddAccountScreen extends StatefulWidget {
-  final Account? accountToEdit; // 🔥 Added to receive account data for editing
+  final Account? accountToEdit; // Received account data for editing
 
   const AddAccountScreen({super.key, this.accountToEdit});
 
@@ -42,6 +43,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   String? _selectedRoute;
   String? _selectedSalesman;
 
+  List<String> _groupCategories = []; // Dynamically loaded from database
+  String _groupCategory = 'Sundry Debtor';
+
   final _gstinController = TextEditingController();
   final _balanceController = TextEditingController();
   
@@ -52,18 +56,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPortalAccessEnabled = false;
-
-  String _groupCategory = 'Sundry Debtor';
-  final List<String> _groupCategories = [
-    'Sundry Debtor',
-    'Sundry Creditor',
-    'Bank Account',
-    'Cash-in-Hand',
-    'Direct Expense',
-    'Indirect Expense',
-    'Direct Income',
-    'Indirect Income',
-  ];
 
   final List<String> _categoryList = List.generate(26, (index) => String.fromCharCode(65 + index));
   String _priceCategory = 'A'; 
@@ -86,7 +78,36 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   void initState() {
     super.initState();
     _loadMasterData();
-    _initializeEditData(); // 🔥 Pre-fill data if editing
+  }
+
+  Future<void> _loadMasterData() async {
+    final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
+    final categories = await DatabaseHelper.isar.accountCategoryModels.where().findAll();
+
+    List<String> loadedCategories = categories.map((c) => c.categoryName).toList();
+    if (loadedCategories.isEmpty) {
+      loadedCategories = [
+        'Sundry Debtor',
+        'Sundry Creditor',
+        'Bank Account',
+        'Cash-in-Hand',
+        'Direct Expense',
+        'Indirect Expense',
+        'Direct Income',
+        'Indirect Income'
+      ];
+    }
+
+    setState(() {
+      _availableRoutes = settings != null ? List.from(settings.routes) : [];
+      _availableSalesmen = settings != null ? List.from(settings.salesmen) : [];
+      _groupCategories = loadedCategories;
+      if (!_groupCategories.contains(_groupCategory) && _groupCategories.isNotEmpty) {
+        _groupCategory = _groupCategories.first;
+      }
+    });
+
+    _initializeEditData();
   }
 
   void _initializeEditData() {
@@ -95,7 +116,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       _nameController.text = acc.name;
       _phoneController.text = acc.phone ?? '';
       _emailController.text = acc.email ?? '';
-      _groupCategory = _groupCategories.contains(acc.groupCategory) ? acc.groupCategory : 'Sundry Debtor';
+      _groupCategory = _groupCategories.contains(acc.groupCategory) ? acc.groupCategory : (_groupCategories.isNotEmpty ? _groupCategories.first : 'Sundry Debtor');
       _gstinController.text = acc.gstin ?? '';
       _balanceController.text = acc.openingBalance.toString();
       _balanceType = acc.balanceType;
@@ -111,31 +132,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       _usernameController.text = acc.loginUsername ?? '';
       _passwordController.text = acc.loginPassword ?? '';
 
-      // Parse address if available
       if (acc.address != null && acc.address!.isNotEmpty) {
         String addr = acc.address!;
-        // Simple splitter based on standard format saved previously
         try {
-          partsMap(String text, String key) {
-            if (text.contains(key)) {
-              return text.split(key).last.split(',').first.trim();
-            }
-            return '';
-          }
-          // Fallback assignment for raw string address handling
           _houseNoController.text = addr.contains(',') ? addr.split(',').first.trim() : addr;
         } catch (_) {}
       }
-    }
-  }
-
-  Future<void> _loadMasterData() async {
-    final settings = await DatabaseHelper.isar.companySettings.where().findFirst();
-    if (settings != null) {
-      setState(() {
-        _availableRoutes = List.from(settings.routes);
-        _availableSalesmen = List.from(settings.salesmen);
-      });
     }
   }
 
@@ -157,16 +159,24 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             onPressed: () async {
               String name = controller.text.trim();
               if (name.isNotEmpty) {
-                final settings = await DatabaseHelper.isar.companySettings.where().findFirst() ?? CompanySettings();
-                await DatabaseHelper.isar.writeTxn(() async {
-                  if (titleType == 'Route') {
-                    if (!settings.routes.contains(name)) settings.routes.add(name);
-                  } else {
-                    if (!settings.salesmen.contains(name)) settings.salesmen.add(name);
-                  }
-                  await DatabaseHelper.isar.companySettings.put(settings);
-                });
-
+                if (titleType == 'Category') {
+                  await DatabaseHelper.isar.writeTxn(() async {
+                    final newCat = AccountCategoryModel()
+                      ..categoryName = name
+                      ..allowedUsers = [];
+                    await DatabaseHelper.isar.accountCategoryModels.put(newCat);
+                  });
+                } else {
+                  final settings = await DatabaseHelper.isar.companySettings.where().findFirst() ?? CompanySettings();
+                  await DatabaseHelper.isar.writeTxn(() async {
+                    if (titleType == 'Route') {
+                      if (!settings.routes.contains(name)) settings.routes.add(name);
+                    } else {
+                      if (!settings.salesmen.contains(name)) settings.salesmen.add(name);
+                    }
+                    await DatabaseHelper.isar.companySettings.put(settings);
+                  });
+                }
                 onAdded(name);
               }
               if (!mounted) return;
@@ -227,9 +237,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             });
           }
         }
-      } catch (e) {
-        // Handle error silently
-      }
+      } catch (_) {}
     }
   }
 
@@ -251,12 +259,11 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     if (name.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya Account / Party का Naam likhein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Please enter account / party name!'), backgroundColor: Colors.red),
       );
       return;
     }
 
-    // Check duplicate name only if creating new or changing name to an existing one
     if (widget.accountToEdit == null || widget.accountToEdit!.name != name) {
       final existingAccount = await DatabaseHelper.isar.accounts
           .filter()
@@ -266,28 +273,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       if (existingAccount != null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: "$name" naam ka account pehle se bana hua hai!'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: Account with name "$name" already exists!'), backgroundColor: Colors.red),
         );
         return;
       }
     }
 
-    if (phone.isNotEmpty) {
-      final existingByPhone = await DatabaseHelper.isar.accounts
-          .filter()
-          .phoneEqualTo(phone)
-          .findFirst();
-
-      if (existingByPhone != null && (widget.accountToEdit == null || existingByPhone.id != widget.accountToEdit!.id)) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: Mobile number "$phone" pehle se "${existingByPhone.name}" ke paas registered hai!'), backgroundColor: Colors.red),
-        );
-        return;
-      }
-    }
-
-    // Use existing account ID if editing, otherwise let Isar auto-increment for new
     final accountToSave = widget.accountToEdit ?? Account();
     accountToSave.name = name;
     accountToSave.groupCategory = _groupCategory;
@@ -313,7 +304,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Account "$name" safaltapurvak update/save ho gaya!'), backgroundColor: Colors.green),
+      SnackBar(content: Text('Account "$name" saved successfully!'), backgroundColor: Colors.green),
     );
 
     Navigator.pop(context, name);
@@ -336,21 +327,42 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DropdownButtonFormField<String>(
-                value: _groupCategory,
-                items: _groupCategories.map((group) {
-                  return DropdownMenuItem(value: group, child: Text(group, style: const TextStyle(fontWeight: FontWeight.bold)));
-                }).toList(),
-                onChanged: (val) {
-                  setState(() {
-                    _groupCategory = val!;
-                  });
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Account Group Category *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.category, color: Colors.teal),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _groupCategories.contains(_groupCategory) ? _groupCategory : null,
+                      items: _groupCategories.map((group) {
+                        return DropdownMenuItem(value: group, child: Text(group, style: const TextStyle(fontWeight: FontWeight.bold)));
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _groupCategory = val!;
+                        });
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Account Group Category *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.category, color: Colors.teal),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle, color: Colors.teal, size: 32),
+                    tooltip: 'Add New Category',
+                    onPressed: () {
+                      _showQuickAddDialog('Category', (newCat) {
+                        setState(() {
+                          if (!_groupCategories.contains(newCat)) {
+                            _groupCategories.add(newCat);
+                          }
+                          _groupCategory = newCat;
+                        });
+                      });
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
 
