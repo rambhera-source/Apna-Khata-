@@ -33,7 +33,7 @@ class _SalesScreenState extends State<SalesScreen> {
   final TextEditingController _inlineSearchController = TextEditingController();
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
-  final TextEditingController _freightSearchController = TextEditingController();
+  final TextEditingController _extraChargeSearchController = TextEditingController();
   
   final ScrollController _scrollController = ScrollController();
 
@@ -42,11 +42,11 @@ class _SalesScreenState extends State<SalesScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
-  final FocusNode _freightFocusNode = FocusNode();
+  final FocusNode _extraChargeFocusNode = FocusNode();
   final FocusNode _saveButtonFocusNode = FocusNode();
 
-  List<Map<String, dynamic>> _presetChargesList = [];
-  final List<Map<String, dynamic>> _billChargesList = [];
+  List<Map<String, dynamic>> _presetExtraChargesList = [];
+  final List<Map<String, dynamic>> _appliedExtraChargesList = [];
 
   DateTime _selectedDate = DateTime.now();
 
@@ -102,7 +102,7 @@ class _SalesScreenState extends State<SalesScreen> {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
       }
-      _presetChargesList = loadedCharges;
+      _presetExtraChargesList = loadedCharges;
     });
   }
 
@@ -191,9 +191,9 @@ class _SalesScreenState extends State<SalesScreen> {
     return _cartItems.fold(0.0, (sum, item) => sum + ((item['qty'] as int) * (item['price'] as double)));
   }
 
-  double get _billChargesTotal {
+  double get _extraChargesTotal {
     double total = 0.0;
-    for (var charge in _billChargesList) {
+    for (var charge in _appliedExtraChargesList) {
       double qty = charge['qty'] is double ? charge['qty'] : double.tryParse(charge['qty'].toString()) ?? 1.0;
       double rate = charge['rate'] is double ? charge['rate'] : double.tryParse(charge['rate'].toString()) ?? 0.0;
       double amt = qty * rate;
@@ -209,13 +209,13 @@ class _SalesScreenState extends State<SalesScreen> {
 
   double get _taxAmount {
     if (!_isGstActive) return 0.0;
-    double taxableValue = _subTotal + _billChargesTotal;
+    double taxableValue = _subTotal + _extraChargesTotal;
     if (taxableValue < 0) taxableValue = 0;
     return taxableValue * (_gstRate / 100);
   }
 
   double get _grandTotal {
-    double total = _subTotal + _billChargesTotal + _taxAmount;
+    double total = _subTotal + _extraChargesTotal + _taxAmount;
     return total < 0 ? 0 : total;
   }
 
@@ -324,7 +324,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text('Subtotal: ₹ ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
-                        for (var charge in _billChargesList)
+                        for (var charge in _appliedExtraChargesList)
                           Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         if (_isGstActive) Text('GST (${_gstRate}%): + ₹ ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11)),
                         const SizedBox(height: 4),
@@ -423,7 +423,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text('Sub Total: ₹ ${_subTotal.toStringAsFixed(2)}'),
-                        for (var charge in _billChargesList)
+                        for (var charge in _appliedExtraChargesList)
                           pw.Text('${charge['name']}: ₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}'),
                         if (_isGstActive) pw.Text('GST (${_gstRate.toStringAsFixed(1)}%): + ₹ ${_taxAmount.toStringAsFixed(2)}'),
                         pw.Divider(),
@@ -531,7 +531,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _cartItems.clear();
       _partyController.clear();
       _invoiceNoController.text = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-      _billChargesList.clear();
+      _appliedExtraChargesList.clear();
     });
     Future.delayed(const Duration(milliseconds: 50), () {
       FocusScope.of(context).requestFocus(_dateFocusNode);
@@ -1027,8 +1027,8 @@ class _SalesScreenState extends State<SalesScreen> {
                     ),
                     const SizedBox(height: 2),
 
-                    ...List.generate(_billChargesList.length, (index) {
-                      final charge = _billChargesList[index];
+                    ...List.generate(_appliedExtraChargesList.length, (index) {
+                      final charge = _appliedExtraChargesList[index];
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 1),
                         child: Row(
@@ -1067,7 +1067,7 @@ class _SalesScreenState extends State<SalesScreen> {
                             Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                             IconButton(
                               icon: const Icon(Icons.close, size: 12, color: Colors.red),
-                              onPressed: () => setState(() => _billChargesList.removeAt(index)),
+                              onPressed: () => setState(() => _appliedExtraChargesList.removeAt(index)),
                               constraints: const BoxConstraints(),
                               padding: EdgeInsets.zero,
                             ),
@@ -1084,12 +1084,12 @@ class _SalesScreenState extends State<SalesScreen> {
                         child: RawAutocomplete<Map<String, dynamic>>(
                           optionsBuilder: (TextEditingValue textEditingValue) {
                             if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
-                            return _presetChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                            return _presetExtraChargesList.where((c) => c['name'].toLowerCase().contains(textEditingValue.text.toLowerCase()));
                           },
                           displayStringForOption: (option) => option['name'],
                           onSelected: (selection) {
                             setState(() {
-                              _billChargesList.add({
+                              _appliedExtraChargesList.add({
                                 'name': selection['name'],
                                 'type': selection['type'],
                                 'mode': selection['mode'],
@@ -1097,17 +1097,17 @@ class _SalesScreenState extends State<SalesScreen> {
                                 'rate': selection['value'] ?? 0.0,
                               });
                             });
-                            _freightSearchController.clear();
+                            _extraChargeSearchController.clear();
                           },
-                          textEditingController: _freightSearchController,
-                          focusNode: _freightFocusNode,
+                          textEditingController: _extraChargeSearchController,
+                          focusNode: _extraChargeFocusNode,
                           fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                             return TextField(
                               controller: controller,
                               focusNode: focusNode,
                               style: const TextStyle(fontSize: 11),
                               decoration: const InputDecoration(
-                                labelText: 'Add Freight / Discount Charge...',
+                                labelText: 'Add Charge / Discount from Settings...',
                                 border: OutlineInputBorder(),
                                 isDense: true,
                                 contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -1214,14 +1214,14 @@ class _SalesScreenState extends State<SalesScreen> {
     _inlineSearchController.dispose();
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
-    _freightSearchController.dispose();
+    _extraChargeSearchController.dispose();
     _scrollController.dispose();
     _dateFocusNode.dispose();
     _partyFocusNode.dispose();
     _searchFocusNode.dispose();
     _qtyFocusNode.dispose();
     _priceFocusNode.dispose();
-    _freightFocusNode.dispose();
+    _extraChargeFocusNode.dispose();
     _saveButtonFocusNode.dispose();
     super.dispose();
   }
