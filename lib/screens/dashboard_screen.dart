@@ -20,7 +20,9 @@ import 'reports/financial_reports_screen.dart';
 import 'products/product_inventory_screen.dart';
 import 'account/parties_master_screen.dart';
 import 'order/orders_management_screen.dart';
-import 'Voucher/voucher_entry_screen.dart';
+import 'vouchers/payment_voucher_screen.dart';
+import 'vouchers/receipt_voucher_screen.dart';
+import 'vouchers/journal_voucher_screen.dart';
 import 'setting/settings_screen.dart';
 import 'setting/backup_settings_screen.dart';
 import 'manufacturing_screen.dart';
@@ -45,7 +47,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final List<String> _selectedQuickMenus = [
     'Sales Bill', 'Purchase', 'Sales Return', 'Purchase Ret.',
     'Parties', 'Inventory', 'Day Book', 'Ledger', 'Reports',
-    'Orders', 'Voucher', 'Manufacturing', 'Settings'
+    'Orders', 'Payment', 'Receipt', 'Journal', 'Manufacturing', 'Settings'
   ];
 
   @override
@@ -294,7 +296,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               'Ledger': Icons.account_balance_wallet,
               'Reports': Icons.bar_chart,
               'Orders': Icons.shopping_bag,
-              'Voucher': Icons.receipt_long,
+              'Payment': Icons.payment,
+              'Receipt': Icons.receipt,
+              'Journal': Icons.menu_book,
               'Manufacturing': Icons.factory,
               'Settings': Icons.settings_applications,
             };
@@ -535,6 +539,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseScreen())),
               ),
               ListTile(
+                leading: const Icon(Icons.payment, color: Colors.red),
+                title: const Text('Payment Voucher'),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PaymentVoucherScreen())),
+              ),
+              ListTile(
+                leading: const Icon(Icons.receipt, color: Colors.green),
+                title: const Text('Receipt Voucher'),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReceiptVoucherScreen())),
+              ),
+              ListTile(
+                leading: const Icon(Icons.menu_book, color: Colors.purple),
+                title: const Text('Journal Voucher'),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const JournalVoucherScreen())),
+              ),
+              ListTile(
                 leading: const Icon(Icons.people),
                 title: const Text('Parties Master'),
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PartiesMasterScreen())),
@@ -688,8 +707,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               return _buildMenuCard(context, 'Reports', Icons.bar_chart, Colors.cyan.shade800, const FinancialReportsScreen());
                             case 'Orders':
                               return _buildMenuCard(context, 'Orders', Icons.shopping_bag, Colors.pink.shade700, const OrdersManagementScreen());
-                            case 'Voucher':
-                              return _buildMenuCard(context, 'Voucher', Icons.receipt_long, Colors.blueGrey, const VoucherEntryScreen());
+                            case 'Payment':
+                              return _buildMenuCard(context, 'Payment', Icons.payment, Colors.red, const PaymentVoucherScreen());
+                            case 'Receipt':
+                              return _buildMenuCard(context, 'Receipt', Icons.receipt, Colors.green, const ReceiptVoucherScreen());
+                            case 'Journal':
+                              return _buildMenuCard(context, 'Journal', Icons.menu_book, Colors.purple, const JournalVoucherScreen());
                             case 'Manufacturing':
                               return _buildMenuCard(context, 'Manufacturing', Icons.factory, Colors.deepPurple, const ManufacturingScreen());
                             case 'Settings':
