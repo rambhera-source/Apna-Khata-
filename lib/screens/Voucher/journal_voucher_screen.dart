@@ -19,7 +19,6 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
   DateTime _selectedDate = DateTime.now();
   String _voucherNumber = '';
 
-  // Rows containing Dr/Cr type, account controller, and amount controller
   final List<Map<String, dynamic>> _voucherRows = [];
 
   final TextEditingController _notesController = TextEditingController();
@@ -45,7 +44,6 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
 
   void _initDefaultRows() {
     _voucherRows.clear();
-    // Default 2 rows: One Debit, One Credit
     _voucherRows.add({
       'type': 'Dr',
       'accountController': TextEditingController(),
@@ -133,7 +131,7 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
       String acc = row['accountController'].text.trim();
       String amt = row['amountController'].text.trim();
       if (acc.isNotEmpty && amt.isNotEmpty) {
-        summaryParts.appendOrAdd('$type: $acc (₹$amt)');
+        summaryParts.add('$type: $acc (₹$amt)');
       }
     }
 
@@ -147,7 +145,7 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
         double amt = double.tryParse(row['amountController'].text) ?? 0.0;
 
         if (accName.isNotEmpty && amt > 0) {
-          // If Dr, amount is positive (+). If Cr, amount is negative (-) to reduce ledger balance correctly.
+          // Dr adds positive balance, Cr reduces balance with negative amount
           double finalAmount = (type == 'Dr') ? amt : -amt;
 
           final txn = AccountingTransaction()
@@ -173,7 +171,7 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: const [
-            Icon(Icons.check_circle_rounded, color: Colors.purple, size: 28),
+            Icon(Icons.check_circle_rounded, color: Colors.teal, size: 28),
             SizedBox(width: 10),
             Text('Voucher Saved Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
@@ -182,7 +180,7 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple.shade700,
+              backgroundColor: Colors.teal,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
@@ -216,12 +214,10 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
 
   @override
   Widget build(BuildContext context) {
-    Color themeColor = Colors.purple.shade700;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Journal Voucher Entry'),
-        backgroundColor: themeColor,
+        backgroundColor: Colors.teal.shade800,
         foregroundColor: Colors.white,
       ),
       body: Padding(
@@ -230,7 +226,6 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Date & Voucher No Row
               Row(
                 children: [
                   Expanded(
@@ -272,28 +267,25 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Dynamic Entries Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Account Entries (Dr / Cr):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.purple)),
+                  const Text('Account Entries (Dr / Cr):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   TextButton.icon(
                     style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(60, 30)),
-                    icon: const Icon(Icons.add_circle, size: 16, color: Colors.purple),
-                    label: const Text('Add Row', style: TextStyle(fontSize: 11, color: Colors.purple, fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.add_circle, size: 16),
+                    label: const Text('Add Row', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     onPressed: _addRow,
                   ),
                 ],
               ),
               const SizedBox(height: 4),
 
-              // Dynamic Rows for Dr/Cr selection, Account & Amount
               ...List.generate(_voucherRows.length, (index) {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
-                      // Dr / Cr Dropdown Selector
                       Container(
                         width: 70,
                         height: 40,
@@ -301,16 +293,15 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade400),
                           borderRadius: BorderRadius.circular(4),
-                          color: _voucherRows[index]['type'] == 'Dr' ? Colors.red.shade50 : Colors.green.shade50,
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: _voucherRows[index]['type'],
                             isExpanded: true,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: _voucherRows[index]['type'] == 'Dr' ? Colors.red.shade700 : Colors.green.shade700,
+                              color: Colors.black87,
                             ),
                             items: const [
                               DropdownMenuItem(value: 'Dr', child: Text('Dr')),
@@ -325,8 +316,6 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
                         ),
                       ),
                       const SizedBox(width: 6),
-
-                      // Account Searchable Field
                       Expanded(
                         flex: 3,
                         child: SearchableField(
@@ -337,8 +326,6 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
                         ),
                       ),
                       const SizedBox(width: 6),
-
-                      // Amount Field
                       Expanded(
                         flex: 2,
                         child: TextField(
@@ -352,15 +339,12 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
                           ),
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                           onChanged: (_) => setState(() {
-                            // Automatically move focus to narration if totals match
                             if ((_totalDebit - _totalCredit).abs() <= 0.01 && _totalDebit > 0) {
                               FocusScope.of(context).requestFocus(_narrationFocusNode);
                             }
                           }),
                         ),
                       ),
-
-                      // Remove Row Button
                       if (_voucherRows.length > 2)
                         IconButton(
                           icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 18),
@@ -374,7 +358,6 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
               }),
               const SizedBox(height: 14),
 
-              // Totals Banner
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
@@ -392,7 +375,6 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
               ),
               const SizedBox(height: 14),
 
-              // Narration / Remarks Field
               TextField(
                 controller: _notesController,
                 focusNode: _narrationFocusNode,
@@ -411,14 +393,13 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Save Button
               SizedBox(
                 width: double.infinity,
                 height: 45,
                 child: ElevatedButton(
                   focusNode: _saveButtonFocusNode,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: themeColor,
+                    backgroundColor: Colors.teal.shade800,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
@@ -431,11 +412,5 @@ class _JournalVoucherScreenState extends State<JournalVoucherScreen> {
         ),
       ),
     );
-  }
-}
-
-extension on List<String> {
-  void appendOrAdd(String element) {
-    add(element);
   }
 }
