@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../database/database_helper.dart';
 import '../../models/account.dart';
 import '../../models/transaction_model.dart';
+import '../../models/order_model.dart';
 import '../../models/settings_model.dart'; 
 import '../../models/inventory_model.dart';
 import '../account/add_account_screen.dart';
@@ -472,9 +473,19 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
       for (var cartItem in _cartItems) {
         String prodName = cartItem['name'];
         double returnedQty = (cartItem['qty'] as int).toDouble();
+        String itemStockType = cartItem['stockType'] ?? 'Fresh';
+
         final invItem = await DatabaseHelper.isar.inventoryItems.filter().itemNameEqualTo(prodName, caseSensitive: false).findFirst();
         if (invItem != null) {
-          invItem.stockQuantity += returnedQty;
+          if (itemStockType == 'Fresh') {
+            invItem.stockQuantity += returnedQty;
+          } else if (itemStockType == 'Old') {
+            invItem.stockQuantity += returnedQty; // Old stock mapping if required, or fallback to main stock
+          } else if (itemStockType == 'Damaged') {
+            invItem.damagedStock = (invItem.damagedStock ?? 0.0) + returnedQty;
+          } else {
+            invItem.stockQuantity += returnedQty;
+          }
           await DatabaseHelper.isar.inventoryItems.put(invItem);
         }
       }
@@ -775,7 +786,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                                  Text('SKU: ${item['sku']} | Type: ${item['stockType']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                 ],
                               ),
                             ),
