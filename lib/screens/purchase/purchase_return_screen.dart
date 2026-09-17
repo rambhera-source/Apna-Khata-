@@ -3,17 +3,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/account.dart';
 import 'package:accounting_app/models/transaction_model.dart';
 import 'package:accounting_app/models/settings_model.dart';
 import 'package:accounting_app/models/inventory_model.dart';
+import 'package:accounting_app/models/pdf_helper.dart';
 import '../account/add_account_screen.dart';
 import '../products/product_inventory_screen.dart';
 
@@ -357,150 +353,23 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) return;
 
-    final pdf = pw.Document();
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                      pw.Text('Purchase Return / Debit Note', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      if (_isGstActive && _companyGstin.isNotEmpty)
-                        pw.Text('GSTIN: $_companyGstin', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text(_isGstActive ? 'DEBIT NOTE (GST)' : 'PURCHASE RETURN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                      pw.Text('Return No: ${_returnNoController.text}', style: const pw.TextStyle(fontSize: 11)),
-                      pw.Text('Date: ${_dateController.text}', style: const pw.TextStyle(fontSize: 11)),
-                    ],
-                  ),
-                ],
-              ),
-              pw.Divider(thickness: 1.5, color: PdfColors.blue900),
-              pw.SizedBox(height: 8),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('Supplier Name:', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      pw.Text(partyName, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text('Payment Mode: $_paymentMode', style: const pw.TextStyle(fontSize: 11)),
-                      pw.Text('Stock Type: $_globalStockType', style: const pw.TextStyle(fontSize: 11)),
-                    ],
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 15),
-              pw.Table.fromTextArray(
-                headers: ['S.N.', 'Item Description & SKU', 'Qty', 'Unit', 'Price (₹)', 'Total (₹)'],
-                data: List.generate(_cartItems.length, (index) {
-                  final item = _cartItems[index];
-                  double total = (item['qty'] as int) * (item['price'] as double);
-                  return [
-                    '${index + 1}',
-                    '${item['name']} [${item['sku']}]',
-                    '${item['qty']}',
-                    'Pcs',
-                    '${item['price']}',
-                    '${total.toStringAsFixed(2)}',
-                  ];
-                }),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
-                cellStyle: const pw.TextStyle(fontSize: 10),
-                cellAlignment: pw.Alignment.centerLeft,
-                columnWidths: {
-                  0: const pw.FixedColumnWidth(30),
-                  1: const pw.FlexColumnWidth(3),
-                  2: const pw.FixedColumnWidth(40),
-                  3: const pw.FixedColumnWidth(45),
-                  4: const pw.FixedColumnWidth(60),
-                  5: const pw.FixedColumnWidth(70),
-                },
-              ),
-              pw.SizedBox(height: 20),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.end,
-                children: [
-                  pw.Container(
-                    width: 220,
-                    padding: const pw.EdgeInsets.all(8),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.blue900), borderRadius: pw.BorderRadius.circular(4)),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Subtotal:', style: pw.TextStyle(fontSize: 11)),
-                            pw.Text('₹ ${_subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                          ],
-                        ),
-                        for (var charge in _appliedExtraChargesList) ...[
-                          pw.SizedBox(height: 4),
-                          pw.Row(
-                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                            children: [
-                              pw.Text('${charge['name']}:', style: pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${(charge['qty'] * charge['rate']).toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                            ],
-                          ),
-                        ],
-                        if (_isGstActive) ...[
-                          pw.SizedBox(height: 4),
-                          pw.Row(
-                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                            children: [
-                              pw.Text('GST (${_gstRate}%):', style: pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                            ],
-                          ),
-                        ],
-                        pw.Divider(),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Return Total:', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                            pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
+    await PdfHelper.generateAndPrintOrShare(
+      title: _isGstActive ? 'DEBIT NOTE (GST)' : 'PURCHASE RETURN',
+      voucherNoKey: 'Return No',
+      voucherNoValue: _returnNoController.text,
+      date: _dateController.text,
+      partyLabel: 'Supplier Name',
+      partyName: partyName,
+      items: _cartItems,
+      subTotal: _subTotal,
+      extraCharges: _appliedExtraChargesList.map((e) => {'name': e['name'], 'rate': (e['qty'] as double) * (e['rate'] as double)}).toList(),
+      taxAmount: _taxAmount,
+      grandTotal: _grandTotal,
+      isGstActive: _isGstActive,
+      companyGstin: _companyGstin,
+      gstRate: _gstRate,
+      isShare: isShare,
     );
-
-    if (isShare) {
-      final output = await getTemporaryDirectory();
-      final file = File('${output.path}/PurchaseReturn_${_returnNoController.text}.pdf');
-      await file.writeAsBytes(await pdf.save());
-      await Share.shareXFiles([XFile(file.path)], text: 'Purchase Return / Debit Note #${_returnNoController.text}. Total: ₹ ${_grandTotal.toStringAsFixed(2)}');
-    } else {
-      await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-    }
   }
 
   Future<void> _savePurchaseReturnTransaction() async {
