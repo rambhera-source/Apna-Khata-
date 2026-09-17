@@ -1,13 +1,9 @@
 import 'dart:io';
+import 'dart:json' if (dart.library.html) '' ;
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../database/database_helper.dart';
 import '../../models/account.dart';
@@ -15,6 +11,7 @@ import '../../models/transaction_model.dart';
 import '../../models/order_model.dart';
 import '../../models/settings_model.dart'; 
 import '../../models/inventory_model.dart';
+import '../../models/pdf_helper.dart';
 import '../account/add_account_screen.dart';
 import '../products/product_inventory_screen.dart';
 
@@ -315,142 +312,23 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) return;
 
-    final pdf = pw.Document();
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
-                      pw.Text('Sales Return / Debit Note', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      if (_isGstActive && _companyGstin.isNotEmpty)
-                        pw.Text('GSTIN: $_companyGstin', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text('SALES RETURN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
-                      pw.Text('Return No: ${_returnNoController.text}', style: const pw.TextStyle(fontSize: 11)),
-                      pw.Text('Date: ${_dateController.text}', style: const pw.TextStyle(fontSize: 11)),
-                    ],
-                  ),
-                ],
-              ),
-              pw.Divider(thickness: 1.5, color: PdfColors.orange),
-              pw.SizedBox(height: 8),
-
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('Customer / Party Name:', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      pw.Text(partyName, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text('Stock Type: $_globalStockType', style: const pw.TextStyle(fontSize: 11)),
-                    ],
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 15),
-
-              pw.Table.fromTextArray(
-                headers: ['S.N.', 'Item Description & SKU', 'Qty', 'Unit', 'Price (₹)', 'Total (₹)'],
-                data: List.generate(_cartItems.length, (index) {
-                  final item = _cartItems[index];
-                  double total = (item['qty'] as int) * (item['price'] as double);
-                  return [
-                    '${index + 1}',
-                    '${item['name']} [${item['sku']}]',
-                    '${item['qty']}',
-                    'Pcs',
-                    '${item['price']}',
-                    '${total.toStringAsFixed(2)}',
-                  ];
-                }),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.orange),
-                cellStyle: const pw.TextStyle(fontSize: 10),
-                cellAlignment: pw.Alignment.centerLeft,
-                columnWidths: {
-                  0: const pw.FixedColumnWidth(30),
-                  1: const pw.FlexColumnWidth(3),
-                  2: const pw.FixedColumnWidth(40),
-                  3: const pw.FixedColumnWidth(45),
-                  4: const pw.FixedColumnWidth(60),
-                  5: const pw.FixedColumnWidth(70),
-                },
-              ),
-              pw.SizedBox(height: 20),
-
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.end,
-                children: [
-                  pw.Container(
-                    width: 220,
-                    padding: const pw.EdgeInsets.all(8),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.orange), borderRadius: pw.BorderRadius.circular(4)),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Subtotal:', style: const pw.TextStyle(fontSize: 11)),
-                            pw.Text('₹ ${_subTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                          ],
-                        ),
-                        if (_isGstActive) ...[
-                          pw.SizedBox(height: 4),
-                          pw.Row(
-                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                            children: [
-                              pw.Text('GST (${_gstRate}%):', style: const pw.TextStyle(fontSize: 11)),
-                              pw.Text('₹ ${_taxAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                            ],
-                          ),
-                        ],
-                        pw.Divider(),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Return Total:', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
-                            pw.Text('₹ ${_grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
+    await PdfHelper.generateAndPrintOrShare(
+      title: 'SALES RETURN',
+      voucherNoKey: 'Return No',
+      voucherNoValue: _returnNoController.text,
+      date: _dateController.text,
+      partyLabel: 'Customer / Party Name',
+      partyName: partyName,
+      items: _cartItems,
+      subTotal: _subTotal,
+      extraCharges: [],
+      taxAmount: _taxAmount,
+      grandTotal: _grandTotal,
+      isGstActive: _isGstActive,
+      companyGstin: _companyGstin,
+      gstRate: _gstRate,
+      isShare: isWhatsApp,
     );
-
-    if (isWhatsApp) {
-      final output = await getTemporaryDirectory();
-      final file = File('${output.path}/SalesReturn_${_returnNoController.text}.pdf');
-      await file.writeAsBytes(await pdf.save());
-      await Share.shareXFiles([XFile(file.path)], text: 'Sales Return #${_returnNoController.text} from ORLIFE. Total: ₹ ${_grandTotal.toStringAsFixed(2)}');
-    } else {
-      await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-    }
   }
 
   Future<void> _saveSalesReturnTransaction() async {
@@ -480,7 +358,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
           if (itemStockType == 'Fresh') {
             invItem.stockQuantity += returnedQty;
           } else if (itemStockType == 'Old') {
-            invItem.stockQuantity += returnedQty; // Old stock mapping if required, or fallback to main stock
+            invItem.stockQuantity += returnedQty;
           } else if (itemStockType == 'Damaged') {
             invItem.damagedStock = (invItem.damagedStock ?? 0.0) + returnedQty;
           } else {
