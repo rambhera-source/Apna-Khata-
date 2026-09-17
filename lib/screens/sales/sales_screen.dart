@@ -19,7 +19,9 @@ import '../account/add_account_screen.dart';
 import '../products/product_inventory_screen.dart';
 
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({super.key});
+  final SalesOrder? initialOrder; // Added to receive order when "Gen Bill" is clicked
+
+  const SalesScreen({super.key, this.initialOrder});
 
   @override
   State<SalesScreen> createState() => _SalesScreenState();
@@ -102,7 +104,22 @@ class _SalesScreenState extends State<SalesScreen> {
         _isGstActive = settings.isGstEnabled;
         _companyGstin = settings.gstin ?? '';
       }
-      _presetExtraChargesList = loadedCharges;
+      _presetChargesList = loadedCharges;
+
+      // If an order was passed from OrdersManagementScreen, load its data automatically
+      if (widget.initialOrder != null) {
+        _partyController.text = widget.initialOrder!.partyName;
+        for (var item in widget.initialOrder!.items) {
+          _cartItems.add({
+            'name': item.productName,
+            'sku': '-',
+            'qty': item.qty,
+            'price': item.price,
+            'stockType': _globalStockType,
+            'isOutOfStock': false,
+          });
+        }
+      }
     });
   }
 
@@ -476,6 +493,12 @@ class _SalesScreenState extends State<SalesScreen> {
           await DatabaseHelper.isar.inventoryItems.put(invItem);
         }
       }
+
+      // If this bill was generated from an order, update the order status to 'Completed' (or Delivered)
+      if (widget.initialOrder != null) {
+        widget.initialOrder!.status = 'Completed';
+        await DatabaseHelper.isar.salesOrders.put(widget.initialOrder!);
+      }
     });
 
     if (!mounted) return;
@@ -567,7 +590,7 @@ class _SalesScreenState extends State<SalesScreen> {
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
-          title: const Text('Sales Invoice'),
+          title: Text(widget.initialOrder != null ? 'Generate Bill (Order: ${widget.initialOrder!.orderNo})' : 'Sales Invoice'),
           backgroundColor: Colors.teal.shade800,
           foregroundColor: Colors.white,
         ),
