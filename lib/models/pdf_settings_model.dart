@@ -19,4 +19,7 @@ class PdfSettingsModel {
   
   // Theme Color Choice ('Teal', 'Amber', 'Blue', 'Indigo')
   String themeColorName = 'Teal';
+
+  // Default Page Size ('A4', 'Letter', 'A5', 'Thermal 3-Inch')
+  String pageSize = 'A4';
 }
