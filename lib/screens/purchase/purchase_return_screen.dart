@@ -158,7 +158,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
 
     if (q <= 0 || pr < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quantity aur Price valid hone chahiye!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Please enter valid quantity and price!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -226,7 +226,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('⚠️ Pehle Supplier Name aur Return Items add karein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Please select a supplier and add return items first!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -511,7 +511,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
 
   Future<void> _savePurchaseReturnTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill party and items!'), backgroundColor: Colors.red));
       return;
     }
 
@@ -522,7 +522,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
         ..voucherNumber = _returnNoController.text
         ..partyName = _partyController.text.trim()
         ..cashOrBank = _paymentMode
-        ..amount = -_grandTotal // 👈 यहाँ माइनस (-) कर दिया गया है ताकि लेजर में सप्लायर का बैलेंस कम हो जाए
+        ..amount = -_grandTotal
         ..notes = 'Purchase Return Entry';
       await DatabaseHelper.isar.accountingTransactions.put(txn);
 
@@ -536,7 +536,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             .findFirst();
 
         if (invItem != null) {
-          invItem.stockQuantity -= returnedQty; // इन्वेंट्री से स्टॉक कम होना सही है
+          invItem.stockQuantity -= returnedQty;
           if (invItem.stockQuantity < 0) invItem.stockQuantity = 0;
           await DatabaseHelper.isar.inventoryItems.put(invItem);
         }
@@ -557,7 +557,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
             Text('Purchase Return Saved!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('Purchase return safalpurvak save ho gaya hai. Ab aap ise share ya print kar sakte hain.', style: TextStyle(fontSize: 13)),
+        content: const Text('Purchase return has been saved successfully and inventory updated.', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () {
@@ -611,7 +611,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Discard Return Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Kya aap waqai is purchase return bill ko exit karna chahte hain?', style: TextStyle(fontSize: 13)),
+        content: const Text('Do you really want to exit this purchase return bill?', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
@@ -758,7 +758,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                             onSubmitted: (_) {
                               if (_partyController.text.trim().isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Pehle Supplier / Party Name bharein!'), backgroundColor: Colors.red),
+                                  const SnackBar(content: Text('Please fill supplier name first!'), backgroundColor: Colors.red),
                                 );
                                 _partyFocusNode.requestFocus();
                               } else {
@@ -971,7 +971,7 @@ class _PurchaseReturnScreenState extends State<PurchaseReturnScreen> {
                                   onTap: () {
                                     if (_partyController.text.trim().isEmpty) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Kripya pehle Supplier / Party Name bharein!'), backgroundColor: Colors.red),
+                                        const SnackBar(content: Text('Please select supplier name first!'), backgroundColor: Colors.red),
                                       );
                                       _partyFocusNode.requestFocus();
                                     }
