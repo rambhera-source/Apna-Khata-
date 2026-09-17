@@ -33,6 +33,8 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
   final TextEditingController _inlineQtyController = TextEditingController(text: '1');
   final TextEditingController _inlinePriceController = TextEditingController(text: '0');
   
+  final ScrollController _scrollController = ScrollController();
+
   final FocusNode _dateFocusNode = FocusNode();
   final FocusNode _partyFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
@@ -118,7 +120,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
 
     if (q <= 0 || pr < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quantity aur Price valid hone chahiye!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Please enter valid quantity and price!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -145,7 +147,14 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
       _inlinePriceController.text = '0';
     });
 
-    Future.delayed(const Duration(milliseconds: 50), () {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
       _searchFocusNode.requestFocus();
     });
   }
@@ -170,7 +179,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     final partyName = _partyController.text.trim();
     if (partyName.isEmpty || _cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pehle Party Name aur Return Items add karein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Please select party name and add items first!'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -247,7 +256,15 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                     child: Row(
                       children: [
                         SizedBox(width: 25, child: Text('${index + 1}', style: const TextStyle(fontSize: 11))),
-                        Expanded(flex: 3, child: Text('${item['name']} [${item['sku']}]', style: const TextStyle(fontSize: 11))),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            '${item['name']} [${item['sku']}]',
+                            style: const TextStyle(fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         SizedBox(width: 35, child: Text('${item['qty']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
                         SizedBox(width: 50, child: Text('₹${item['price']}', style: const TextStyle(fontSize: 11), textAlign: TextAlign.right)),
                         SizedBox(width: 55, child: Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
@@ -437,7 +454,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
 
   Future<void> _saveSalesReturnTransaction() async {
     if (_partyController.text.isEmpty || _cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Party aur Items bharein!'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill party and items!'), backgroundColor: Colors.red));
       return;
     }
 
@@ -477,7 +494,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
             Text('Return Saved Successfully!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('Sales return safalpurvak save ho gaya hai aur stock inventory me update kar diya gaya hai.', style: TextStyle(fontSize: 13)),
+        content: const Text('Sales return has been saved successfully and inventory updated.', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () {
@@ -530,7 +547,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Discard Return?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: const Text('Kya aap waqai is sales return bill ko exit karna chahte hain?', style: TextStyle(fontSize: 13)),
+        content: const Text('Do you really want to exit this sales return bill?', style: TextStyle(fontSize: 13)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
@@ -549,7 +566,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        resizeToAvoidBottomInset: false,
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: const Text('Sales Return'),
           backgroundColor: Colors.orange.shade800,
@@ -663,7 +680,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                             onSubmitted: (_) {
                               if (_partyController.text.trim().isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Pehle Customer / Party Name bharein!'), backgroundColor: Colors.red),
+                                  const SnackBar(content: Text('Please fill party name first!'), backgroundColor: Colors.red),
                                 );
                                 _partyFocusNode.requestFocus();
                               } else {
@@ -731,6 +748,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               const SizedBox(height: 2),
               Expanded(
                 child: ListView(
+                  controller: _scrollController,
                   padding: EdgeInsets.zero,
                   children: [
                     ...List.generate(_cartItems.length, (index) {
@@ -751,7 +769,12 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87)),
+                                  Text(
+                                    item['name'],
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                   Text('SKU: ${item['sku']}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                 ],
                               ),
@@ -857,7 +880,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                                   onTap: () {
                                     if (_partyController.text.trim().isEmpty) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Kripya pehle Customer / Party Name bharein!'), backgroundColor: Colors.red),
+                                        const SnackBar(content: Text('Please fill party name first!'), backgroundColor: Colors.red),
                                       );
                                       _partyFocusNode.requestFocus();
                                     }
@@ -879,7 +902,12 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                                           final item = options.elementAt(index);
                                           return ListTile(
                                             dense: true,
-                                            title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                            title: Text(
+                                              item.itemName,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                             subtitle: Text('SKU: ${item.sku ?? "-"} | Stock: ${item.stockQuantity}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                                             onTap: () => onSelected(item),
                                           );
@@ -898,6 +926,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                                   child: Text(
                                     _selectedInlineProduct!.itemName,
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange),
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -1014,6 +1043,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     _inlineSearchController.dispose();
     _inlineQtyController.dispose();
     _inlinePriceController.dispose();
+    _scrollController.dispose();
     _dateFocusNode.dispose();
     _partyFocusNode.dispose();
     _searchFocusNode.dispose();
