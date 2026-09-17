@@ -4,6 +4,7 @@ import 'package:isar/isar.dart';
 import '../../database/database_helper.dart';
 import '../../models/settings_model.dart';
 import 'category_management_screen.dart';
+import 'pdf_customization_screen.dart'; // Imported for PDF Settings Link
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -67,7 +68,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (existing != null) {
         existing.isGstEnabled = _isGstEnabled;
         existing.routes = _routes;
-        // salesmen को यहाँ से हटा दिया गया है
         existing.taxSlabs = _taxSlabs;                   
         existing.extraCharges = encodedCharges;
         await DatabaseHelper.isar.companySettings.put(existing);
@@ -279,6 +279,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+              const Divider(height: 32, thickness: 1),
+
+              // PDF Customization Link Added Here
+              Card(
+                elevation: 1,
+                child: ListTile(
+                  leading: const Icon(Icons.picture_as_pdf, color: Colors.teal),
+                  title: const Text('PDF Invoice Customization', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  subtitle: const Text('Invoice title, SKU, color & page size (A4, Letter, Thermal) set karein', style: TextStyle(fontSize: 11)),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const PdfCustomizationScreen()),
+                    );
+                  },
+                ),
+              ),
+
               const Divider(height: 32, thickness: 1),
 
               Card(
