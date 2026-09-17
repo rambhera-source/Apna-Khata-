@@ -4,9 +4,11 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:accounting_app/database/database_helper.dart';
+import 'package:accounting_app/models/pdf_settings_model.dart';
 
 class PdfHelper {
-  /// Universal function to generate, print, or share invoices/orders/returns
+  /// Universal function to generate, print, or share invoices/orders/returns dynamically based on user settings
   static Future<void> generateAndPrintOrShare({
     required String title, // e.g., "TAX INVOICE (GST)", "PURCHASE RETURN", "SALES ORDER"
     required String voucherNoKey, // e.g., "Invoice No", "Return No", "Order No"
@@ -23,14 +25,89 @@ class PdfHelper {
     required String companyGstin,
     required double gstRate,
     required bool isShare, // true to share via WhatsApp/Apps, false to print/view PDF
-    required PdfColor themeColor, // e.g., Colors.teal, Colors.blue900, Colors.amber900
   }) async {
+    // 1. Fetch user's custom PDF settings from Isar database
+    final settings = await DatabaseHelper.isar.pdfSettingsModels.get(1);
+    
+    String customTitle = settings?.companyCustomTitle ?? 'ORLIFE Mobile Accessories';
+    String customSubHeading = settings?.subHeading ?? 'Wholesale & Retail Mobile Parts & Accessories';
+    bool showGstin = settings?.showGstin ?? true;
+    bool showSku = settings?.showSku ?? true;
+    String themeName = settings?.themeColorName ?? 'Teal';
+    String selectedPageSize = settings?.pageSize ?? 'A4';
+
+    // Map theme color string to PdfColor
+    PdfColor themeColor = PdfColor.fromInt(0xFF00695C); // Default Teal 800
+    if (themeName == 'Amber') themeColor = PdfColor.fromInt(0xFFE65100);
+    if (themeName == 'Blue') themeColor = PdfColor.fromInt(0xFF1565C0);
+    if (themeName == 'Indigo') themeColor = PdfColor.fromInt(0xFF283593);
+
+    // Map Page Size to actual PdfPageFormat
+    PdfPageFormat pageFormat = PdfPageFormat.a4;
+    if (selectedPageSize == 'Letter') pageFormat = PdfPageFormat.letter;
+    if (selectedPageSize == 'A5') pageFormat = PdfPageFormat.a5;
+    if (selectedPageSize == 'Thermal 3-Inch') {
+      pageFormat = PdfPageFormat(80 * PdfPoint.mm, 200 * PdfPoint.mm, marginAll: 10);
+    }
+
     final pdf = pw.Document();
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: pageFormat,
         build: (pw.Context context) {
+          // If Thermal Roll view is selected, render a compact POS receipt style
+          if (selectedPageSize == 'Thermal 3-Inch') {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Text(customTitle, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: themeColor)),
+                pw.Text(customSubHeading, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700), textAlign: pw.TextAlign.center),
+                if (isGstActive && showGstin && companyGstin.isNotEmpty)
+                  pw.Text('GSTIN: $companyGstin', style: const pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                pw.Divider(thickness: 1),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('$voucherNoKey: $voucherNoValue', style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text('Date: $date', style: const pw.TextStyle(fontSize: 9)),
+                  ],
+                ),
+                pw.Text('$partyLabel: $partyName', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.Divider(thickness: 0.5),
+                pw.SizedBox(height: 5),
+                pw.Table.fromTextArray(
+                  headers: ['Item', 'Qty', 'Price', 'Total'],
+                  data: List.generate(items.length, (index) {
+                    final item = items[index];
+                    double total = (item['qty'] as num) * (item['price'] as num);
+                    String itemName = showSku ? '${item['name']} [${item['sku'] ?? "-"}]' : '${item['name']}';
+                    return [
+                      itemName,
+                      '${item['qty']}',
+                      '${item['price']}',
+                      total.toStringAsFixed(2),
+                    ];
+                  }),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+                  cellStyle: const pw.TextStyle(fontSize: 8),
+                  cellAlignment: pw.Alignment.centerLeft,
+                ),
+                pw.Divider(thickness: 0.5),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Grand Total:', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: themeColor)),
+                    pw.Text('₹ ${grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: themeColor)),
+                  ],
+                ),
+                pw.SizedBox(height: 10),
+                pw.Text('Thank You for Business!', style: const pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic)),
+              ],
+            );
+          }
+
+          // Standard Layout (A4, Letter, A5)
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
@@ -41,9 +118,9 @@ class PdfHelper {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('ORLIFE Mobile Accessories', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: themeColor)),
-                      pw.Text('Wholesale & Retail Mobile Parts & Accessories', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                      if (isGstActive && companyGstin.isNotEmpty)
+                      pw.Text(customTitle, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: themeColor)),
+                      pw.Text(customSubHeading, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      if (isGstActive && showGstin && companyGstin.isNotEmpty)
                         pw.Text('GSTIN: $companyGstin', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ],
                   ),
@@ -77,13 +154,14 @@ class PdfHelper {
 
               // Items Table
               pw.Table.fromTextArray(
-                headers: ['S.No', 'Item Description & SKU', 'Qty', 'Price (₹)', 'Total (₹)'],
+                headers: ['S.No', showSku ? 'Item Description & SKU' : 'Item Description', 'Qty', 'Price (₹)', 'Total (₹)'],
                 data: List.generate(items.length, (index) {
                   final item = items[index];
                   double total = (item['qty'] as num) * (item['price'] as num);
+                  String desc = showSku ? '${item['name']} [${item['sku'] ?? "-"}]' : '${item['name']}';
                   return [
                     '${index + 1}',
-                    '${item['name']} [${item['sku'] ?? "-"}]',
+                    desc,
                     '${item['qty']}',
                     '${item['price']}',
                     total.toStringAsFixed(2),
@@ -139,7 +217,7 @@ class PdfHelper {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                             children: [
-                              pw.Text('GST (${gstRate.toStringAsFixed(1)}%):', style: const TextStyle(fontSize: 11)),
+                              pw.Text('GST (${gstRate.toStringAsFixed(1)}%):', style: const pw.TextStyle(fontSize: 11)),
                               pw.Text('₹ ${taxAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
