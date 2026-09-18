@@ -1,16 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
+import 'package:intl/intl.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/inventory_model.dart';
 import 'package:accounting_app/models/bom_model.dart';
 import 'searchable_field.dart';
 
+// ==========================================
+// 1. PRODUCTION LOG MODEL FOR ISAR
+// ==========================================
+@collection
+class ProductionLog {
+  Id id = Isar.autoIncrement;
+  late DateTime date;
+  late String productionNumber;
+  late String productName;
+  late double quantity;
+  late double totalCost;
+  late double costPerPiece;
+  String? notes;
+}
+
 class ManufacturingScreen extends StatefulWidget {
   const ManufacturingScreen({super.key});
 
   @override
-  State<ManufacturingScreen> createState() =>
-      _ManufacturingScreenState();
+  State<ManufacturingScreen> createState() => _ManufacturingScreenState();
 }
 
 class _ManufacturingScreenState extends State<ManufacturingScreen>
@@ -33,8 +49,7 @@ class _ManufacturingScreenState extends State<ManufacturingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title:
-            const Text('Manufacturing & Production Dashboard'),
+        title: const Text('Manufacturing & Production Dashboard', style: TextStyle(fontSize: 18)),
         backgroundColor: Colors.indigo.shade800,
         foregroundColor: Colors.white,
         bottom: TabBar(
@@ -43,22 +58,16 @@ class _ManufacturingScreenState extends State<ManufacturingScreen>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           tabs: const [
-            Tab(
-              icon: Icon(Icons.precision_manufacturing),
-              text: '1. Production Entry',
-            ),
-            Tab(
-              icon: Icon(Icons.receipt_long),
-              text: '2. BOM Recipe Builder',
-            ),
+            Tab(icon: Icon(Icons.precision_manufacturing, size: 18), text: '1. Production Register'),
+            Tab(icon: Icon(Icons.receipt_long, size: 18), text: '2. BOM Master & Recipe'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: const [
-          ProductionTab(),
-          BomTab(),
+          ProductionHistoryTab(),
+          BomMasterTab(),
         ],
       ),
     );
@@ -66,1044 +75,608 @@ class _ManufacturingScreenState extends State<ManufacturingScreen>
 }
 
 // ==========================================
-// TAB 1: PRODUCTION ENTRY TAB
+// TAB 1: PRODUCTION HISTORY & NEW ENTRY
 // ==========================================
 
-class ProductionTab extends StatefulWidget {
-  const ProductionTab({super.key});
+class ProductionHistoryTab extends StatefulWidget {
+  const ProductionHistoryTab({super.key});
 
   @override
-  State<ProductionTab> createState() =>
-      _ProductionTabState();
+  State<ProductionHistoryTab> createState() => _ProductionHistoryTabState();
 }
 
-class _ProductionTabState extends State<ProductionTab> {
-  final TextEditingController _productController =
-      TextEditingController();
-
-  final TextEditingController _qtyController =
-      TextEditingController(text: '1');
-
-  final TextEditingController _extraExpenseController =
-      TextEditingController(text: '0');
-
-  List<String> _finishedProductNames = [];
-
-  List<InventoryItem> _allProducts = [];
-
-  List<BillOfMaterials> _currentBOMList = [];
-
-  bool _isLoadingBOM = false;
+class _ProductionHistoryTabState extends State<ProductionHistoryTab> {
+  List<ProductionLog> _productionLogs = [];
+  bool _isLoading = false;
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _loadInventoryData();
+    _loadProductionLogs();
   }
 
-  Future<void> _loadInventoryData() async {
-    _allProducts = await DatabaseHelper
-        .isar
-        .inventoryItems
-        .where()
-        .findAll();
+  Future<void> _loadProductionLogs() async {
+    setState(() => _isLoading = true);
+    var query = DatabaseHelper.isar.productionLogs.where();
 
-    _finishedProductNames =
-        _allProducts.map((p) => p.itemName).toSet().toList();
+    List<ProductionLog> results;
+    if (_searchQuery.isNotEmpty) {
+      results = await query.filter().productNameContains(_searchQuery, caseSensitive: false).sortByDateDesc().findAll();
+    } else {
+      results = await query.sortByDateDesc().findAll();
+    }
 
-    setState(() {});
-  }
-
-  Future<void> _fetchBOMForProduct(
-      String productName) async {
     setState(() {
-      _isLoadingBOM = true;
+      _productionLogs = results;
+      _isLoading = false;
     });
+  }
 
-    _currentBOMList = await DatabaseHelper
-        .isar
-        .billOfMaterials
+  void _openNewProductionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const NewProductionDialog(),
+    ).then((value) {
+      if (value == true) {
+        _loadProductionLogs();
+      }
+    });
+  }
+
+  void _openEditProductionDialog(ProductionLog log) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => EditProductionDialog(productionLog: log),
+    ).then((value) {
+      if (value == true) {
+        _loadProductionLogs();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(10.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            elevation: 1,
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Search Product',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.search, size: 18),
+                      ),
+                      onChanged: (val) {
+                        setState(() => _searchQuery = val);
+                        _loadProductionLogs();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('New Production'),
+                    onPressed: _openNewProductionDialog,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _productionLogs.isEmpty
+                    ? const Center(child: Text('Koi production record nahi mila.', style: TextStyle(color: Colors.grey)))
+                    : ListView.builder(
+                        itemCount: _productionLogs.length,
+                        itemBuilder: (context, index) {
+                          final log = _productionLogs[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 3),
+                            child: ListTile(
+                              dense: true,
+                              title: Text('${log.productionNumber} - ${log.productName}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('Date: ${DateFormat('dd-MM-yyyy').format(log.date)} | Qty: ${log.quantity} | Cost/Pc: ₹${log.costPerPiece.toStringAsFixed(2)}'),
+                              trailing: Text('₹${log.totalCost.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 13)),
+                              onTap: () => _openEditProductionDialog(log),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// NEW PRODUCTION DIALOG WITH KEYBOARD FOCUS
+// ==========================================
+
+class NewProductionDialog extends StatefulWidget {
+  const NewProductionDialog({super.key});
+
+  @override
+  State<NewProductionDialog> createState() => _NewProductionDialogState();
+}
+
+class _NewProductionDialogState extends State<NewProductionDialog> {
+  DateTime _productionDate = DateTime.now();
+  late final TextEditingController _productionNoController;
+  String _selectedBomProduct = '';
+  List<String> _availableBomProducts = [];
+  List<BillOfMaterials> _currentBOMList = [];
+  List<InventoryItem> _allProducts = [];
+
+  final TextEditingController _qtyController = TextEditingController(text: '1');
+  final TextEditingController _extraExpenseController = TextEditingController(text: '0');
+
+  // Focus Nodes
+  final FocusNode _dateFocusNode = FocusNode();
+  final FocusNode _bomDropdownFocusNode = FocusNode();
+  final FocusNode _qtyFocusNode = FocusNode();
+  final FocusNode _saveButtonFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _productionNoController = TextEditingController();
+    _generateNextProductionNumber();
+    _loadData();
+  }
+
+  // Auto-increment Production Number starting from 1 (e.g., 001, 002...)
+  Future<void> _generateNextProductionNumber() async {
+    final count = await DatabaseHelper.isar.productionLogs.count();
+    int nextId = count + 1;
+    String formattedNo = nextId.toString().padLeft(3, '0'); // 001, 002...
+    setState(() {
+      _productionNoController.text = formattedNo;
+    });
+  }
+
+  @override
+  void dispose() {
+    _productionNoController.dispose();
+    _qtyController.dispose();
+    _extraExpenseController.dispose();
+    _dateFocusNode.dispose();
+    _bomDropdownFocusNode.dispose();
+    _qtyFocusNode.dispose();
+    _saveButtonFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
+    _allProducts = await DatabaseHelper.isar.inventoryItems.where().findAll();
+    final boms = await DatabaseHelper.isar.billOfMaterials.where().findAll();
+    setState(() {
+      _availableBomProducts = boms.map((b) => b.productName).toSet().toList();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FocusScope.of(context).requestFocus(_dateFocusNode);
+    });
+  }
+
+  Future<void> _onBomSelected(String productName) async {
+    setState(() {
+      _selectedBomProduct = productName;
+    });
+    _currentBOMList = await DatabaseHelper.isar.billOfMaterials
         .filter()
         .productNameEqualTo(productName)
         .findAll();
-
-    setState(() {
-      _isLoadingBOM = false;
-    });
+    setState(() {});
   }
 
   double get _totalMaterialCost {
-    double productionQty =
-        double.tryParse(_qtyController.text) ?? 1.0;
+    double qty = double.tryParse(_qtyController.text) ?? 1.0;
+    double sum = 0;
+    for (var bom in _currentBOMList) {
+      InventoryItem item = _allProducts.firstWhere(
+        (p) => p.itemName.toLowerCase() == bom.materialName.toLowerCase(),
+        orElse: () => InventoryItem()..priceA = 0.0,
+      );
+      sum += (bom.quantity * qty) * item.priceA;
+    }
+    return sum;
+  }
 
-    double materialCostSum = 0;
+  double get _grandTotalCost => _totalMaterialCost + (double.tryParse(_extraExpenseController.text) ?? 0.0);
+  double get _costPerPiece {
+    double qty = double.tryParse(_qtyController.text) ?? 1.0;
+    return qty > 0 ? _grandTotalCost / qty : 0.0;
+  }
+
+  Future<void> _saveProduction() async {
+    if (_selectedBomProduct.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya BOM Recipe select karein!'), backgroundColor: Colors.red));
+      return;
+    }
+    double qty = double.tryParse(_qtyController.text) ?? 0.0;
+    if (qty <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Valid Qty enter karein!'), backgroundColor: Colors.red));
+      return;
+    }
 
     for (var bom in _currentBOMList) {
-      InventoryItem rawMaterial =
-          _allProducts.firstWhere(
-        (p) =>
-            p.itemName.toLowerCase() ==
-            bom.materialName.toLowerCase(),
-        orElse: () => InventoryItem()
-          ..priceA = 0.0,
+      double needed = bom.quantity * qty;
+      InventoryItem raw = _allProducts.firstWhere(
+        (p) => p.itemName.toLowerCase() == bom.materialName.toLowerCase(),
+        orElse: () => InventoryItem()..stockQuantity = -1,
       );
-
-      materialCostSum +=
-          (bom.quantity * productionQty) *
-              rawMaterial.priceA;
-    }
-
-    return materialCostSum;
-  }
-
-  double get _grandTotalCost {
-    double extraExpense =
-        double.tryParse(_extraExpenseController.text) ??
-            0.0;
-
-    return _totalMaterialCost + extraExpense;
-  }
-
-  double get _costPerPiece {
-    double productionQty =
-        double.tryParse(_qtyController.text) ?? 1.0;
-
-    if (productionQty <= 0) {
-      return 0.0;
-    }
-
-    return _grandTotalCost / productionQty;
-  }
-
-  Future<void> _confirmProduction() async {
-    String finishedProduct =
-        _productController.text.trim();
-
-    double productionQty =
-        double.tryParse(_qtyController.text) ?? 0.0;
-
-    if (finishedProduct.isEmpty || productionQty <= 0) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Kripya Product aur valid Quantity enter karein!',
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
-
-      return;
-    }
-
-    if (_currentBOMList.isEmpty) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Is product ka koi BOM (Recipe) nahi mila! Pehle Tab 2 mein BOM set karein.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-
-      return;
-    }
-
-    // Stock sufficiency check
-
-    for (var bomItem in _currentBOMList) {
-      double requiredTotalQty =
-          bomItem.quantity * productionQty;
-
-      InventoryItem rawMaterial =
-          _allProducts.firstWhere(
-        (p) =>
-            p.itemName.toLowerCase() ==
-            bomItem.materialName.toLowerCase(),
-        orElse: () => InventoryItem()
-          ..stockQuantity = -1,
-      );
-
-      if (rawMaterial.stockQuantity == -1 ||
-          rawMaterial.stockQuantity <
-              requiredTotalQty) {
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Stock Kam Hai! "${bomItem.materialName}" ka stock insufficient hai.',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-
+      if (raw.stockQuantity < needed) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Stock Kam Hai: ${bom.materialName}'), backgroundColor: Colors.red));
         return;
       }
     }
 
-    double finalUnitCost = _costPerPiece;
-
     await DatabaseHelper.isar.writeTxn(() async {
-      for (var bomItem in _currentBOMList) {
-        double requiredTotalQty =
-            bomItem.quantity * productionQty;
-
-        InventoryItem rawMaterial =
-            _allProducts.firstWhere(
-          (p) =>
-              p.itemName.toLowerCase() ==
-              bomItem.materialName.toLowerCase(),
-        );
-
-        rawMaterial.stockQuantity -=
-            requiredTotalQty;
-
-        if (rawMaterial.stockQuantity < 0) {
-          rawMaterial.stockQuantity = 0;
-        }
-
-        await DatabaseHelper
-            .isar
-            .inventoryItems
-            .put(rawMaterial);
+      for (var bom in _currentBOMList) {
+        double needed = bom.quantity * qty;
+        InventoryItem raw = _allProducts.firstWhere((p) => p.itemName.toLowerCase() == bom.materialName.toLowerCase());
+        raw.stockQuantity -= needed;
+        await DatabaseHelper.isar.inventoryItems.put(raw);
       }
 
-      InventoryItem finishedItem =
-          _allProducts.firstWhere(
-        (p) =>
-            p.itemName.toLowerCase() ==
-            finishedProduct.toLowerCase(),
+      InventoryItem finished = _allProducts.firstWhere(
+        (p) => p.itemName.toLowerCase() == _selectedBomProduct.toLowerCase(),
         orElse: () => InventoryItem(),
       );
 
-      if (finishedItem.id != 0) {
-        finishedItem.stockQuantity +=
-            productionQty;
-
-        finishedItem.priceA = finalUnitCost;
-
-        await DatabaseHelper
-            .isar
-            .inventoryItems
-            .put(finishedItem);
+      if (finished.id != 0) {
+        finished.stockQuantity += qty;
+        finished.priceA = _costPerPiece;
+        await DatabaseHelper.isar.inventoryItems.put(finished);
       } else {
-        final newItem = InventoryItem()
-          ..itemName = finishedProduct
-          ..stockQuantity = productionQty
-          ..priceA = finalUnitCost;
-
-        await DatabaseHelper
-            .isar
-            .inventoryItems
-            .put(newItem);
+        final newFi = InventoryItem()
+          ..itemName = _selectedBomProduct
+          ..stockQuantity = qty
+          ..priceA = _costPerPiece;
+        await DatabaseHelper.isar.inventoryItems.put(newFi);
       }
+
+      final log = ProductionLog()
+        ..date = _productionDate
+        ..productionNumber = _productionNoController.text
+        ..productName = _selectedBomProduct
+        ..quantity = qty
+        ..totalCost = _grandTotalCost
+        ..costPerPiece = _costPerPiece;
+
+      await DatabaseHelper.isar.productionLogs.put(log);
     });
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Production Successful! Cost per piece: ₹${finalUnitCost.toStringAsFixed(2)}',
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 15),
+            Text('Production Saved Successfully!'),
+          ],
         ),
-        backgroundColor: Colors.green,
       ),
     );
 
-    _productController.clear();
-
-    _qtyController.text = '1';
-
-    _extraExpenseController.text = '0';
-
-    setState(() {
-      _currentBOMList.clear();
-    });
-
-    _loadInventoryData();
-  }
-
-  @override
-  void dispose() {
-    _productController.dispose();
-    _qtyController.dispose();
-    _extraExpenseController.dispose();
-
-    super.dispose();
+    await Future.delayed(const Duration(seconds: 1));
+    if (!mounted) return;
+    Navigator.pop(context);
+    Navigator.pop(context, true);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding:
-          const EdgeInsets.all(12.0),
-      child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-        children: [
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding:
-                  const EdgeInsets.all(10.0),
-              child: Column(
-                children: [
-                  SearchableField(
-                    label:
-                        'Select Finished Product to Build *',
-                    items: _finishedProductNames,
-                    controller:
-                        _productController,
-                    onSelected: (selectedName) {
-                      _fetchBOMForProduct(
-                        selectedName,
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller:
-                              _qtyController,
-                          keyboardType:
-                              TextInputType.number,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Production Qty (Pieces) *',
-                            border:
-                                OutlineInputBorder(),
-                            contentPadding:
-                                EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 12,
-                            ),
-                          ),
-                          onChanged: (_) =>
-                              setState(() {}),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller:
-                              _extraExpenseController,
-                          keyboardType:
-                              TextInputType.number,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Extra Expense / Labor (₹)',
-                            border:
-                                OutlineInputBorder(),
-                            contentPadding:
-                                EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 12,
-                            ),
-                          ),
-                          onChanged: (_) =>
-                              setState(() {}),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+    return AlertDialog(
+      title: const Text('New Production Entry', style: TextStyle(fontSize: 16)),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Production Number (Non-Editable / Fixed starting from 001)
+              TextField(
+                readOnly: true,
+                controller: _productionNoController,
+                decoration: const InputDecoration(labelText: 'Production Number (Auto)', border: OutlineInputBorder(), isDense: true, fillColor: Colors.black12, filled: true),
               ),
-            ),
-          ),
+              const SizedBox(height: 10),
 
-          const SizedBox(height: 10),
-
-          const Text(
-            'BOM Recipe Breakdown & Material Cost:',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              color: Colors.indigo,
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
-          Expanded(
-            child: _isLoadingBOM
-                ? const Center(
-                    child:
-                        CircularProgressIndicator(),
-                  )
-                : _currentBOMList.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'Kripya valid Finished Product select karein.',
-                          style:
-                              TextStyle(color: Colors.grey),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount:
-                            _currentBOMList.length,
-                        itemBuilder:
-                            (context, index) {
-                          final bom =
-                              _currentBOMList[index];
-
-                          double productionQty =
-                              double.tryParse(
-                                    _qtyController.text,
-                                  ) ??
-                                  1.0;
-
-                          double totalNeeded =
-                              bom.quantity *
-                                  productionQty;
-
-                          InventoryItem rawMaterial =
-                              _allProducts.firstWhere(
-                            (p) =>
-                                p.itemName
-                                    .toLowerCase() ==
-                                bom.materialName
-                                    .toLowerCase(),
-                            orElse: () =>
-                                InventoryItem()
-                                  ..priceA = 0.0,
-                          );
-
-                          double lineCost =
-                              totalNeeded *
-                                  rawMaterial.priceA;
-
-                          return Card(
-                            margin:
-                                const EdgeInsets
-                                    .symmetric(
-                              vertical: 2,
-                            ),
-                            child: ListTile(
-                              dense: true,
-                              title: Text(
-                                bom.materialName,
-                                style:
-                                    const TextStyle(
-                                  fontWeight:
-                                      FontWeight.bold,
-                                ),
-                              ),
-                              subtitle: Text(
-                                'Req: $totalNeeded ${bom.unit} | Rate: ₹${rawMaterial.priceA}',
-                              ),
-                              trailing: Text(
-                                '₹${lineCost.toStringAsFixed(2)}',
-                                style:
-                                    const TextStyle(
-                                  fontWeight:
-                                      FontWeight.bold,
-                                  color:
-                                      Colors.indigo,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-          ),
-
-          Container(
-            padding:
-                const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.indigo.shade50,
-              borderRadius:
-                  BorderRadius.circular(8),
-              border: Border.all(
-                color:
-                    Colors.indigo.shade200,
+              // Date Picker
+              InkWell(
+                focusNode: _dateFocusNode,
+                onTap: () async {
+                  final picked = await showDatePicker(context: context, initialDate: _productionDate, firstDate: DateTime(2020), lastDate: DateTime(2030));
+                  if (picked != null) setState(() => _productionDate = picked);
+                  FocusScope.of(context).requestFocus(_bomDropdownFocusNode);
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(labelText: 'Production Date', border: OutlineInputBorder(), isDense: true),
+                  child: Text(DateFormat('dd-MM-yyyy').format(_productionDate), style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
               ),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment
-                          .spaceBetween,
-                  children: [
-                    const Text(
-                      'Material Cost Subtotal:',
-                      style:
-                          TextStyle(fontSize: 13),
-                    ),
-                    Text(
-                      '₹ ${_totalMaterialCost.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 10),
 
-                const Divider(height: 8),
+              // BOM Recipe Selector
+              DropdownButtonFormField<String>(
+                focusNode: _bomDropdownFocusNode,
+                value: _selectedBomProduct.isNotEmpty ? _selectedBomProduct : null,
+                items: _availableBomProducts.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    _onBomSelected(val);
+                    FocusScope.of(context).requestFocus(_qtyFocusNode);
+                  }
+                },
+                decoration: const InputDecoration(labelText: 'Select BOM Recipe *', border: OutlineInputBorder(), isDense: true),
+              ),
+              const SizedBox(height: 10),
 
-                Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment
-                          .spaceBetween,
-                  children: [
-                    const Text(
-                      'Grand Total Production Cost:',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      '₹ ${_grandTotalCost.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight:
-                            FontWeight.bold,
-                        color: Colors.indigo,
-                      ),
-                    ),
-                  ],
-                ),
+              // Finished Product Name (Non-Editable)
+              TextField(
+                readOnly: true,
+                controller: TextEditingController(text: _selectedBomProduct),
+                decoration: const InputDecoration(labelText: 'Finished Product (Auto)', border: OutlineInputBorder(), isDense: true, fillColor: Colors.black12, filled: true),
+              ),
+              const SizedBox(height: 10),
 
-                const SizedBox(height: 4),
-
-                Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment
-                          .spaceBetween,
-                  children: [
-                    const Text(
-                      'Cost Price Per Piece:',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight:
-                            FontWeight.bold,
-                        color: Colors.green,
-                      ),
-                    ),
-                    Text(
-                      '₹ ${_costPerPiece.toStringAsFixed(2)} / pc',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight:
-                            FontWeight.bold,
-                        color: Colors.green,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 8),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style:
-                        ElevatedButton.styleFrom(
-                      backgroundColor:
-                          Colors.indigo,
-                      foregroundColor:
-                          Colors.white,
-                    ),
-                    onPressed:
-                        _confirmProduction,
-                    child: const Text(
-                      'Confirm Production & Update Cost / Stock',
-                      style: TextStyle(
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              // Quantity
+              TextField(
+                focusNode: _qtyFocusNode,
+                controller: _qtyController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Quantity *', border: OutlineInputBorder(), isDense: true),
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => FocusScope.of(context).requestFocus(_saveButtonFocusNode),
+              ),
+              const SizedBox(height: 10),
+              Text('Cost/Piece: ₹${_costPerPiece.toStringAsFixed(2)} | Total: ₹${_grandTotalCost.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+            ],
           ),
-        ],
+        ),
       ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(
+          focusNode: _saveButtonFocusNode,
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+          onPressed: _saveProduction,
+          child: const Text('Save Production'),
+        ),
+      ],
     );
   }
 }
 
 // ==========================================
-// TAB 2: BOM RECIPE BUILDER TAB
+// EDIT / MODIFY PRODUCTION DIALOG
 // ==========================================
 
-class BomTab extends StatefulWidget {
-  const BomTab({super.key});
+class EditProductionDialog extends StatefulWidget {
+  final ProductionLog productionLog;
+  const EditProductionDialog({super.key, required this.productionLog});
 
   @override
-  State<BomTab> createState() =>
-      _BomTabState();
+  State<EditProductionDialog> createState() => _EditProductionDialogState();
 }
 
-class _BomTabState extends State<BomTab> {
-  final TextEditingController _productController =
-      TextEditingController();
-
-  final TextEditingController _materialController =
-      TextEditingController();
-
-  final TextEditingController _qtyController =
-      TextEditingController(text: '1');
-
-  final TextEditingController _unitController =
-      TextEditingController(text: 'pcs');
-
-  List<InventoryItem> _allProducts = [];
-
-  List<String> _allProductNames = [];
-
-  List<BillOfMaterials>
-      _currentProductBomList = [];
+class _EditProductionDialogState extends State<EditProductionDialog> {
+  late TextEditingController _qtyController;
+  double _currentCostPerPiece = 0.0;
+  double _currentTotalCost = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _qtyController = TextEditingController(text: widget.productionLog.quantity.toString());
+    _currentCostPerPiece = widget.productionLog.costPerPiece;
+    _currentTotalCost = widget.productionLog.totalCost;
   }
 
-  Future<void> _loadData() async {
-    _allProducts = await DatabaseHelper
-        .isar
-        .inventoryItems
-        .where()
-        .findAll();
-
-    _allProductNames =
-        _allProducts.map((p) => p.itemName).toSet().toList();
-
-    setState(() {});
+  void _recalculate(String val) {
+    double qty = double.tryParse(val) ?? 1.0;
+    double oldQty = widget.productionLog.quantity;
+    if (oldQty > 0) {
+      double unitCost = widget.productionLog.totalCost / oldQty;
+      setState(() {
+        _currentCostPerPiece = unitCost;
+        _currentTotalCost = unitCost * qty;
+      });
+    }
   }
 
-  Future<void> _loadBomForSelectedProduct(
-      String productName) async {
-    if (productName.trim().isEmpty) {
+  Future<void> _updateProduction() async {
+    double newQty = double.tryParse(_qtyController.text) ?? 0.0;
+    if (newQty <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Valid Qty enter karein!'), backgroundColor: Colors.red));
       return;
     }
 
-    _currentProductBomList =
-        await DatabaseHelper
-            .isar
-            .billOfMaterials
-            .filter()
-            .productNameEqualTo(
-              productName.trim(),
-            )
-            .findAll();
+    await DatabaseHelper.isar.writeTxn(() async {
+      widget.productionLog.quantity = newQty;
+      widget.productionLog.totalCost = _currentTotalCost;
+      widget.productionLog.costPerPiece = _currentCostPerPiece;
+      await DatabaseHelper.isar.productionLogs.put(widget.productionLog);
+    });
 
-    setState(() {});
-  }
+    if (!mounted) return;
 
-  Future<void> _saveBom() async {
-    final product =
-        _productController.text.trim();
-
-    final material =
-        _materialController.text.trim();
-
-    final qty =
-        double.tryParse(_qtyController.text) ??
-            0.0;
-
-    final unit =
-        _unitController.text.trim();
-
-    if (product.isEmpty ||
-        material.isEmpty ||
-        qty <= 0) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Kripya Product, Raw Material aur Qty sahi se bharein!',
-          ),
-          backgroundColor: Colors.red,
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 15),
+            Text('Production Updated Successfully!'),
+          ],
         ),
-      );
-
-      return;
-    }
-
-    final existingBom =
-        await DatabaseHelper
-            .isar
-            .billOfMaterials
-            .filter()
-            .productNameEqualTo(product)
-            .and()
-            .materialNameEqualTo(material)
-            .findFirst();
-
-    await DatabaseHelper.isar
-        .writeTxn(() async {
-      if (existingBom != null) {
-        existingBom.quantity += qty;
-
-        existingBom.unit = unit;
-
-        await DatabaseHelper
-            .isar
-            .billOfMaterials
-            .put(existingBom);
-      } else {
-        final bom = BillOfMaterials()
-          ..productName = product
-          ..materialName = material
-          ..quantity = qty
-          ..unit = unit;
-
-        await DatabaseHelper
-            .isar
-            .billOfMaterials
-            .put(bom);
-      }
-    });
-
-    _materialController.clear();
-
-    _qtyController.text = '1';
-
-    _unitController.text = 'pcs';
-
-    await _loadBomForSelectedProduct(
-      product,
-    );
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content:
-            Text('BOM Recipe Updated Successfully!'),
-        backgroundColor: Colors.green,
       ),
     );
-  }
 
-  Future<void> _deleteBomItem(
-    int id,
-    String productName,
-  ) async {
-    await DatabaseHelper.isar
-        .writeTxn(() async {
-      await DatabaseHelper
-          .isar
-          .billOfMaterials
-          .delete(id);
-    });
-
-    await _loadBomForSelectedProduct(
-      productName,
-    );
-
+    await Future.delayed(const Duration(seconds: 1));
     if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('BOM Item Removed!'),
-        backgroundColor: Colors.orange,
-      ),
-    );
-  }
-
-  double get _totalEstimatedCostPerPiece {
-    double totalCost = 0;
-
-    for (var bom
-        in _currentProductBomList) {
-      InventoryItem rawItem =
-          _allProducts.firstWhere(
-        (p) =>
-            p.itemName.toLowerCase() ==
-            bom.materialName.toLowerCase(),
-        orElse: () => InventoryItem()
-          ..priceA = 0.0,
-      );
-
-      totalCost +=
-          bom.quantity * rawItem.priceA;
-    }
-
-    return totalCost;
+    Navigator.pop(context);
+    Navigator.pop(context, true);
   }
 
   @override
-  void dispose() {
-    _productController.dispose();
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Modify Production (${widget.productionLog.productionNumber})', style: const TextStyle(fontSize: 16)),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Product: ${widget.productionLog.productName}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _qtyController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Modify Quantity *', border: OutlineInputBorder(), isDense: true),
+              onChanged: _recalculate,
+            ),
+            const SizedBox(height: 10),
+            Text('Updated Cost/Pc: ₹${_currentCostPerPiece.toStringAsFixed(2)} | Total: ₹${_currentTotalCost.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+          onPressed: _updateProduction,
+          child: const Text('Update'),
+        ),
+      ],
+    );
+  }
+}
 
-    _materialController.dispose();
+// ==========================================
+// TAB 2: BOM MASTER & RECIPE BUILDER
+// ==========================================
 
-    _qtyController.dispose();
+class BomMasterTab extends StatefulWidget {
+  const BomMasterTab({super.key});
 
-    _unitController.dispose();
+  @override
+  State<BomMasterTab> createState() => _BomMasterTabState();
+}
 
-    super.dispose();
+class _BomMasterTabState extends State<BomMasterTab> {
+  List<String> _uniqueBomProducts = [];
+  bool _isLoading = false;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBomMasterList();
+  }
+
+  Future<void> _loadBomMasterList() async {
+    setState(() => _isLoading = true);
+    final boms = await DatabaseHelper.isar.billOfMaterials.where().findAll();
+    var products = boms.map((b) => b.productName).toSet().toList();
+    if (_searchQuery.isNotEmpty) {
+      products = products.where((p) => p.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    }
+    setState(() {
+      _uniqueBomProducts = products;
+      _isLoading = false;
+    });
+  }
+
+  void _openAddBomDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AddEditBomDialog(),
+    ).then((value) {
+      if (value == true) _loadBomMasterList();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding:
-          const EdgeInsets.all(12.0),
+      padding: const EdgeInsets.all(10.0),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Card(
-            elevation: 2,
+            elevation: 1,
             child: Padding(
-              padding:
-                  const EdgeInsets.all(10.0),
-              child: SearchableField(
-                label:
-                    'Select / Type Finished Product Name *',
-                items: _allProductNames,
-                controller:
-                    _productController,
-                onSelected: (selectedName) {
-                  _loadBomForSelectedProduct(
-                    selectedName,
-                  );
-                },
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding:
-                  const EdgeInsets.all(10.0),
-              child: Column(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
                 children: [
-                  SearchableField(
-                    label:
-                        'Select Raw Material / Component *',
-                    items: _allProductNames,
-                    controller:
-                        _materialController,
-                    onSelected:
-                        (selectedMaterial) {
-                      setState(() {});
-                    },
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Search BOM Recipes',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.search, size: 18),
+                      ),
+                      onChanged: (val) {
+                        setState(() => _searchQuery = val);
+                        _loadBomMasterList();
+                      },
+                    ),
                   ),
-
-                  const SizedBox(height: 10),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller:
-                              _qtyController,
-                          keyboardType:
-                              TextInputType.number,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Qty Required *',
-                            border:
-                                OutlineInputBorder(),
-                            contentPadding:
-                                EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 8),
-
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller:
-                              _unitController,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Unit (pcs/box)',
-                            border:
-                                OutlineInputBorder(),
-                            contentPadding:
-                                EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 8),
-
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: _saveBom,
-                          style:
-                              ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Colors.teal.shade700,
-                            foregroundColor:
-                                Colors.white,
-                            padding:
-                                const EdgeInsets
-                                    .symmetric(
-                              vertical: 14,
-                            ),
-                          ),
-                          child: const Text(
-                            'Add Item',
-                            style: TextStyle(
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade700, foregroundColor: Colors.white),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add New BOM'),
+                    onPressed: _openAddBomDialog,
                   ),
                 ],
               ),
             ),
           ),
-
-          const SizedBox(height: 10),
-
-          Row(
-            mainAxisAlignment:
-                MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Current Recipe Components:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: Colors.teal,
-                ),
-              ),
-              Text(
-                'Est. Cost/Piece: ₹ ${_totalEstimatedCostPerPiece.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: Colors.green,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 4),
-
+          const SizedBox(height: 8),
           Expanded(
-            child:
-                _currentProductBomList.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'Kripya upar finished product select karke raw materials add karein.',
-                          style: TextStyle(
-                            color: Colors.grey,
-                          ),
-                          textAlign:
-                              TextAlign.center,
-                        ),
-                      )
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _uniqueBomProducts.isEmpty
+                    ? const Center(child: Text('Koi BOM Recipe nahi mili.', style: TextStyle(color: Colors.grey)))
                     : ListView.builder(
-                        itemCount:
-                            _currentProductBomList
-                                .length,
-                        itemBuilder:
-                            (context, index) {
-                          final bom =
-                              _currentProductBomList[
-                                  index];
-
-                          InventoryItem rawItem =
-                              _allProducts
-                                  .firstWhere(
-                            (p) =>
-                                p.itemName
-                                    .toLowerCase() ==
-                                bom.materialName
-                                    .toLowerCase(),
-                            orElse: () =>
-                                InventoryItem()
-                                  ..priceA = 0.0,
-                          );
-
-                          double lineCost =
-                              bom.quantity *
-                                  rawItem.priceA;
-
+                        itemCount: _uniqueBomProducts.length,
+                        itemBuilder: (context, index) {
+                          String productName = _uniqueBomProducts[index];
                           return Card(
-                            margin:
-                                const EdgeInsets
-                                    .symmetric(
-                              vertical: 3,
-                            ),
+                            margin: const EdgeInsets.symmetric(vertical: 3),
                             child: ListTile(
                               dense: true,
-                              title: Text(
-                                bom.materialName,
-                                style:
-                                    const TextStyle(
-                                  fontWeight:
-                                      FontWeight.bold,
-                                ),
-                              ),
-                              subtitle: Text(
-                                'Required: ${bom.quantity} ${bom.unit} | Unit Rate: ₹${rawItem.priceA}',
-                              ),
-                              trailing: Row(
-                                mainAxisSize:
-                                    MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '₹${lineCost.toStringAsFixed(2)}',
-                                    style:
-                                        const TextStyle(
-                                      fontWeight:
-                                          FontWeight
-                                              .bold,
-                                      color:
-                                          Colors.teal,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon:
-                                        const Icon(
-                                      Icons.delete,
-                                      color:
-                                          Colors.red,
-                                      size: 18,
-                                    ),
-                                    onPressed: () =>
-                                        _deleteBomItem(
-                                      bom.id,
-                                      bom.productName,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              title: Text(productName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                              onTap: () {},
                             ),
                           );
                         },
@@ -1111,6 +684,174 @@ class _BomTabState extends State<BomTab> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ==========================================
+// ADD NEW BOM POP-UP FORM WITH INVENTORY SELECTION
+// ==========================================
+
+class AddEditBomDialog extends StatefulWidget {
+  const AddEditBomDialog({super.key});
+
+  @override
+  State<AddEditBomDialog> createState() => _AddEditBomDialogState();
+}
+
+class _AddEditBomDialogState extends State<AddEditBomDialog> {
+  final TextEditingController _productController = TextEditingController();
+  List<InventoryItem> _allInventory = [];
+  List<String> _inventoryNames = [];
+  List<Map<String, dynamic>> _bomRows = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInventory();
+  }
+
+  Future<void> _loadInventory() async {
+    _allInventory = await DatabaseHelper.isar.inventoryItems.where().findAll();
+    _inventoryNames = _allInventory.map((i) => i.itemName).toSet().toList();
+    setState(() {});
+  }
+
+  void _addRow() {
+    setState(() {
+      _bomRows.add({
+        'materialController': TextEditingController(),
+        'qtyController': TextEditingController(text: '1'),
+        'unitController': TextEditingController(text: 'pcs'),
+      });
+    });
+  }
+
+  Future<void> _saveBomMaster() async {
+    String productName = _productController.text.trim();
+    if (productName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kripya Unique BOM Name / Product enter karein!'), backgroundColor: Colors.red));
+      return;
+    }
+
+    final existing = await DatabaseHelper.isar.billOfMaterials.filter().productNameEqualTo(productName).findFirst();
+    if (existing != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Is naam ka BOM pehle se mojood hai!'), backgroundColor: Colors.red));
+      return;
+    }
+
+    if (_bomRows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kam se kam ek Raw Material add karein!'), backgroundColor: Colors.orange));
+      return;
+    }
+
+    await DatabaseHelper.isar.writeTxn(() async {
+      for (var row in _bomRows) {
+        String material = row['materialController'].text.trim();
+        double qty = double.tryParse(row['qtyController'].text) ?? 0.0;
+        String unit = row['unitController'].text.trim();
+
+        if (material.isNotEmpty && qty > 0) {
+          final bom = BillOfMaterials()
+            ..productName = productName
+            ..materialName = material
+            ..quantity = qty
+            ..unit = unit;
+          await DatabaseHelper.isar.billOfMaterials.put(bom);
+        }
+      }
+    });
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).pop(true);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('BOM Created Successfully!'), backgroundColor: Colors.green));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create New BOM Recipe', style: TextStyle(fontSize: 16)),
+      content: SizedBox(
+        width: 500,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SearchableField(
+                label: 'Finished Product Name (Unique) *',
+                items: _inventoryNames,
+                controller: _productController,
+                onSelected: (_) {},
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Raw Materials / Components:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                    icon: const Icon(Icons.add, size: 14),
+                    label: const Text('Add Row'),
+                    onPressed: _addRow,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ..._bomRows.asMap().entries.map((entry) {
+                int idx = entry.key;
+                var row = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: SearchableField(
+                          label: 'Material',
+                          items: _inventoryNames,
+                          controller: row['materialController'],
+                          onSelected: (_) {},
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        flex: 1,
+                        child: TextField(
+                          controller: row['qtyController'],
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        flex: 1,
+                        child: TextField(
+                          controller: row['unitController'],
+                          decoration: const InputDecoration(labelText: 'Unit', border: OutlineInputBorder(), isDense: true),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                        onPressed: () => setState(() => _bomRows.removeAt(idx)),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade700, foregroundColor: Colors.white),
+          onPressed: _saveBomMaster,
+          child: const Text('Save BOM'),
+        ),
+      ],
     );
   }
 }
