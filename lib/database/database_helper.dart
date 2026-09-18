@@ -1,7 +1,6 @@
-import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
+
 import '../models/account.dart';
 import '../models/product.dart';
 import '../models/user_profile.dart';
@@ -10,37 +9,41 @@ import '../models/settings_model.dart';
 import '../models/user_model.dart';
 import '../models/order_model.dart';
 import '../models/transaction_model.dart';
-import '../models/inventory_model.dart'; // 🔥 1. Inventory Model Import Add कर दिया गया है
+import '../models/inventory_model.dart';
 
 class DatabaseHelper {
   static late Isar isar;
 
   static Future<void> initDB() async {
-    final dir = await getApplicationDocumentsDirectory();
-    
-    if (Isar.instanceNames.isEmpty) {
-      isar = await Isar.open(
-        [
-          AccountSchema, 
-          ProductSchema,
-          UserProfileSchema, 
-          BillOfMaterialsSchema, 
-          CompanySettingsSchema,
-          UserAccountSchema,
-          SalesOrderSchema,
-          OrderItemModelSchema,
-          AccountingTransactionSchema,
-          InventoryItemSchema, // 🔥 2. Isar Schemas की लिस्ट में इसे जोड़ दिया गया है
-        ],
-        directory: dir.path,
-        inspector: true, // Debugging के लिए सहायक
-      );
-    } else {
+    if (Isar.instanceNames.isNotEmpty) {
       isar = Isar.getInstance()!;
+      return;
     }
+
+    final dir = await getApplicationDocumentsDirectory();
+
+    isar = await Isar.open(
+      [
+        AccountSchema,
+        ProductSchema,
+        UserProfileSchema,
+        BillOfMaterialsSchema,
+        CompanySettingsSchema,
+        UserAccountSchema,
+        SalesOrderSchema,
+        OrderItemModelSchema,
+        AccountingTransactionSchema,
+        InventoryItemSchema,
+      ],
+      directory: dir.path,
+      inspector: true,
+    );
   }
 
-  // --- Account / Party Functions ---
+  // ----------------------------------------------------------
+  // Account / Party Functions
+  // ----------------------------------------------------------
+
   static Future<List<Account>> getParties() async {
     return await isar.accounts.where().findAll();
   }
@@ -84,13 +87,21 @@ class DatabaseHelper {
     });
   }
 
-  // --- User Profile / Login Functions ---
-  static Future<void> addUser(String username, String password, String businessType) async {
+  // ----------------------------------------------------------
+  // User Profile / Login Functions
+  // ----------------------------------------------------------
+
+  static Future<void> addUser(
+    String username,
+    String password,
+    String businessType,
+  ) async {
     final user = UserProfile()
       ..username = username
       ..password = password
       ..businessType = businessType
-      ..subscriptionExpiry = DateTime.now().add(const Duration(days: 365))
+      ..subscriptionExpiry =
+          DateTime.now().add(const Duration(days: 365))
       ..isActive = true;
 
     await isar.writeTxn(() async {
@@ -98,7 +109,10 @@ class DatabaseHelper {
     });
   }
 
-  static Future<UserProfile?> loginUser(String username, String password) async {
+  static Future<UserProfile?> loginUser(
+    String username,
+    String password,
+  ) async {
     return await isar.userProfiles
         .filter()
         .usernameEqualTo(username)
