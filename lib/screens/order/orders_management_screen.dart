@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/order_model.dart';
 import 'book_order_screen.dart';
-import 'sales/sales_screen.dart'; // Ensure this points to your SalesScreen file path
+import '../sales/sales_screen.dart';
 
 class OrdersManagementScreen extends StatefulWidget {
   const OrdersManagementScreen({super.key});
@@ -169,13 +169,12 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> {
     );
   }
 
-  // Navigate to SalesScreen and pass the selected order for billing
   void _generateBillForOrder(SalesOrder order) async {
     await order.items.load();
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SalesScreen(initialOrder: order), // Passing order to SalesScreen
+        builder: (context) => SalesScreen(initialOrder: order),
       ),
     );
     _fetchOrders();
