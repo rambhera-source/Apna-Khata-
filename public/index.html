@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17314f">
+  <meta name="description" content="ORLIFE Accounting — a focused workspace for growing businesses.">
+  <title>ORLIFE Accounting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <main class="shell">
+    <section class="story" aria-labelledby="brand-title">
+      <header class="brand"><span class="brand-mark">O</span><span>ORLIFE</span></header>
+      <div class="story-copy">
+        <p class="eyebrow">Accounting, made legible</p>
+        <h1 id="brand-title">Your business,<br><em>in balance.</em></h1>
+        <p class="intro">Invoices, inventory and ledgers in one focused workspace—built for the way Indian businesses actually work.</p>
+      </div>
+      <div class="ledger-card" aria-label="Sample business snapshot">
+        <div><span>Today’s position</span><span class="live"><i></i> Live</span></div>
+        <strong>₹ 2,48,760</strong>
+        <div class="rule"></div>
+        <div class="metrics"><span><b>18</b> invoices</span><span><b>6</b> pending</span><span><b>₹34.8k</b> due</span></div>
+      </div>
+      <p class="edition">Business Edition · 2026</p>
+    </section>
+
+    <section class="access" aria-labelledby="login-title">
+      <div class="login-wrap">
+        <div class="mobile-brand brand"><span class="brand-mark">O</span><span>ORLIFE</span></div>
+        <p class="step">SECURE WORKSPACE / 01</p>
+        <h2 id="login-title">Welcome back</h2>
+        <p class="sub">Sign in to continue to your company books.</p>
+
+        <form id="login-form" novalidate>
+          <label for="username">Username</label>
+          <div class="field"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg><input id="username" name="username" autocomplete="username" placeholder="Enter your username" required></div>
+          <label for="password">Password</label>
+          <div class="field"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" class="eye" id="toggle-password" aria-label="Show password">Show</button></div>
+          <p class="error" id="error" role="alert"></p>
+          <div class="options"><label class="remember"><input type="checkbox"><span></span>Remember me</label><a href="#" id="forgot">Forgot password?</a></div>
+          <button class="submit" type="submit"><span>Open workspace</span><span aria-hidden="true">↗</span></button>
+        </form>
+        <div class="help"><span>Need help?</span> Contact your company administrator.</div>
+      </div>
+      <footer><span>© 2026 ORLIFE</span><span>Private & encrypted</span></footer>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
+
