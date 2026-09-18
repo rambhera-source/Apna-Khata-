@@ -13,10 +13,10 @@ class DayBookScreen extends StatefulWidget {
 
 class _DayBookScreenState extends State<DayBookScreen> {
   // Filters
-  String _selectedVoucherType = 'All'; // 'All', 'Payment', 'Receipt', 'Journal', 'Sales', 'Purchase'
+  String _selectedVoucherType = 'All'; 
   final List<String> _voucherTypes = ['All', 'Payment', 'Receipt', 'Journal', 'Sales', 'Purchase'];
 
-  DateTime _fromDate = DateTime.now().subtract(const Duration(days: 7)); // Default last 7 days
+  DateTime _fromDate = DateTime.now().subtract(const Duration(days: 7)); 
   DateTime _toDate = DateTime.now();
 
   List<AccountingTransaction> _dayBookEntries = [];
@@ -56,14 +56,13 @@ class _DayBookScreenState extends State<DayBookScreen> {
     }
   }
 
-  // 🔍 Filter aur Date ke aadhar par Entries Fetch karna
+  // Fetch Entries from Isar Database
   Future<void> _fetchDayBookData() async {
     setState(() => _isLoading = true);
 
     final startDateTime = DateTime(_fromDate.year, _fromDate.month, _fromDate.day);
     final endDateTime = DateTime(_toDate.year, _toDate.month, _toDate.day, 23, 59, 59);
 
-    // Isar query base
     var query = DatabaseHelper.isar.accountingTransactions
         .filter()
         .dateBetween(startDateTime, endDateTime);
@@ -73,7 +72,6 @@ class _DayBookScreenState extends State<DayBookScreen> {
     if (_selectedVoucherType == 'All') {
       result = await query.sortByDateDesc().findAll();
     } else {
-      // Specific voucher type filter (Payment, Receipt, Journal, Sales, Purchase)
       result = await query
           .and()
           .voucherTypeEqualTo(_selectedVoucherType)
@@ -87,87 +85,167 @@ class _DayBookScreenState extends State<DayBookScreen> {
     });
   }
 
+  // Edit Dialog when clicking on Voucher Number
+  void _openEditTransactionDialog(AccountingTransaction txn) {
+    final TextEditingController amountController = TextEditingController(text: txn.amount.toString());
+    final TextEditingController notesController = TextEditingController(text: txn.notes ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Edit ${txn.voucherType} (${txn.voucherNumber})', style: const TextStyle(fontSize: 16)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Party: ${txn.partyName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 8),
+                Text('Date: ${DateFormat('dd-MM-yyyy').format(txn.date)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Amount (₹)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: notesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes / Remarks',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey.shade800, foregroundColor: Colors.white),
+              onPressed: () async {
+                final newAmount = double.tryParse(amountController.text) ?? txn.amount;
+                final newNotes = notesController.text.trim();
+
+                await DatabaseHelper.isar.writeTxn(() async {
+                  txn.amount = newAmount;
+                  txn.notes = newNotes.isEmpty ? null : newNotes;
+                  await DatabaseHelper.isar.accountingTransactions.put(txn);
+                });
+
+                Navigator.pop(context);
+                _fetchDayBookData();
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Transaction successfully updated!'), backgroundColor: Colors.green),
+                );
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Total Amount calculate karna current filtered list ka
     double totalAmount = _dayBookEntries.fold(0.0, (sum, item) => sum + item.amount);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Day Book & Transaction Register'),
+        title: const Text('Day Book & Transaction Register', style: TextStyle(fontSize: 18)),
         backgroundColor: Colors.blueGrey.shade800,
         foregroundColor: Colors.white,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(10.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ================= FILTER BAR =================
+            // ================= COMPACT FILTER BAR =================
             Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 1,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
                   children: [
-                    // 1. Voucher Type Filter Dropdown
-                    SizedBox(
-                      width: 200,
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedVoucherType,
-                        items: _voucherTypes.map((type) {
-                          return DropdownMenuItem(
-                            value: type,
-                            child: Text(type == 'All' ? 'All Transactions' : '$type Vouchers', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          setState(() => _selectedVoucherType = val!);
-                          _fetchDayBookData();
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Filter by Type',
-                          border: OutlineInputBorder(),
-                          isDense: true,
+                    // 1. Dropdown
+                    Expanded(
+                      flex: 2,
+                      child: SizedBox(
+                        height: 38,
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedVoucherType,
+                          items: _voucherTypes.map((type) {
+                            return DropdownMenuItem(
+                              value: type,
+                              child: Text(type == 'All' ? 'All Types' : type, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            setState(() => _selectedVoucherType = val!);
+                            _fetchDayBookData();
+                          },
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                            isDense: true,
+                          ),
                         ),
                       ),
                     ),
+                    const SizedBox(width: 6),
 
-                    // 2. From Date Picker Button
-                    InkWell(
-                      onTap: () => _selectFromDate(context),
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'From Date',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          prefixIcon: Icon(Icons.calendar_today, size: 16),
-                        ),
-                        child: Text(
-                          DateFormat('dd-MM-yyyy').format(_fromDate),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    // 2. From Date
+                    Expanded(
+                      flex: 2,
+                      child: InkWell(
+                        onTap: () => _selectFromDate(context),
+                        child: Container(
+                          height: 38,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            DateFormat('dd-MM-yy').format(_fromDate),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
                     ),
+                    const SizedBox(width: 6),
 
-                    // 3. To Date Picker Button
-                    InkWell(
-                      onTap: () => _selectToDate(context),
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'To Date',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          prefixIcon: Icon(Icons.calendar_today, size: 16),
-                        ),
-                        child: Text(
-                          DateFormat('dd-MM-yyyy').format(_toDate),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    // 3. To Date
+                    Expanded(
+                      flex: 2,
+                      child: InkWell(
+                        onTap: () => _selectToDate(context),
+                        child: Container(
+                          height: 38,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            DateFormat('dd-MM-yy').format(_toDate),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
                     ),
@@ -175,31 +253,31 @@ class _DayBookScreenState extends State<DayBookScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
 
             // ================= SUMMARY BANNER =================
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.blueGrey.shade50,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: Colors.blueGrey.shade200),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Showing: ${_selectedVoucherType == 'All' ? 'All Entries' : '$_selectedVoucherType Only'} (${_dayBookEntries.length} records)',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey.shade800),
+                    'Records: ${_dayBookEntries.length}',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueGrey.shade800),
                   ),
                   Text(
-                    'Total Amount: ₹ ${totalAmount.toStringAsFixed(2)}',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.blue.shade900),
+                    'Total: ₹ ${totalAmount.toStringAsFixed(2)}',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue.shade900),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
 
             // ================= TRANSACTIONS LIST =================
             Expanded(
@@ -207,14 +285,13 @@ class _DayBookScreenState extends State<DayBookScreen> {
                   ? const Center(child: CircularProgressIndicator())
                   : _dayBookEntries.isEmpty
                       ? const Center(
-                          child: Text('Selected filter ya date range mein koi entry nahi mili.', style: TextStyle(color: Colors.grey)),
+                          child: Text('Koi entry nahi mili.', style: TextStyle(color: Colors.grey, fontSize: 13)),
                         )
                       : ListView.builder(
                           itemCount: _dayBookEntries.length,
                           itemBuilder: (context, index) {
                             final txn = _dayBookEntries[index];
                             
-                            // Color coding based on voucher type
                             Color badgeColor = Colors.teal;
                             if (txn.voucherType == 'Payment') badgeColor = Colors.red;
                             if (txn.voucherType == 'Receipt') badgeColor = Colors.green;
@@ -223,39 +300,75 @@ class _DayBookScreenState extends State<DayBookScreen> {
                             if (txn.voucherType == 'Purchase') badgeColor = Colors.blue.shade700;
 
                             return Card(
-                              elevation: 2,
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: badgeColor.withOpacity(0.15),
-                                  child: Text(
-                                    txn.voucherType.substring(0, 1),
-                                    style: TextStyle(fontWeight: FontWeight.bold, color: badgeColor),
-                                  ),
-                                ),
-                                title: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              elevation: 1,
+                              margin: const EdgeInsets.symmetric(vertical: 3),
+                              child: Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('${txn.voucherType} - ${txn.voucherNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                    Text(
-                                      '₹ ${txn.amount.toStringAsFixed(2)}',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: badgeColor),
+                                    // Row 1: Date | Clickable Voucher Number | Amount
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        // 1. Date
+                                        Text(
+                                          DateFormat('dd-MM-yy').format(txn.date),
+                                          style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold),
+                                        ),
+                                        
+                                        // 2. Voucher / Invoice Number (Clickable to Edit)
+                                        InkWell(
+                                          onTap: () => _openEditTransactionDialog(txn),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: badgeColor.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: badgeColor.withOpacity(0.4)),
+                                            ),
+                                            child: Text(
+                                              '${txn.voucherType}: ${txn.voucherNumber}',
+                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: badgeColor),
+                                            ),
+                                          ),
+                                        ),
+
+                                        // 3. Amount
+                                        Text(
+                                          '₹ ${txn.amount.toStringAsFixed(2)}',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: badgeColor),
+                                        ),
+                                      ],
                                     ),
+                                    const Divider(height: 6, thickness: 0.5),
+
+                                    // Row 2: Party Name & Mode
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            'Party: ${txn.partyName}',
+                                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Mode: ${txn.cashOrBank}',
+                                          style: const TextStyle(color: Colors.black54, fontSize: 10),
+                                        ),
+                                      ],
+                                    ),
+                                    if (txn.notes != null && txn.notes!.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Note: ${txn.notes}',
+                                        style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 10, color: Colors.grey),
+                                      ),
+                                    ],
                                   ],
                                 ),
-                                subtitle: Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('Party / Account: ${txn.partyName}', style: const TextStyle(fontWeight: FontWeight.w500)),
-                                      Text('Mode: ${txn.cashOrBank} | Date: ${DateFormat('dd-MM-yyyy').format(txn.date)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                                      if (txn.notes != null && txn.notes!.isNotEmpty)
-                                        Text('Notes: ${txn.notes}', style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.black54)),
-                                    ],
-                                  ),
-                                 ),
-                                isThreeLine: true,
                               ),
                             );
                           },
