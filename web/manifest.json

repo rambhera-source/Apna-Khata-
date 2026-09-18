@@ -1,0 +1,6 @@
+{
+  "name": "Apna Khata",
+  "short_name": "Apna Khata",
+  "start_url": "/",
+  "display": "standalone"
+}
