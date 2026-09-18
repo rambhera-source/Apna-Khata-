@@ -10,7 +10,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/inventory_model.dart';
-import 'accounting_app/models/transaction_model.dart'; // यदि जरूरत हो तो इम्पोर्ट रखें
 import 'add_product_screen.dart';
 
 class ProductInventoryScreen extends StatefulWidget {
@@ -26,7 +25,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
   List<InventoryItem> _filteredItems = [];
   
   String _selectedStockFilter = 'Fresh'; 
-  final Set<String> _selectedCategories = {}; // मल्टीपल कैटेगरी सिलेक्शन के लिए
+  final Set<String> _selectedCategories = {}; 
   bool _isStockAscending = true; 
 
   DateTime? _startDate;
@@ -183,8 +182,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    Set<String> allCategories = _allInventoryItems.map((e) => e.category ?? 'General').toSet();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Product Inventory Management', style: TextStyle(fontSize: 18)),
@@ -203,7 +200,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
         padding: const EdgeInsets.all(10.0),
         child: Column(
           children: [
-            // Search & Filters Row
             Row(
               children: [
                 Expanded(
@@ -256,7 +252,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
             ),
             const SizedBox(height: 8),
 
-            // Select All Header Bar
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(4)),
@@ -276,7 +271,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> {
             ),
             const SizedBox(height: 4),
 
-            // Inventory List with S.N., Name+SKU, Category, Stock & Delete
             Expanded(
               child: _filteredItems.isEmpty
                   ? const Center(child: Text('No inventory items found.', style: TextStyle(color: Colors.grey, fontSize: 13)))
