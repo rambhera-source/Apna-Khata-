@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
 import 'package:accounting_app/database/database_helper.dart';
 import 'package:accounting_app/models/transaction_model.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class DayBookScreen extends StatefulWidget {
   const DayBookScreen({super.key});
@@ -22,10 +26,27 @@ class _DayBookScreenState extends State<DayBookScreen> {
   List<AccountingTransaction> _dayBookEntries = [];
   bool _isLoading = false;
 
+  // Focus Nodes for Keyboard Navigation
+  final FocusNode _dropdownFocusNode = FocusNode();
+  final FocusNode _fromDateFocusNode = FocusNode();
+  final FocusNode _toDateFocusNode = FocusNode();
+  final FocusNode _listFocusNode = FocusNode();
+
+  int _focusedIndex = 0;
+
   @override
   void initState() {
     super.initState();
     _fetchDayBookData();
+  }
+
+  @override
+  void dispose() {
+    _dropdownFocusNode.dispose();
+    _fromDateFocusNode.dispose();
+    _toDateFocusNode.dispose();
+    _listFocusNode.dispose();
+    super.dispose();
   }
 
   // From Date Picker
@@ -82,6 +103,7 @@ class _DayBookScreenState extends State<DayBookScreen> {
     setState(() {
       _dayBookEntries = result;
       _isLoading = false;
+      _focusedIndex = 0;
     });
   }
 
@@ -157,6 +179,45 @@ class _DayBookScreenState extends State<DayBookScreen> {
     );
   }
 
+  // 🖨️ PDF Generation & Printing
+  Future<void> _generateAndPrintPdf() async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('Day Book & Transaction Register', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 5),
+              pw.Text('Period: ${DateFormat('dd-MM-yyyy').format(_fromDate)} to ${DateFormat('dd-MM-yyyy').format(_toDate)} | Type: $_selectedVoucherType', style: const pw.TextStyle(fontSize: 12)),
+              pw.SizedBox(height: 15),
+              pw.Table.fromTextArray(
+                headers: ['Date', 'Voucher No', 'Type', 'Party Name', 'Mode', 'Amount (₹)'],
+                data: _dayBookEntries.map((txn) => [
+                  DateFormat('dd-MM-yy').format(txn.date),
+                  txn.voucherNumber,
+                  txn.voucherType,
+                  txn.partyName,
+                  txn.cashOrBank,
+                  txn.amount.toStringAsFixed(2),
+                ]).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     double totalAmount = _dayBookEntries.fold(0.0, (sum, item) => sum + item.amount);
@@ -166,13 +227,20 @@ class _DayBookScreenState extends State<DayBookScreen> {
         title: const Text('Day Book & Transaction Register', style: TextStyle(fontSize: 18)),
         backgroundColor: Colors.blueGrey.shade800,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.print),
+            tooltip: 'Print / Export PDF',
+            onPressed: _generateAndPrintPdf,
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(10.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ================= COMPACT FILTER BAR =================
+            // ================= COMPACT FILTER BAR WITH KEYBOARD FOCUS =================
             Card(
               elevation: 1,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
@@ -185,22 +253,33 @@ class _DayBookScreenState extends State<DayBookScreen> {
                       flex: 2,
                       child: SizedBox(
                         height: 38,
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedVoucherType,
-                          items: _voucherTypes.map((type) {
-                            return DropdownMenuItem(
-                              value: type,
-                              child: Text(type == 'All' ? 'All Types' : type, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            setState(() => _selectedVoucherType = val!);
-                            _fetchDayBookData();
+                        child: Focus(
+                          focusNode: _dropdownFocusNode,
+                          onKey: (node, event) {
+                            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+                              FocusScope.of(context).requestFocus(_fromDateFocusNode);
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
                           },
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                            isDense: true,
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedVoucherType,
+                            items: _voucherTypes.map((type) {
+                              return DropdownMenuItem(
+                                value: type,
+                                child: Text(type == 'All' ? 'All Types' : type, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              setState(() => _selectedVoucherType = val!);
+                              _fetchDayBookData();
+                              FocusScope.of(context).requestFocus(_fromDateFocusNode);
+                            },
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                              isDense: true,
+                            ),
                           ),
                         ),
                       ),
@@ -210,19 +289,25 @@ class _DayBookScreenState extends State<DayBookScreen> {
                     // 2. From Date
                     Expanded(
                       flex: 2,
-                      child: InkWell(
-                        onTap: () => _selectFromDate(context),
-                        child: Container(
-                          height: 38,
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade400),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            DateFormat('dd-MM-yy').format(_fromDate),
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      child: Focus(
+                        focusNode: _fromDateFocusNode,
+                        child: InkWell(
+                          onTap: () async {
+                            await _selectFromDate(context);
+                            FocusScope.of(context).requestFocus(_toDateFocusNode);
+                          },
+                          child: Container(
+                            height: 38,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade400),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              DateFormat('dd-MM-yy').format(_fromDate),
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                       ),
@@ -232,19 +317,25 @@ class _DayBookScreenState extends State<DayBookScreen> {
                     // 3. To Date
                     Expanded(
                       flex: 2,
-                      child: InkWell(
-                        onTap: () => _selectToDate(context),
-                        child: Container(
-                          height: 38,
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade400),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            DateFormat('dd-MM-yy').format(_toDate),
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      child: Focus(
+                        focusNode: _toDateFocusNode,
+                        child: InkWell(
+                          onTap: () async {
+                            await _selectToDate(context);
+                            FocusScope.of(context).requestFocus(_listFocusNode);
+                          },
+                          child: Container(
+                            height: 38,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade400),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              DateFormat('dd-MM-yy').format(_toDate),
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                       ),
@@ -279,7 +370,7 @@ class _DayBookScreenState extends State<DayBookScreen> {
             ),
             const SizedBox(height: 8),
 
-            // ================= TRANSACTIONS LIST =================
+            // ================= TRANSACTIONS LIST WITH KEYBOARD ARROW NAVIGATION =================
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -287,91 +378,122 @@ class _DayBookScreenState extends State<DayBookScreen> {
                       ? const Center(
                           child: Text('Koi entry nahi mili.', style: TextStyle(color: Colors.grey, fontSize: 13)),
                         )
-                      : ListView.builder(
-                          itemCount: _dayBookEntries.length,
-                          itemBuilder: (context, index) {
-                            final txn = _dayBookEntries[index];
-                            
-                            Color badgeColor = Colors.teal;
-                            if (txn.voucherType == 'Payment') badgeColor = Colors.red;
-                            if (txn.voucherType == 'Receipt') badgeColor = Colors.green;
-                            if (txn.voucherType == 'Journal') badgeColor = Colors.purple;
-                            if (txn.voucherType == 'Sales') badgeColor = Colors.teal.shade700;
-                            if (txn.voucherType == 'Purchase') badgeColor = Colors.blue.shade700;
-
-                            return Card(
-                              elevation: 1,
-                              margin: const EdgeInsets.symmetric(vertical: 3),
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Row 1: Date | Clickable Voucher Number | Amount
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        // 1. Date
-                                        Text(
-                                          DateFormat('dd-MM-yy').format(txn.date),
-                                          style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold),
-                                        ),
-                                        
-                                        // 2. Voucher / Invoice Number (Clickable to Edit)
-                                        InkWell(
-                                          onTap: () => _openEditTransactionDialog(txn),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: badgeColor.withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(color: badgeColor.withOpacity(0.4)),
-                                            ),
-                                            child: Text(
-                                              '${txn.voucherType}: ${txn.voucherNumber}',
-                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: badgeColor),
-                                            ),
-                                          ),
-                                        ),
-
-                                        // 3. Amount
-                                        Text(
-                                          '₹ ${txn.amount.toStringAsFixed(2)}',
-                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: badgeColor),
-                                        ),
-                                      ],
-                                    ),
-                                    const Divider(height: 6, thickness: 0.5),
-
-                                    // Row 2: Party Name & Mode
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            'Party: ${txn.partyName}',
-                                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        Text(
-                                          'Mode: ${txn.cashOrBank}',
-                                          style: const TextStyle(color: Colors.black54, fontSize: 10),
-                                        ),
-                                      ],
-                                    ),
-                                    if (txn.notes != null && txn.notes!.isNotEmpty) ...[
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Note: ${txn.notes}',
-                                        style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 10, color: Colors.grey),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            );
+                      : Focus(
+                          focusNode: _listFocusNode,
+                          onKey: (node, event) {
+                            if (event is KeyDownEvent) {
+                              if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                setState(() {
+                                  if (_focusedIndex < _dayBookEntries.length - 1) _focusedIndex++;
+                                });
+                                return KeyEventResult.handled;
+                              } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                setState(() {
+                                  if (_focusedIndex > 0) _focusedIndex--;
+                                });
+                                return KeyEventResult.handled;
+                              } else if (event.logicalKey == LogicalKeyboardKey.enter) {
+                                if (_dayBookEntries.isNotEmpty) {
+                                  _openEditTransactionDialog(_dayBookEntries[_focusedIndex]);
+                                }
+                                return KeyEventResult.handled;
+                              }
+                            }
+                            return KeyEventResult.ignored;
                           },
+                          child: ListView.builder(
+                            itemCount: _dayBookEntries.length,
+                            itemBuilder: (context, index) {
+                              final txn = _dayBookEntries[index];
+                              final bool isSelected = (index == _focusedIndex);
+                              
+                              Color badgeColor = Colors.teal;
+                              if (txn.voucherType == 'Payment') badgeColor = Colors.red;
+                              if (txn.voucherType == 'Receipt') badgeColor = Colors.green;
+                              if (txn.voucherType == 'Journal') badgeColor = Colors.purple;
+                              if (txn.voucherType == 'Sales') badgeColor = Colors.teal.shade700;
+                              if (txn.voucherType == 'Purchase') badgeColor = Colors.blue.shade700;
+
+                              return InkWell(
+                                onTap: () {
+                                  setState(() => _focusedIndex = index);
+                                  _openEditTransactionDialog(txn);
+                                },
+                                child: Card(
+                                  elevation: isSelected ? 3 : 1,
+                                  color: isSelected ? Colors.blueGrey.shade50 : Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    side: BorderSide(
+                                      color: isSelected ? Colors.blueGrey.shade700 : Colors.transparent,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  margin: const EdgeInsets.symmetric(vertical: 3),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Row 1: Date | Voucher Number | Amount
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              DateFormat('dd-MM-yy').format(txn.date),
+                                              style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: badgeColor.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: badgeColor.withOpacity(0.4)),
+                                              ),
+                                              child: Text(
+                                                '${txn.voucherType}: ${txn.voucherNumber}',
+                                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: badgeColor),
+                                              ),
+                                            ),
+                                            Text(
+                                              '₹ ${txn.amount.toStringAsFixed(2)}',
+                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: badgeColor),
+                                            ),
+                                          ],
+                                        ),
+                                        const Divider(height: 6, thickness: 0.5),
+
+                                        // Row 2: Party Name & Mode
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                'Party: ${txn.partyName}',
+                                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            Text(
+                                              'Mode: ${txn.cashOrBank}',
+                                              style: const TextStyle(color: Colors.black54, fontSize: 10),
+                                            ),
+                                          ],
+                                        ),
+                                        if (txn.notes != null && txn.notes!.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Note: ${txn.notes}',
+                                            style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 10, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
             ),
           ],
