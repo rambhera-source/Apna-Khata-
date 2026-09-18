@@ -59,14 +59,13 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  // Delete Confirmation Dialog
   void _confirmDeleteTransaction(AccountingTransaction txn) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Delete Bill?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red)),
-        content: Text('Kya aap wakai invoice [${txn.voucherNumber}] ko delete karna chahte hain?', style: const TextStyle(fontSize: 13)),
+        content: Text('Are you sure you want to delete invoice [${txn.voucherNumber}]?', style: const TextStyle(fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -160,7 +159,7 @@ class _SalesScreenState extends State<SalesScreen> {
               child: _isLoadingHistory
                   ? const Center(child: CircularProgressIndicator())
                   : _salesHistory.isEmpty
-                      ? const Center(child: Text('Koi sales bill record nahi mila.', style: TextStyle(color: Colors.grey)))
+                      ? const Center(child: Text('No sales bill records found.', style: TextStyle(color: Colors.grey)))
                       : ListView.builder(
                           itemCount: _salesHistory.length,
                           itemBuilder: (context, index) {
@@ -200,7 +199,7 @@ class _SalesScreenState extends State<SalesScreen> {
 }
 
 // ==========================================
-// SALES FORM VIEW (NEW BILL / EDIT BILL)
+// SALES FORM VIEW (ORIGINAL FLOW WITH FOCUS)
 // ==========================================
 
 class SalesFormView extends StatefulWidget {
@@ -682,6 +681,7 @@ class _SalesFormViewState extends State<SalesFormView> {
             ),
             const SizedBox(height: 6),
 
+            // Cart Items List & Inline Search
             Expanded(
               child: ListView(
                 controller: _scrollController,
@@ -697,48 +697,90 @@ class _SalesFormViewState extends State<SalesFormView> {
                     );
                   }),
                   const SizedBox(height: 10),
-                  RawAutocomplete<InventoryItem>(
-                    optionsBuilder: (textValue) {
-                      if (textValue.text.isEmpty) return _allInventoryItems;
-                      return _allInventoryItems.where((i) => i.itemName.toLowerCase().contains(textValue.text.toLowerCase()));
-                    },
-                    displayStringForOption: (item) => item.itemName,
-                    onSelected: (item) {
-                      setState(() {
-                        _selectedInlineProduct = item;
-                        _inlinePriceController.text = item.priceA.toString();
-                      });
-                      _qtyFocusNode.requestFocus();
-                    },
-                    textEditingController: _inlineSearchController,
-                    focusNode: _searchFocusNode,
-                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                      return TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: const InputDecoration(labelText: 'Search Product to add...', border: OutlineInputBorder(), isDense: true, prefixIcon: Icon(Icons.search, size: 16)),
-                      );
-                    },
-                    optionsViewBuilder: (context, onSelected, options) {
-                      return Align(
-                        alignment: Alignment.topLeft,
-                        child: Material(
-                          elevation: 4,
-                          child: SizedBox(
-                            width: 250,
-                            height: 150,
-                            child: ListView.builder(
-                              itemCount: options.length,
-                              itemBuilder: (context, index) {
-                                final opt = options.elementAt(index);
-                                return ListTile(dense: true, title: Text(opt.itemName, style: const TextStyle(fontSize: 11)), onTap: () => onSelected(opt));
-                              },
+                  
+                  if (_selectedInlineProduct == null)
+                    RawAutocomplete<InventoryItem>(
+                      optionsBuilder: (textValue) {
+                        if (textValue.text.isEmpty) return _allInventoryItems;
+                        return _allInventoryItems.where((i) => i.itemName.toLowerCase().contains(textValue.text.toLowerCase()));
+                      },
+                      displayStringForOption: (item) => item.itemName,
+                      onSelected: (item) {
+                        setState(() {
+                          _selectedInlineProduct = item;
+                          _inlinePriceController.text = item.priceA.toString();
+                        });
+                        _qtyFocusNode.requestFocus();
+                      },
+                      textEditingController: _inlineSearchController,
+                      focusNode: _searchFocusNode,
+                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: const InputDecoration(labelText: 'Search Product to add...', border: OutlineInputBorder(), isDense: true, prefixIcon: Icon(Icons.search, size: 16)),
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4,
+                            child: SizedBox(
+                              width: 250,
+                              height: 150,
+                              child: ListView.builder(
+                                itemCount: options.length,
+                                itemBuilder: (context, index) {
+                                  final opt = options.elementAt(index);
+                                  return ListTile(dense: true, title: Text(opt.itemName, style: const TextStyle(fontSize: 11)), onTap: () => onSelected(opt));
+                                },
+                              ),
                             ),
                           ),
+                        );
+                      },
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Text(_selectedInlineProduct!.itemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal)),
                         ),
-                      );
-                    },
-                  ),
+                        const SizedBox(width: 4),
+                        SizedBox(
+                          width: 50,
+                          child: TextField(
+                            controller: _inlineQtyController,
+                            focusNode: _qtyFocusNode,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
+                            onSubmitted: (_) => _priceFocusNode.requestFocus(),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        SizedBox(
+                          width: 65,
+                          child: TextField(
+                            controller: _inlinePriceController,
+                            focusNode: _priceFocusNode,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(4)),
+                            onSubmitted: (_) => _addInlineItemToCart(),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.red, size: 16),
+                          onPressed: () {
+                            setState(() => _selectedInlineProduct = null);
+                            _searchFocusNode.requestFocus();
+                          },
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
