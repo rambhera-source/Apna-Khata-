@@ -9,20 +9,20 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
   isar: ^3.1.0+1
-  isar_flutter_libs: ^3.1.0+1
   path_provider: ^2.1.2
   intl: ^0.18.1
   provider: ^6.1.1
-  excel: ^4.0.3        # Excel read/write aur template generate karne ke liye
-  file_picker: ^8.0.0  # File select aur save dialog ke liye
-  csv: ^6.0.0          # 🔥 Inventory CSV template generate aur import karne ke liye add kiya gaya hai
-  
+  excel: ^4.0.3
+  file_picker: ^8.0.0
+  csv: ^6.0.0
+
   # PDF generation aur WhatsApp sharing ke liye
-  pdf: ^3.10.4             
-  printing: ^5.11.1        
-  share_plus: ^7.2.1       
-  shared_preferences: ^2.2.3  # Home screen preferences aur module visibility save karne ke liye
+  pdf: ^3.10.4
+  printing: ^5.11.1
+  share_plus: ^7.2.1
+  shared_preferences: ^2.2.3
 
 dev_dependencies:
   flutter_test:
